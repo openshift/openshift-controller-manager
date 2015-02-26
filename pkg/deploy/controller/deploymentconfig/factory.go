@@ -18,11 +18,15 @@ import (
 // DeploymentConfigControllerFactory can create a DeploymentConfigController which obtains
 // DeploymentConfigs from a queue populated from a watch of all DeploymentConfigs.
 type DeploymentConfigControllerFactory struct {
-	Client     *osclient.Client
+	// Client is an OpenShift client.
+	Client osclient.Interface
+	// KubeClient is a Kubernetes client.
 	KubeClient kclient.Interface
-	Codec      runtime.Codec
+	// Codec is used to encode/decode.
+	Codec runtime.Codec
 }
 
+// Create creates a DeploymentConfigController.
 func (factory *DeploymentConfigControllerFactory) Create() controller.RunnableController {
 	deploymentConfigLW := &deployutil.ListWatcherImpl{
 		ListFunc: func() (runtime.Object, error) {
@@ -54,9 +58,9 @@ func (factory *DeploymentConfigControllerFactory) Create() controller.RunnableCo
 		RetryManager: controller.NewQueueRetryManager(queue, cache.MetaNamespaceKeyFunc, 1),
 		ShouldRetry: func(obj interface{}, err error) bool {
 			if _, isFatal := err.(fatalError); isFatal {
+				kutil.HandleError(err)
 				return false
 			}
-			kutil.HandleError(err)
 			return true
 		},
 		Handle: func(obj interface{}) error {
