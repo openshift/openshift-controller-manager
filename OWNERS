@@ -1,9 +1,16 @@
-assignees:
-- arschles
-- bmelville
-- duglin
-- jpeeler
-- krancour
-- mhbauer
-- pmorie
-- vaikas-google
+reviewers:
+  - smarterclayton
+  - deads2k
+  - liggitt
+  - bparees
+  - mfojtik
+  - stevekuznetsov
+  - ncdc
+  - kargakis
+  - soltysh
+approvers:
+  - smarterclayton
+  - deads2k
+  - liggitt
+  - bparees
+  - mfojtik
