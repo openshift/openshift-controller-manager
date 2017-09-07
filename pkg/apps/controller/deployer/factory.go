@@ -20,7 +20,7 @@ import (
 	kcoreinformers "k8s.io/kubernetes/pkg/client/informers/informers_generated/externalversions/core/v1"
 	kcontroller "k8s.io/kubernetes/pkg/controller"
 
-	deployutil "github.com/openshift/origin/pkg/deploy/util"
+	deployutil "github.com/openshift/origin/pkg/apps/util"
 )
 
 const (

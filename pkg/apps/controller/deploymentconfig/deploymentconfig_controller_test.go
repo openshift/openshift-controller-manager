@@ -20,12 +20,12 @@ import (
 	"k8s.io/kubernetes/pkg/client/clientset_generated/clientset/fake"
 	kinformers "k8s.io/kubernetes/pkg/client/informers/informers_generated/externalversions"
 
-	deployapi "github.com/openshift/origin/pkg/deploy/apis/apps"
-	_ "github.com/openshift/origin/pkg/deploy/apis/apps/install"
-	deploytest "github.com/openshift/origin/pkg/deploy/apis/apps/test"
-	deployv1 "github.com/openshift/origin/pkg/deploy/apis/apps/v1"
-	appsfake "github.com/openshift/origin/pkg/deploy/generated/internalclientset/fake"
-	deployutil "github.com/openshift/origin/pkg/deploy/util"
+	deployapi "github.com/openshift/origin/pkg/apps/apis/apps"
+	_ "github.com/openshift/origin/pkg/apps/apis/apps/install"
+	deploytest "github.com/openshift/origin/pkg/apps/apis/apps/test"
+	deployv1 "github.com/openshift/origin/pkg/apps/apis/apps/v1"
+	appsfake "github.com/openshift/origin/pkg/apps/generated/internalclientset/fake"
+	deployutil "github.com/openshift/origin/pkg/apps/util"
 )
 
 func alwaysReady() bool { return true }

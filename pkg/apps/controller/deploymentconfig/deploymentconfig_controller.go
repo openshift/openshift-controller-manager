@@ -21,10 +21,10 @@ import (
 	"k8s.io/kubernetes/pkg/client/retry"
 	kcontroller "k8s.io/kubernetes/pkg/controller"
 
+	deployapi "github.com/openshift/origin/pkg/apps/apis/apps"
+	appsclient "github.com/openshift/origin/pkg/apps/generated/internalclientset/typed/apps/internalversion"
+	deployutil "github.com/openshift/origin/pkg/apps/util"
 	oscache "github.com/openshift/origin/pkg/client/cache"
-	deployapi "github.com/openshift/origin/pkg/deploy/apis/apps"
-	appsclient "github.com/openshift/origin/pkg/deploy/generated/internalclientset/typed/apps/internalversion"
-	deployutil "github.com/openshift/origin/pkg/deploy/util"
 )
 
 const (

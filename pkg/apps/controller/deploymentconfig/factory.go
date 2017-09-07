@@ -19,8 +19,8 @@ import (
 	kcoreinformers "k8s.io/kubernetes/pkg/client/informers/informers_generated/externalversions/core/v1"
 	kcontroller "k8s.io/kubernetes/pkg/controller"
 
-	deployapi "github.com/openshift/origin/pkg/deploy/apis/apps"
-	appsclient "github.com/openshift/origin/pkg/deploy/generated/internalclientset"
+	deployapi "github.com/openshift/origin/pkg/apps/apis/apps"
+	appsclient "github.com/openshift/origin/pkg/apps/generated/internalclientset"
 )
 
 const (
