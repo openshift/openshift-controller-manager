@@ -9,7 +9,7 @@ import (
 
 	buildv1 "github.com/openshift/api/build/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
-	testutil "github.com/openshift/origin/pkg/build/controller/common/testutil"
+	testutil "github.com/openshift/openshift-controller-manager/pkg/build/controller/common/testutil"
 )
 
 func TestBuildOverrideForcePull(t *testing.T) {

@@ -8,9 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/diff"
 
-	u "github.com/openshift/origin/pkg/build/controller/common/testutil"
-
-	_ "github.com/openshift/origin/pkg/build/apis/build/install"
+	u "github.com/openshift/openshift-controller-manager/pkg/build/controller/common/testutil"
 )
 
 func TestGetBuild(t *testing.T) {

@@ -19,7 +19,7 @@ import (
 	securityv1 "github.com/openshift/api/security/v1"
 	securityv1typed "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1"
 	securityv1fake "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1/fake"
-	buildutil "github.com/openshift/origin/pkg/build/buildutil"
+	buildutil "github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 )
 
 func newFakeSecurityClient(rootAllowed bool) securityv1typed.SecurityV1Interface {

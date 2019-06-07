@@ -4,22 +4,20 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/openshift/origin/pkg/build/buildutil"
-
-	"k8s.io/klog"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/kubernetes/third_party/forked/golang/expansion"
+	"k8s.io/klog"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	buildlisterv1 "github.com/openshift/client-go/build/listers/build/v1"
 	sharedbuildutil "github.com/openshift/library-go/pkg/build/buildutil"
 	"github.com/openshift/library-go/pkg/build/envresolve"
+	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
+	"github.com/openshift/openshift-controller-manager/pkg/build/controller/common/internal/expansion"
 )
 
 type ByCreationTimestamp []*buildv1.Build

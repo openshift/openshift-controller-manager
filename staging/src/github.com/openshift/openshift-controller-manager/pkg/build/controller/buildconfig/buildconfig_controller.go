@@ -25,8 +25,8 @@ import (
 	buildinformer "github.com/openshift/client-go/build/informers/externalversions/build/v1"
 	buildlister "github.com/openshift/client-go/build/listers/build/v1"
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildscheme"
-	"github.com/openshift/origin/pkg/build/buildutil"
-	buildcommon "github.com/openshift/origin/pkg/build/controller/common"
+	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
+	buildcommon "github.com/openshift/openshift-controller-manager/pkg/build/controller/common"
 )
 
 const (

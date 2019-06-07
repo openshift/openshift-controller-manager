@@ -15,7 +15,7 @@ import (
 	kapihelper "k8s.io/kubernetes/pkg/apis/core/helper"
 
 	buildv1 "github.com/openshift/api/build/v1"
-	"github.com/openshift/origin/pkg/build/buildutil"
+	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 )
 
 func TestCustomCreateBuildPod(t *testing.T) {

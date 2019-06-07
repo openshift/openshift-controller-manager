@@ -14,7 +14,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 
 	buildv1 "github.com/openshift/api/build/v1"
-	buildutil "github.com/openshift/origin/pkg/build/buildutil"
+	buildutil "github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 )
 
 var (

@@ -12,8 +12,8 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	sharedbuildutil "github.com/openshift/library-go/pkg/build/buildutil"
-	"github.com/openshift/origin/pkg/build/buildutil"
-	"github.com/openshift/origin/pkg/build/controller/common"
+	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
+	"github.com/openshift/openshift-controller-manager/pkg/build/controller/common"
 )
 
 type BuildDefaults struct {

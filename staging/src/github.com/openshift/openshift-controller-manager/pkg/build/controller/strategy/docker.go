@@ -2,61 +2,53 @@ package strategy
 
 import (
 	"fmt"
-	"strings"
 
-	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 
 	buildv1 "github.com/openshift/api/build/v1"
-	securityv1 "github.com/openshift/api/security/v1"
-	securityclient "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1"
-	buildutil "github.com/openshift/origin/pkg/build/buildutil"
+	buildutil "github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 )
 
-// SourceBuildStrategy creates STI(source to image) builds
-type SourceBuildStrategy struct {
-	Image          string
-	SecurityClient securityclient.SecurityV1Interface
+var (
+	buildEncodingScheme       = runtime.NewScheme()
+	buildEncodingCodecFactory = serializer.NewCodecFactory(buildEncodingScheme)
+	buildJSONCodec            runtime.Encoder
+)
+
+func init() {
+	utilruntime.Must(buildv1.Install(buildEncodingScheme))
+	buildJSONCodec = buildEncodingCodecFactory.LegacyCodec(buildv1.GroupVersion)
 }
 
-// DefaultDropCaps is the list of capabilities to drop if the current user cannot run as root
-var DefaultDropCaps = []string{
-	"KILL",
-	"MKNOD",
-	"SETGID",
-	"SETUID",
+// DockerBuildStrategy creates a Docker build using a Docker builder image.
+type DockerBuildStrategy struct {
+	Image string
 }
 
-// CreateBuildPod creates a pod that will execute the STI build
+// CreateBuildPod creates the pod to be used for the Docker build
 // TODO: Make the Pod definition configurable
-func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost string) (*corev1.Pod, error) {
+func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost string) (*v1.Pod, error) {
 	data, err := runtime.Encode(buildJSONCodec, build)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode the Build %s/%s: %v", build.Namespace, build.Name, err)
+		return nil, fmt.Errorf("failed to encode the build: %v", err)
 	}
 
-	containerEnv := []corev1.EnvVar{
+	privileged := true
+	strategy := build.Spec.Strategy.DockerStrategy
+
+	containerEnv := []v1.EnvVar{
 		{Name: "BUILD", Value: string(data)},
 		{Name: "LANG", Value: "en_US.utf8"},
 	}
 
 	addSourceEnvVars(build.Spec.Source, &containerEnv)
 
-	strategy := build.Spec.Strategy.SourceStrategy
 	if len(strategy.Env) > 0 {
 		buildutil.MergeTrustedEnvWithoutDuplicates(strategy.Env, &containerEnv, true)
-	}
-
-	// check if can run container as root
-	if !bs.canRunAsRoot(build) {
-		// TODO: both AllowedUIDs and DropCapabilities should
-		// be controlled via the SCC that's in effect for the build service account
-		// For now, both are hard-coded based on whether the build service account can
-		// run as root.
-		containerEnv = append(containerEnv, corev1.EnvVar{Name: buildv1.AllowedUIDs, Value: "1-"})
-		containerEnv = append(containerEnv, corev1.EnvVar{Name: buildv1.DropCapabilities, Value: strings.Join(DefaultDropCaps, ",")})
 	}
 
 	serviceAccount := build.Spec.ServiceAccount
@@ -64,27 +56,26 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		serviceAccount = buildutil.BuilderServiceAccountName
 	}
 
-	privileged := true
-	pod := &corev1.Pod{
+	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      buildutil.GetBuildPodName(build),
 			Namespace: build.Namespace,
 			Labels:    getPodLabels(build),
 		},
-		Spec: corev1.PodSpec{
+		Spec: v1.PodSpec{
 			ServiceAccountName: serviceAccount,
-			Containers: []corev1.Container{
+			Containers: []v1.Container{
 				{
-					Name:    StiBuild,
+					Name:    DockerBuild,
 					Image:   bs.Image,
-					Command: []string{"openshift-sti-build"},
+					Command: []string{"openshift-docker-build"},
 					Env:     copyEnvVarSlice(containerEnv),
 					// TODO: run unprivileged https://github.com/openshift/origin/issues/662
-					SecurityContext: &corev1.SecurityContext{
+					SecurityContext: &v1.SecurityContext{
 						Privileged: &privileged,
 					},
-					TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
-					VolumeMounts: []corev1.VolumeMount{
+					TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
+					VolumeMounts: []v1.VolumeMount{
 						{
 							Name:      "buildworkdir",
 							MountPath: buildutil.BuildWorkDirMount,
@@ -94,43 +85,46 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 							MountPath: buildutil.BuildBlobsMetaCache,
 						},
 					},
-					ImagePullPolicy: corev1.PullIfNotPresent,
+					ImagePullPolicy: v1.PullIfNotPresent,
 					Resources:       build.Spec.Resources,
 				},
 			},
-			Volumes: []corev1.Volume{
+			Volumes: []v1.Volume{
 				{
 					Name: "buildcachedir",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{Path: buildutil.BuildBlobsMetaCache},
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{Path: buildutil.BuildBlobsMetaCache},
 					},
 				},
 				{
 					Name: "buildworkdir",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					VolumeSource: v1.VolumeSource{
+						EmptyDir: &v1.EmptyDirVolumeSource{},
 					},
 				},
 			},
-			RestartPolicy: corev1.RestartPolicyNever,
+			RestartPolicy: v1.RestartPolicyNever,
 			NodeSelector:  build.Spec.NodeSelector,
 		},
 	}
 
+	// can't conditionalize the manage-dockerfile init container because we don't
+	// know until we've cloned, whether or not we've got a dockerfile to manage
+	// (also if it's a docker type build, we should always have a dockerfile to manage)
 	if build.Spec.Source.Git != nil || build.Spec.Source.Binary != nil {
-		gitCloneContainer := corev1.Container{
+		gitCloneContainer := v1.Container{
 			Name:                     GitCloneContainer,
 			Image:                    bs.Image,
 			Command:                  []string{"openshift-git-clone"},
 			Env:                      copyEnvVarSlice(containerEnv),
-			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
-			VolumeMounts: []corev1.VolumeMount{
+			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
+			VolumeMounts: []v1.VolumeMount{
 				{
 					Name:      "buildworkdir",
 					MountPath: buildutil.BuildWorkDirMount,
 				},
 			},
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: v1.PullIfNotPresent,
 			Resources:       build.Spec.Resources,
 		}
 		if build.Spec.Source.Binary != nil {
@@ -141,17 +135,17 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, gitCloneContainer)
 	}
 	if len(build.Spec.Source.Images) > 0 {
-		extractImageContentContainer := corev1.Container{
+		extractImageContentContainer := v1.Container{
 			Name:    ExtractImageContentContainer,
 			Image:   bs.Image,
 			Command: []string{"openshift-extract-image-content"},
 			Env:     copyEnvVarSlice(containerEnv),
 			// TODO: run unprivileged https://github.com/openshift/origin/issues/662
-			SecurityContext: &corev1.SecurityContext{
+			SecurityContext: &v1.SecurityContext{
 				Privileged: &privileged,
 			},
-			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
-			VolumeMounts: []corev1.VolumeMount{
+			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
+			VolumeMounts: []v1.VolumeMount{
 				{
 					Name:      "buildworkdir",
 					MountPath: buildutil.BuildWorkDirMount,
@@ -161,7 +155,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					MountPath: buildutil.BuildBlobsMetaCache,
 				},
 			},
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: v1.PullIfNotPresent,
 			Resources:       build.Spec.Resources,
 		}
 		setupDockerSecrets(pod, &extractImageContentContainer, build.Spec.Output.PushSecret, strategy.PullSecret, build.Spec.Source.Images)
@@ -169,19 +163,19 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, extractImageContentContainer)
 	}
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers,
-		corev1.Container{
+		v1.Container{
 			Name:                     "manage-dockerfile",
 			Image:                    bs.Image,
 			Command:                  []string{"openshift-manage-dockerfile"},
 			Env:                      copyEnvVarSlice(containerEnv),
-			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
-			VolumeMounts: []corev1.VolumeMount{
+			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
+			VolumeMounts: []v1.VolumeMount{
 				{
 					Name:      "buildworkdir",
 					MountPath: buildutil.BuildWorkDirMount,
 				},
 			},
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: v1.PullIfNotPresent,
 			Resources:       build.Spec.Resources,
 		},
 	)
@@ -204,34 +198,4 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	// setupContainersNodeStorage(pod, &pod.Spec.Containers[0]) // for privileged builds
 	setupBlobCache(pod)
 	return pod, nil
-}
-
-func (bs *SourceBuildStrategy) canRunAsRoot(build *buildv1.Build) bool {
-	rootUser := int64(0)
-
-	review, err := bs.SecurityClient.PodSecurityPolicySubjectReviews(build.Namespace).Create(
-		&securityv1.PodSecurityPolicySubjectReview{
-			Spec: securityv1.PodSecurityPolicySubjectReviewSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						ServiceAccountName: build.Spec.ServiceAccount,
-						Containers: []corev1.Container{
-							{
-								Name:  "fake",
-								Image: "fake",
-								SecurityContext: &corev1.SecurityContext{
-									RunAsUser: &rootUser,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	)
-	if err != nil {
-		utilruntime.HandleError(err)
-		return false
-	}
-	return review.Status.AllowedBy != nil
 }
