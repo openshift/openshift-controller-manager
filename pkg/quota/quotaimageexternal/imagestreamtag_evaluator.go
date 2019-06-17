@@ -30,7 +30,7 @@ type imageStreamTagEvaluator struct {
 
 // NewImageStreamTagEvaluator computes resource usage of ImageStreamsTags. Its sole purpose is to handle
 // UPDATE admission operations on imageStreamTags resource.
-// If you make a change here, be sure to make a corresponding change in the openshift-controller-manager
+// If you make a change here, be sure to make a corresponding change in the apiserver
 func NewImageStreamTagEvaluator(store imagev1lister.ImageStreamLister, istGetter imagev1typedclient.ImageStreamTagsGetter) kquota.Evaluator {
 	return &imageStreamTagEvaluator{
 		store:     store,

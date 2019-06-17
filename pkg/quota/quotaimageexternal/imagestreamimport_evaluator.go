@@ -28,7 +28,7 @@ type imageStreamImportEvaluator struct {
 // NewImageStreamImportEvaluator computes resource usage for ImageStreamImport objects. This particular kind
 // is a virtual resource. It depends on ImageStream usage evaluator to compute image numbers before the
 // the admission can work.
-// If you make a change here, be sure to make a corresponding change in the openshift-controller-manager
+// If you make a change here, be sure to make a corresponding change in the apiserver
 func NewImageStreamImportEvaluator(store imagev1lister.ImageStreamLister) kquota.Evaluator {
 	return &imageStreamImportEvaluator{
 		store: store,
