@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog"
 	kcmdutil "k8s.io/kubernetes/pkg/kubectl/cmd/util"
@@ -45,7 +44,6 @@ func NewOpenShiftControllerManagerCommand(name string, out, errout io.Writer) *c
 		Short: "Start the OpenShift controllers",
 		Long:  longDescription,
 		Run: func(c *cobra.Command, args []string) {
-			rest.CommandNameOverride = name
 			kcmdutil.CheckErr(options.Validate())
 
 			serviceability.StartProfiler()
