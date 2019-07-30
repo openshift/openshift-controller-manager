@@ -1975,6 +1975,9 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 			Insecure: registryList{
 				Registries: registriesConfig.InsecureRegistries,
 			},
+			Block: registryList{
+				Registries: registriesConfig.BlockedRegistries,
+			},
 		},
 	}
 
