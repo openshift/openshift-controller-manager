@@ -1542,9 +1542,16 @@ func TestHandleControllerConfig(t *testing.T) {
 					registriesConfig.Registries.Insecure.Registries)
 			}
 
+			if !equality.Semantic.DeepEqual(registriesConfig.Registries.Block.Registries,
+				buildRegistriesConfig.BlockedRegistries) {
+				t.Errorf("expected blocked registries to equal %v, got %v",
+					buildRegistriesConfig.BlockedRegistries,
+					registriesConfig.Registries.Block.Registries)
+			}
+
 			expectedSearchRegistries := []string{}
 			// If only insecure registries are specified, default search should be docker.io
-			if len(buildRegistriesConfig.InsecureRegistries) > 0 {
+			if !isRegistryConfigEmpty(buildRegistriesConfig) {
 				expectedSearchRegistries = []string{"docker.io"}
 			}
 			if !equality.Semantic.DeepEqual(registriesConfig.Registries.Search.Registries,
@@ -1620,7 +1627,7 @@ func TestHandleControllerConfig(t *testing.T) {
 }
 
 func isRegistryConfigEmpty(config configv1.RegistrySources) bool {
-	return len(config.InsecureRegistries) == 0
+	return len(config.InsecureRegistries) == 0 && len(config.BlockedRegistries) == 0
 }
 
 func decodeRegistries(configTOML string) (*tomlConfig, error) {
