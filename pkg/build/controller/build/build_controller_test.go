@@ -1241,6 +1241,26 @@ func TestCreateBuildCAConfigMap(t *testing.T) {
 	}
 }
 
+func TestCreateBuildProxyCAConfigMap(t *testing.T) {
+	bc := newFakeBuildController(nil, nil, nil, nil, nil)
+	defer bc.stop()
+	build := dockerStrategy(mockBuild(buildv1.BuildPhaseNew, buildv1.BuildOutput{}))
+	pod := mockBuildPod(build)
+	caMap := bc.createBuildGlobalCAConfigMapSpec(build, pod)
+	if caMap == nil {
+		t.Error("proxy certificate authority configMap was not created")
+	}
+	if !hasBuildPodOwnerRef(pod, caMap) {
+		t.Error("build proxy CA configMap is missing owner ref to the build pod")
+	}
+	if caMap.Annotations == nil || len(caMap.Annotations) == 0 {
+		t.Errorf("build proxy CA config map has empty annotations")
+	}
+	if _, ok := caMap.Annotations[buildutil.GlobalCAConfigMapAnnotation]; !ok {
+		t.Errorf("build proxy configMap is missing the proxy CA annotation")
+	}
+}
+
 func TestHandleControllerConfig(t *testing.T) {
 	tests := []struct {
 		name string

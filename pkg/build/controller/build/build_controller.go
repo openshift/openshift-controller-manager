@@ -1210,6 +1210,19 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 				return update, err
 			}
 		}
+		//TODO commented out until CA injection controller lands
+		/*
+			hasGlobalCAMap, err := bc.findOwnedConfigMap(existingPod, build.Namespace, buildutil.GetBuildGlobalCAConfigMapName(build))
+			if err != nil {
+				return update, fmt.Errorf("could not find global certificate authority for build: %v", err)
+			}
+			if !hasGlobalCAMap {
+				update, err = bc.createBuildGlobalCAConfigMap(build, existingPod, update)
+				if err != nil {
+					return update, err
+				}
+			}
+		*/
 		hasRegistryConf, err := bc.findOwnedConfigMap(existingPod, build.Namespace, buildutil.GetBuildSystemConfigMapName(build))
 		if err != nil {
 			return update, fmt.Errorf("could not find registry config for build: %v", err)
@@ -1234,6 +1247,13 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		if err != nil {
 			return nil, err
 		}
+		//TODO commented out until CA injection controller lands
+		/*
+			update, err = bc.createBuildGlobalCAConfigMap(build, pod, update)
+			if err != nil {
+				return update, err
+			}
+		*/
 	}
 
 	update = transitionToPhase(buildv1.BuildPhasePending, "", "")
@@ -1700,6 +1720,21 @@ func (bc *BuildController) handleBuildConfigError(err error, key interface{}) {
 	bc.buildConfigQueue.Forget(key)
 }
 
+// createBuildGlobalCAConfigMap creates a ConfigMap container certificate authorities used by the build pod
+// that are injected via the platform's proxy support based on setting a particular annotation on the config map
+func (bc *BuildController) createBuildGlobalCAConfigMap(build *buildv1.Build, buildPod *corev1.Pod, update *buildUpdate) (*buildUpdate, error) {
+	configMapSpec := bc.createBuildGlobalCAConfigMapSpec(build, buildPod)
+	cm, err := bc.configMapClient.ConfigMaps(buildPod.Namespace).Create(configMapSpec)
+	if err != nil {
+		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build proxy certificate authority configMap: %v", err)
+		update.setReason("CannotCreateGlobalCAConfigMap")
+		update.setMessage("Failed creating build proxy certificate authority configMap.")
+		return update, fmt.Errorf("failed to create build proxy certificate authority configMap: %v", err)
+	}
+	klog.V(4).Infof("Created proxy certificate authority configMap %s/%s for build %s", build.Namespace, cm.Name, buildDesc(build))
+	return update, nil
+}
+
 // createBuildCAConfigMap creates a ConfigMap containing certificate authorities used by the build pod.
 func (bc *BuildController) createBuildCAConfigMap(build *buildv1.Build, buildPod *corev1.Pod, update *buildUpdate, additionalCAs map[string]string) (*buildUpdate, error) {
 	configMapSpec := bc.createBuildCAConfigMapSpec(build, buildPod, additionalCAs)
@@ -1751,6 +1786,21 @@ func (bc *BuildController) createBuildCAConfigMapSpec(build *buildv1.Build, buil
 		return cm
 	}
 	cm.Data[buildv1.ServiceCAKey] = registryCAData
+	return cm
+}
+
+// createBuildGlobalCAConfigMapSpec creates a ConfigMap template to hold certificate authorities provided by the platform's proxy support
+// to be used by thebuild pod.  The returned ConfigMap has an owner reference to the provided pod, ensuring proper garbage collection.
+func (bc *BuildController) createBuildGlobalCAConfigMapSpec(build *buildv1.Build, buildPod *corev1.Pod) *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: buildutil.GetBuildGlobalCAConfigMapName(build),
+			OwnerReferences: []metav1.OwnerReference{
+				makeBuildPodOwnerRef(buildPod),
+			},
+			Annotations: map[string]string{buildutil.GlobalCAConfigMapAnnotation: "true"},
+		},
+	}
 	return cm
 }
 
