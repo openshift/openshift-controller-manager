@@ -56,7 +56,7 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 	}
 
 	build := mockSTIBuild()
-	actual, err := strategy.CreateBuildPod(build, nil, testInternalRegistryHost)
+	actual, err := strategy.CreateBuildPod(build, nil, testInternalRegistryHost, testRegistrySources)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -99,6 +99,7 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 		"PULL_DOCKERCFG_PATH":         "",
 		"BUILD_REGISTRIES_CONF_PATH":  "",
 		"BUILD_REGISTRIES_DIR_PATH":   "",
+		"BUILD_REGISTRY_SOURCES":      "",
 		"BUILD_SIGNATURE_POLICY_PATH": "",
 		"BUILD_STORAGE_CONF_PATH":     "",
 		"BUILD_STORAGE_DRIVER":        "",
@@ -214,7 +215,7 @@ func TestS2IBuildLongName(t *testing.T) {
 	}
 	build := mockSTIBuild()
 	build.Name = strings.Repeat("a", validation.DNS1123LabelMaxLength*2)
-	pod, err := strategy.CreateBuildPod(build, nil, testInternalRegistryHost)
+	pod, err := strategy.CreateBuildPod(build, nil, testInternalRegistryHost, testRegistrySources)
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}

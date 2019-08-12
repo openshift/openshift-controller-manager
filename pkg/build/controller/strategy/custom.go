@@ -33,7 +33,7 @@ type CustomBuildStrategy struct {
 }
 
 // CreateBuildPod creates the pod to be used for the Custom build
-func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost string) (*corev1.Pod, error) {
+func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost, registrySourcesData string) (*corev1.Pod, error) {
 	strategy := build.Spec.Strategy.CustomStrategy
 	if strategy == nil {
 		return nil, errors.New("CustomBuildStrategy cannot be executed without CustomStrategy parameters")
@@ -136,7 +136,7 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	setupSourceSecrets(pod, &pod.Spec.Containers[0], build.Spec.Source.SourceSecret)
 	setupInputSecrets(pod, &pod.Spec.Containers[0], build.Spec.Source.Secrets)
 	setupAdditionalSecrets(pod, &pod.Spec.Containers[0], build.Spec.Strategy.CustomStrategy.Secrets)
-	setupContainersConfigs(build, pod)
+	setupContainersConfigs(build, pod, registrySourcesData)
 	setupBuildCAs(build, pod, additionalCAs, internalRegistryHost)
 	setupContainersStorage(pod, &pod.Spec.Containers[0]) // for unprivileged builds
 	return pod, nil

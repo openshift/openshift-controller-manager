@@ -340,7 +340,7 @@ func copyEnvVarSlice(in []corev1.EnvVar) []corev1.EnvVar {
 
 // setupContainersConfigs sets up volumes for mounting the node's configuration which governs which
 // registries it knows about, whether or not they should be accessed with TLS, and signature policies.
-func setupContainersConfigs(build *buildv1.Build, pod *corev1.Pod) {
+func setupContainersConfigs(build *buildv1.Build, pod *corev1.Pod, registrySources string) {
 	const volumeName = "build-system-configs"
 	const configDir = ConfigMapBuildSystemConfigsMountPath
 	exists := false
@@ -366,20 +366,20 @@ func setupContainersConfigs(build *buildv1.Build, pod *corev1.Pod) {
 		)
 		containers := make([]corev1.Container, len(pod.Spec.Containers))
 		for i, c := range pod.Spec.Containers {
-			containers[i] = updateConfigsForContainer(c, volumeName, configDir)
+			containers[i] = updateConfigsForContainer(c, volumeName, configDir, registrySources)
 		}
 		pod.Spec.Containers = containers
 		if len(pod.Spec.InitContainers) > 0 {
 			initContainers := make([]corev1.Container, len(pod.Spec.InitContainers))
 			for i, c := range pod.Spec.InitContainers {
-				initContainers[i] = updateConfigsForContainer(c, volumeName, configDir)
+				initContainers[i] = updateConfigsForContainer(c, volumeName, configDir, registrySources)
 			}
 			pod.Spec.InitContainers = initContainers
 		}
 	}
 }
 
-func updateConfigsForContainer(c corev1.Container, volumeName string, configDir string) corev1.Container {
+func updateConfigsForContainer(c corev1.Container, volumeName, configDir, registrySources string) corev1.Container {
 	c.VolumeMounts = append(c.VolumeMounts,
 		corev1.VolumeMount{
 			Name:      volumeName,
@@ -405,6 +405,7 @@ func updateConfigsForContainer(c corev1.Container, volumeName string, configDir 
 	// If these paths do not exist in the build container, buildah falls back to sane defaults.
 	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_REGISTRIES_CONF_PATH", Value: registriesConfPath})
 	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_REGISTRIES_DIR_PATH", Value: registriesDirPath})
+	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_REGISTRY_SOURCES", Value: registrySources})
 	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_SIGNATURE_POLICY_PATH", Value: signaturePolicyPath})
 	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_STORAGE_CONF_PATH", Value: storageConfPath})
 	return c

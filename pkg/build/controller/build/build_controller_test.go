@@ -643,7 +643,7 @@ func TestCreateBuildPodWithImageStreamUnresolved(t *testing.T) {
 
 type errorStrategy struct{}
 
-func (*errorStrategy) CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost string) (*corev1.Pod, error) {
+func (*errorStrategy) CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost, registrySources string) (*corev1.Pod, error) {
 	return nil, fmt.Errorf("error")
 }
 

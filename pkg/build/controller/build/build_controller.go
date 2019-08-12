@@ -192,6 +192,7 @@ type BuildController struct {
 
 	recorder                record.EventRecorder
 	registryConfData        string
+	registrySourcesData     string
 	signaturePolicyData     string
 	additionalTrustedCAData map[string]string
 	configLock              sync.Mutex
@@ -347,6 +348,19 @@ func (bc *BuildController) setRegistryConfTOML(toml string) {
 	bc.configLock.Lock()
 	defer bc.configLock.Unlock()
 	bc.registryConfData = toml
+}
+
+// registrySourcesJSON returns an encoded registrySources JSON value used by the build pod
+func (bc *BuildController) registrySourcesJSON() string {
+	bc.configLock.Lock()
+	defer bc.configLock.Unlock()
+	return bc.registrySourcesData
+}
+
+func (bc *BuildController) setRegistrySourcesJSON(json string) {
+	bc.configLock.Lock()
+	defer bc.configLock.Unlock()
+	bc.registrySourcesData = json
 }
 
 // signaturePolicyJSON returns the contents of the policy.json file used by the build pod
@@ -719,7 +733,7 @@ func (bc *BuildController) createPodSpec(build *buildv1.Build, caData map[string
 	build.Status.Message = ""
 
 	// Invoke the strategy to create a build pod.
-	podSpec, err := bc.createStrategy.CreateBuildPod(build, caData, bc.internalRegistryHostname)
+	podSpec, err := bc.createStrategy.CreateBuildPod(build, caData, bc.internalRegistryHostname, bc.registrySourcesData)
 	if err != nil {
 		if strategy.IsFatal(err) {
 			return nil, &strategy.FatalError{Reason: fmt.Sprintf("failed to create a build pod spec for build %s/%s: %v", build.Namespace, build.Name, err)}
@@ -1946,6 +1960,7 @@ func (bc *BuildController) readClusterImageConfig() []error {
 	} else if imageConfig == nil {
 		bc.setAdditionalTrustedCAs(nil)
 		bc.setRegistryConfTOML("")
+		bc.setRegistrySourcesJSON("")
 		bc.setSignaturePolicyJSON("")
 		return configErrs
 	}
@@ -1969,6 +1984,13 @@ func (bc *BuildController) readClusterImageConfig() []error {
 		configErrs = append(configErrs, regErr)
 	} else {
 		bc.setRegistryConfTOML(registriesTOML)
+	}
+
+	registriesJSON, sigErr := bc.createBuildRegistrySourcesData(imageConfig)
+	if sigErr != nil {
+		configErrs = append(configErrs, sigErr)
+	} else {
+		bc.setRegistrySourcesJSON(registriesJSON)
 	}
 
 	signatureJSON, sigErr := bc.createBuildSignaturePolicyData(imageConfig)
@@ -2039,6 +2061,33 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 	klog.V(4).Info("overrode insecure registry settings for builds")
 	klog.V(5).Infof("generated registries.conf for build pods: \n%s", string(configTOML))
 	return string(configTOML), nil
+}
+
+func (bc *BuildController) createBuildRegistrySourcesData(config *configv1.Image) (string, error) {
+	registriesConfig := config.Spec.RegistrySources
+	if len(registriesConfig.AllowedRegistries) == 0 && len(registriesConfig.BlockedRegistries) == 0 {
+		klog.V(4).Info("allowing builds to pull images from all registries")
+		return "", nil
+	}
+	if len(registriesConfig.AllowedRegistries) != 0 && len(registriesConfig.BlockedRegistries) != 0 {
+		return "", fmt.Errorf("invalid registries config: only one of AllowedRegistries or BlockedRegistries may be specified")
+	}
+	if len(registriesConfig.AllowedRegistries) > 0 {
+		klog.V(4).Infof("only allowing image pulls from %s for builds", registriesConfig.AllowedRegistries)
+	}
+	if len(registriesConfig.BlockedRegistries) > 0 {
+		klog.V(4).Infof("blocking image pulls from %s for builds", registriesConfig.BlockedRegistries)
+	}
+
+	sourcesJSON, err := json.Marshal(registriesConfig)
+	if err != nil {
+		return "", err
+	}
+	if len(sourcesJSON) == 0 {
+		return "", nil
+	}
+	klog.V(5).Infof("generated registry sources JSON for build pods: \n%s", string(sourcesJSON))
+	return string(sourcesJSON), err
 }
 
 func (bc *BuildController) createBuildSignaturePolicyData(config *configv1.Image) (string, error) {

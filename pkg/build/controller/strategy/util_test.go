@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -10,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	buildv1 "github.com/openshift/api/build/v1"
+	configv1 "github.com/openshift/api/config/v1"
 )
 
 const (
@@ -19,6 +21,10 @@ const (
 	---- END CERTIFICATE ----
 	`
 	testInternalRegistryHost = "registry.svc.localhost:5000"
+	testRegistrySources      = `{
+		"InsecureRegistries": ["registry.svc.localhost:5000"],
+		"AllowedRegistries":  ["registry.svc.localhost:5000"]
+	}`
 )
 
 func TestSetupDockerSocketHostSocket(t *testing.T) {
@@ -381,7 +387,7 @@ func TestSetupBuildSystem(t *testing.T) {
 			},
 		},
 	}
-	setupContainersConfigs(build, podSpec)
+	setupContainersConfigs(build, podSpec, testRegistrySources)
 	if len(podSpec.Spec.Volumes) != 1 {
 		t.Fatalf("expected pod to have 1 volume, got %d", len(podSpec.Spec.Volumes))
 	}
@@ -412,6 +418,7 @@ func TestSetupBuildSystem(t *testing.T) {
 			t.Errorf("registry config was not mounted into container %s", c.Name)
 		}
 		foundRegistriesConf := false
+		foundRegistrySources := false
 		foundSignaturePolicy := false
 		for _, env := range c.Env {
 			if env.Name == "BUILD_REGISTRIES_CONF_PATH" {
@@ -419,6 +426,12 @@ func TestSetupBuildSystem(t *testing.T) {
 				expectedMountPath := filepath.Join(ConfigMapBuildSystemConfigsMountPath, buildv1.RegistryConfKey)
 				if env.Value != expectedMountPath {
 					t.Errorf("expected BUILD_REGISTRIES_CONF_PATH %s, got %s", expectedMountPath, env.Value)
+				}
+			}
+			if env.Name == "BUILD_REGISTRY_SOURCES" {
+				foundRegistrySources = true
+				if err := json.Unmarshal([]byte(env.Value), &configv1.RegistrySources{}); err != nil {
+					t.Errorf("expected valid BUILD_REGISTRY_SOURCE, got %s", env.Value)
 				}
 			}
 			if env.Name == "BUILD_SIGNATURE_POLICY_PATH" {
@@ -431,6 +444,9 @@ func TestSetupBuildSystem(t *testing.T) {
 		}
 		if !foundRegistriesConf {
 			t.Errorf("env var %s was not present in container %s", "BUILD_REGISTRIES_CONF_PATH", c.Name)
+		}
+		if !foundRegistrySources {
+			t.Errorf("env var %s was not present in container %s", "BUILD_REGISTRY_SOURCES", c.Name)
 		}
 		if !foundSignaturePolicy {
 			t.Errorf("env var %s was not present in container %s", "BUILD_SIGNATURE_POLICY_PATH", c.Name)

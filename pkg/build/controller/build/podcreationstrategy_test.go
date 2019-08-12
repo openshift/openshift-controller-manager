@@ -14,7 +14,7 @@ type testPodCreationStrategy struct {
 	err error
 }
 
-func (s *testPodCreationStrategy) CreateBuildPod(b *buildv1.Build, additionalCAs map[string]string, internalRegistryHost string) (*v1.Pod, error) {
+func (s *testPodCreationStrategy) CreateBuildPod(b *buildv1.Build, additionalCAs map[string]string, internalRegistryHost, registrySources string) (*v1.Pod, error) {
 	return s.pod, s.err
 }
 
@@ -48,6 +48,10 @@ func TestStrategyCreateBuildPod(t *testing.T) {
 	}
 
 	const internalRegistryHost = "registry.svc.localhost:5000"
+	const registrySources = `{
+		"InsecureRegistries": ["registry.svc.localhost:5000"],
+		"AllowedRegistries":  ["registry.svc.localhost:5000"]
+	}`
 
 	tests := []struct {
 		strategy    buildPodCreationStrategy
@@ -98,7 +102,7 @@ func TestStrategyCreateBuildPod(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		pod, err := test.strategy.CreateBuildPod(test.build, nil, internalRegistryHost)
+		pod, err := test.strategy.CreateBuildPod(test.build, nil, internalRegistryHost, registrySources)
 		if test.expectError {
 			if err == nil {
 				t.Errorf("Expected error but did not get one")
