@@ -942,10 +942,10 @@ func resolveImageID(stream *imagev1.ImageStream, imageID string) (*imagev1.TagEv
 	}
 }
 
-func resolveImageStreamTag(ref *corev1.ObjectReference, lister imagev1lister.ImageStreamLister, defaultNamespace string) (*corev1.ObjectReference, error) {
+func (bc *BuildController) resolveImageStreamTag(ref *corev1.ObjectReference, lister imagev1lister.ImageStreamLister, build *buildv1.Build) (*corev1.ObjectReference, error) {
 	namespace := ref.Namespace
 	if len(namespace) == 0 {
-		namespace = defaultNamespace
+		namespace = build.Namespace
 	}
 	name, tag, ok := imageutil.SplitImageStreamTag(ref.Name)
 	if !ok {
@@ -959,6 +959,22 @@ func resolveImageStreamTag(ref *corev1.ObjectReference, lister imagev1lister.Ima
 		return nil, fmt.Errorf("the referenced image stream %s/%s could not be found: %v", namespace, name, err)
 	}
 	if newRef, ok := imageutil.ResolveLatestTaggedImage(stream, tag); ok {
+		// generate informational event if
+		// a) tag has spec
+		// b) tag is local reference
+		// c) status DockerImageRepository is not set, meaning we got this copy of the stream from the watch
+		//    before the image registry was set up
+		// note, this method is only called for non-output image refs, so we should not get duplicates with
+		// the error/warning currently in place for the output link falling into this category
+		ref2, ok2 := imageutil.SpecHasTag(stream, tag)
+		if ok2 && ref2.ReferencePolicy.Type == imagev1.LocalTagReferencePolicy && len(stream.Status.DockerImageRepository) == 0 {
+			bc.recorder.Eventf(build, corev1.EventTypeNormal,
+				"LocalRefImageStreamTagUnavailable",
+				"The build %s/%s references an image stream tag %s with the local reference policy type, but the internal image registry location was not marked in the image stream",
+				build.Namespace,
+				build.Name,
+				ref.Name)
+		}
 		return &corev1.ObjectReference{Kind: "DockerImage", Name: newRef}, nil
 	}
 	return nil, fmt.Errorf("the referenced image stream tag %s/%s does not exist", namespace, ref.Name)
@@ -1027,7 +1043,7 @@ func (bc *BuildController) resolveImageReferences(build *buildv1.Build, update *
 			}
 			*ref = *newRef
 		case "ImageStreamTag":
-			newRef, err := resolveImageStreamTag(ref, bc.imageStreamStore, build.Namespace)
+			newRef, err := bc.resolveImageStreamTag(ref, bc.imageStreamStore, build)
 			if err != nil {
 				return err
 			}
