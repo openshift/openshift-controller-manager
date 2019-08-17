@@ -292,8 +292,8 @@ func TestSetupBuildCAs(t *testing.T) {
 				},
 			}
 			setupBuildCAs(build, podSpec, tc.certs, testInternalRegistryHost)
-			if len(podSpec.Spec.Volumes) != 1 {
-				t.Fatalf("expected pod to have 1 volume, got %d", len(podSpec.Spec.Volumes))
+			if len(podSpec.Spec.Volumes) != 2 {
+				t.Fatalf("expected pod to have 2 volume, got %d", len(podSpec.Spec.Volumes))
 			}
 			volume := podSpec.Spec.Volumes[0]
 			if volume.Name != "build-ca-bundles" {

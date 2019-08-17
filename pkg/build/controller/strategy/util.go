@@ -32,9 +32,9 @@ const (
 	ConfigMapCertsMountPath              = "/var/run/configs/openshift.io/certs"
 	SecretBuildSourceBaseMountPath       = "/var/run/secrets/openshift.io/build"
 	SourceImagePullSecretMountPath       = "/var/run/secrets/openshift.io/source-image"
-	// ConfigMapBuildProxyCAMountPath is the directory where the tls-ca-bundle.pem file will be mounted
+	// ConfigMapBuildGlobalCAMountPath is the directory where the tls-ca-bundle.pem file will be mounted
 	// by the cluster CA operator
-	ConfigMapBuildProxyCAMountPath = "/etc/pki/ca-trust/extracted/pem"
+	ConfigMapBuildGlobalCAMountPath = "/etc/pki/ca-trust/extracted/pem"
 
 	// ExtractImageContentContainer is the name of the container that will
 	// pull down input images and extract their content for input to the build.
@@ -542,8 +542,7 @@ func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, additionalCAs map[stri
 		pod.Spec.Containers = containers
 	}
 
-	//TODO add back in when global CA injector controller is ready
-	/*if !globalCAsExist {
+	if !globalCAsExist {
 		cmSource := &corev1.ConfigMapVolumeSource{
 			LocalObjectReference: corev1.LocalObjectReference{
 				Name: buildutil.GetBuildGlobalCAConfigMapName(build),
@@ -570,7 +569,7 @@ func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, additionalCAs map[stri
 			c.VolumeMounts = append(c.VolumeMounts,
 				corev1.VolumeMount{
 					Name:      "build-proxy-ca-bundles",
-					MountPath: ConfigMapBuildProxyCAMountPath,
+					MountPath: ConfigMapBuildGlobalCAMountPath,
 				},
 			)
 			containers[i] = c
@@ -581,12 +580,12 @@ func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, additionalCAs map[stri
 			c.VolumeMounts = append(c.VolumeMounts,
 				corev1.VolumeMount{
 					Name:      "build-proxy-ca-bundles",
-					MountPath: ConfigMapBuildProxyCAMountPath,
+					MountPath: ConfigMapBuildGlobalCAMountPath,
 				},
 			)
 			initContainers[i] = c
 		}
-	}*/
+	}
 }
 
 // setupBlobCache configures a shared volume for caching image blobs across the build pod containers.

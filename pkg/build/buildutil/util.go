@@ -39,10 +39,10 @@ const (
 	buildPodSuffix          = "build"
 	caConfigMapSuffix       = "ca"
 	globalCAConfigMapSuffix = "global-ca"
-	// GlobalCAConfigMapAnnotation is the annotation key to set on a config map so that the platform's
+	// GlobalCAConfigMapLabel is the annotation key to set on a config map so that the platform's
 	// global CA support that will inject any required CA's needed for external communication.
-	GlobalCAConfigMapAnnotation = "config.openshift.io/inject-trusted-cabundle"
-	sysConfigConfigMapSuffix    = "sys-config"
+	GlobalCAConfigMapLabel   = "config.openshift.io/inject-trusted-cabundle"
+	sysConfigConfigMapSuffix = "sys-config"
 )
 
 func HasTriggerType(triggerType buildv1.BuildTriggerType, bc *buildv1.BuildConfig) bool {
