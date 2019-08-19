@@ -1253,10 +1253,10 @@ func TestCreateBuildProxyCAConfigMap(t *testing.T) {
 	if !hasBuildPodOwnerRef(pod, caMap) {
 		t.Error("build proxy CA configMap is missing owner ref to the build pod")
 	}
-	if caMap.Annotations == nil || len(caMap.Annotations) == 0 {
+	if caMap.Labels == nil || len(caMap.Labels) == 0 {
 		t.Errorf("build proxy CA config map has empty annotations")
 	}
-	if _, ok := caMap.Annotations[buildutil.GlobalCAConfigMapAnnotation]; !ok {
+	if _, ok := caMap.Labels[buildutil.GlobalCAConfigMapLabel]; !ok {
 		t.Errorf("build proxy configMap is missing the proxy CA annotation")
 	}
 }

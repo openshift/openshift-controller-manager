@@ -1226,19 +1226,18 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 				return update, err
 			}
 		}
-		//TODO commented out until CA injection controller lands
-		/*
-			hasGlobalCAMap, err := bc.findOwnedConfigMap(existingPod, build.Namespace, buildutil.GetBuildGlobalCAConfigMapName(build))
+
+		hasGlobalCAMap, err := bc.findOwnedConfigMap(existingPod, build.Namespace, buildutil.GetBuildGlobalCAConfigMapName(build))
+		if err != nil {
+			return update, fmt.Errorf("could not find global certificate authority for build: %v", err)
+		}
+		if !hasGlobalCAMap {
+			update, err = bc.createBuildGlobalCAConfigMap(build, existingPod, update)
 			if err != nil {
-				return update, fmt.Errorf("could not find global certificate authority for build: %v", err)
+				return update, err
 			}
-			if !hasGlobalCAMap {
-				update, err = bc.createBuildGlobalCAConfigMap(build, existingPod, update)
-				if err != nil {
-					return update, err
-				}
-			}
-		*/
+		}
+
 		hasRegistryConf, err := bc.findOwnedConfigMap(existingPod, build.Namespace, buildutil.GetBuildSystemConfigMapName(build))
 		if err != nil {
 			return update, fmt.Errorf("could not find registry config for build: %v", err)
@@ -1263,13 +1262,12 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		if err != nil {
 			return nil, err
 		}
-		//TODO commented out until CA injection controller lands
-		/*
-			update, err = bc.createBuildGlobalCAConfigMap(build, pod, update)
-			if err != nil {
-				return update, err
-			}
-		*/
+
+		update, err = bc.createBuildGlobalCAConfigMap(build, pod, update)
+		if err != nil {
+			return update, err
+		}
+
 	}
 
 	update = transitionToPhase(buildv1.BuildPhasePending, "", "")
@@ -1814,7 +1812,7 @@ func (bc *BuildController) createBuildGlobalCAConfigMapSpec(build *buildv1.Build
 			OwnerReferences: []metav1.OwnerReference{
 				makeBuildPodOwnerRef(buildPod),
 			},
-			Annotations: map[string]string{buildutil.GlobalCAConfigMapAnnotation: "true"},
+			Labels: map[string]string{buildutil.GlobalCAConfigMapLabel: "true"},
 		},
 	}
 	return cm
