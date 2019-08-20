@@ -23,7 +23,7 @@ import (
 	"time"
 
 	autoscalingv2 "k8s.io/api/autoscaling/v2beta2"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -960,6 +960,26 @@ func TestReplicaCalcToleranceCMObject(t *testing.T) {
 			levels:              []int64{20666},
 			targetUtilization:   20000,
 			expectedUtilization: 20666,
+			singleObject: &autoscalingv2.CrossVersionObjectReference{
+				Kind:       "Deployment",
+				APIVersion: "apps/v1",
+				Name:       "some-deployment",
+			},
+		},
+	}
+	tc.runTest(t)
+}
+
+func TestReplicaCalcTolerancePerPodCMObject(t *testing.T) {
+	tc := replicaCalcTestCase{
+		currentReplicas:  4,
+		expectedReplicas: 4,
+		metric: &metricInfo{
+			metricType:              objectPerPodMetric,
+			name:                    "qps",
+			levels:                  []int64{20166},
+			perPodTargetUtilization: 5000,
+			expectedUtilization:     5042,
 			singleObject: &autoscalingv2.CrossVersionObjectReference{
 				Kind:       "Deployment",
 				APIVersion: "apps/v1",

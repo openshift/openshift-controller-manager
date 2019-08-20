@@ -20,6 +20,8 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/options"
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases/workflow"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
@@ -38,6 +40,7 @@ func getControlPlaneJoinPhaseFlags(name string) []string {
 	flags := []string{
 		options.CfgPath,
 		options.ControlPlane,
+		options.ExperimentalControlPlane,
 		options.NodeName,
 	}
 	if name != "mark-control-plane" {
@@ -50,14 +53,15 @@ func getControlPlaneJoinPhaseFlags(name string) []string {
 func NewControlPlaneJoinPhase() workflow.Phase {
 	return workflow.Phase{
 		Name:    "control-plane-join",
-		Short:   "Joins a machine as a control plane instance",
+		Short:   "Join a machine as a control plane instance",
 		Example: controlPlaneJoinExample,
 		Phases: []workflow.Phase{
 			{
 				Name:           "all",
-				Short:          "Joins a machine as a control plane instance",
+				Short:          "Join a machine as a control plane instance",
 				InheritFlags:   getControlPlaneJoinPhaseFlags("all"),
 				RunAllSiblings: true,
+				ArgsValidator:  cobra.NoArgs,
 			},
 			newEtcdLocalSubphase(),
 			newUpdateStatusSubphase(),
@@ -68,10 +72,11 @@ func NewControlPlaneJoinPhase() workflow.Phase {
 
 func newEtcdLocalSubphase() workflow.Phase {
 	return workflow.Phase{
-		Name:         "etcd",
-		Short:        "Add a new local etcd member",
-		Run:          runEtcdPhase,
-		InheritFlags: getControlPlaneJoinPhaseFlags("etcd"),
+		Name:          "etcd",
+		Short:         "Add a new local etcd member",
+		Run:           runEtcdPhase,
+		InheritFlags:  getControlPlaneJoinPhaseFlags("etcd"),
+		ArgsValidator: cobra.NoArgs,
 	}
 }
 
@@ -83,17 +88,19 @@ func newUpdateStatusSubphase() workflow.Phase {
 			kubeadmconstants.ClusterStatusConfigMapKey,
 			kubeadmconstants.KubeadmConfigConfigMap,
 		),
-		Run:          runUpdateStatusPhase,
-		InheritFlags: getControlPlaneJoinPhaseFlags("update-status"),
+		Run:           runUpdateStatusPhase,
+		InheritFlags:  getControlPlaneJoinPhaseFlags("update-status"),
+		ArgsValidator: cobra.NoArgs,
 	}
 }
 
 func newMarkControlPlaneSubphase() workflow.Phase {
 	return workflow.Phase{
-		Name:         "mark-control-plane",
-		Short:        "Mark a node as a control-plane",
-		Run:          runMarkControlPlanePhase,
-		InheritFlags: getControlPlaneJoinPhaseFlags("mark-control-plane"),
+		Name:          "mark-control-plane",
+		Short:         "Mark a node as a control-plane",
+		Run:           runMarkControlPlanePhase,
+		InheritFlags:  getControlPlaneJoinPhaseFlags("mark-control-plane"),
+		ArgsValidator: cobra.NoArgs,
 	}
 }
 

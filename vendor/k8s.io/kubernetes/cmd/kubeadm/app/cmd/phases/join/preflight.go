@@ -65,6 +65,7 @@ func NewPreflightPhase() workflow.Phase {
 			options.TLSBootstrapToken,
 			options.TokenStr,
 			options.ControlPlane,
+			options.ExperimentalControlPlane,
 			options.APIServerAdvertiseAddress,
 			options.APIServerBindPort,
 			options.NodeCRISocket,
@@ -118,9 +119,10 @@ func runPreflight(c workflow.RunData) error {
 			return errors.New(msg.String())
 		}
 
-		// run kubeadm init preflight checks for checking all the prequisites
+		// run kubeadm init preflight checks for checking all the prerequisites
 		fmt.Println("[preflight] Running pre-flight checks before initializing the new control plane instance")
-		if err := preflight.RunInitNodeChecks(utilsexec.New(), initCfg, j.IgnorePreflightErrors(), true); err != nil {
+
+		if err := preflight.RunInitNodeChecks(utilsexec.New(), initCfg, j.IgnorePreflightErrors(), true, hasCertificateKey); err != nil {
 			return err
 		}
 

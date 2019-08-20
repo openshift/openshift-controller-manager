@@ -21,6 +21,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,11 +34,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
-	utilfeaturetesting "k8s.io/apiserver/pkg/util/feature/testing"
+	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	fakeclient "k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	utiltesting "k8s.io/client-go/util/testing"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/volume"
 	volumetest "k8s.io/kubernetes/pkg/volume/testing"
@@ -198,7 +201,7 @@ func TestAttacherAttach(t *testing.T) {
 
 		csiAttacher := attacher.(*csiAttacher)
 
-		go func(spec *volume.Spec, id, nodename string, fail bool) {
+		go func(spec *volume.Spec, nodename string, fail bool) {
 			attachID, err := csiAttacher.Attach(spec, types.NodeName(nodename))
 			if !fail && err != nil {
 				t.Errorf("expecting no failure, but got err: %v", err)
@@ -206,10 +209,10 @@ func TestAttacherAttach(t *testing.T) {
 			if fail && err == nil {
 				t.Errorf("expecting failure, but got no err")
 			}
-			if attachID != id && !fail {
-				t.Errorf("expecting attachID %v, got %v", id, attachID)
+			if attachID != "" {
+				t.Errorf("expecting empty attachID, got %v", attachID)
 			}
-		}(tc.spec, tc.attachID, tc.nodeName, tc.shouldFail)
+		}(tc.spec, tc.nodeName, tc.shouldFail)
 
 		var status storage.VolumeAttachmentStatus
 		if tc.injectAttacherError {
@@ -225,7 +228,7 @@ func TestAttacherAttach(t *testing.T) {
 }
 
 func TestAttacherAttachWithInline(t *testing.T) {
-	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIInlineVolume, true)()
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIInlineVolume, true)()
 	testCases := []struct {
 		name                string
 		nodeName            string
@@ -277,15 +280,15 @@ func TestAttacherAttachWithInline(t *testing.T) {
 		}
 		csiAttacher := attacher.(*csiAttacher)
 
-		go func(spec *volume.Spec, id, nodename string, fail bool) {
+		go func(spec *volume.Spec, nodename string, fail bool) {
 			attachID, err := csiAttacher.Attach(spec, types.NodeName(nodename))
 			if fail != (err != nil) {
 				t.Errorf("expecting no failure, but got err: %v", err)
 			}
-			if attachID != id && !fail {
-				t.Errorf("expecting attachID %v, got %v", id, attachID)
+			if attachID != "" {
+				t.Errorf("expecting empty attachID, got %v", attachID)
 			}
-		}(tc.spec, tc.attachID, tc.nodeName, tc.shouldFail)
+		}(tc.spec, tc.nodeName, tc.shouldFail)
 
 		var status storage.VolumeAttachmentStatus
 		if tc.injectAttacherError {
@@ -301,7 +304,7 @@ func TestAttacherAttachWithInline(t *testing.T) {
 }
 
 func TestAttacherWithCSIDriver(t *testing.T) {
-	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIDriverRegistry, true)()
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIDriverRegistry, true)()
 
 	tests := []struct {
 		name                   string
@@ -333,9 +336,9 @@ func TestAttacherWithCSIDriver(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			fakeClient := fakeclient.NewSimpleClientset(
-				getCSIDriver("not-attachable", nil, &bFalse),
-				getCSIDriver("attachable", nil, &bTrue),
-				getCSIDriver("nil", nil, nil),
+				getTestCSIDriver("not-attachable", nil, &bFalse),
+				getTestCSIDriver("attachable", nil, &bTrue),
+				getTestCSIDriver("nil", nil, nil),
 			)
 			plug, fakeWatcher, tmpDir, _ := newTestWatchPlugin(t, fakeClient)
 			defer os.RemoveAll(tmpDir)
@@ -347,7 +350,10 @@ func TestAttacherWithCSIDriver(t *testing.T) {
 			csiAttacher := attacher.(*csiAttacher)
 			spec := volume.NewSpecFromPersistentVolume(makeTestPV("test-pv", 10, test.driver, "test-vol"), false)
 
-			pluginCanAttach := plug.CanAttach(spec)
+			pluginCanAttach, err := plug.CanAttach(spec)
+			if err != nil {
+				t.Fatalf("attacher.CanAttach failed: %s", err)
+			}
 			if pluginCanAttach != test.expectVolumeAttachment {
 				t.Errorf("attacher.CanAttach does not match expected attachment status %t", test.expectVolumeAttachment)
 			}
@@ -356,16 +362,16 @@ func TestAttacherWithCSIDriver(t *testing.T) {
 				t.Log("plugin is not attachable")
 				return
 			}
-
+			var wg sync.WaitGroup
+			wg.Add(1)
 			go func(volSpec *volume.Spec, expectAttach bool) {
 				attachID, err := csiAttacher.Attach(volSpec, types.NodeName("node"))
+				defer wg.Done()
+
 				if err != nil {
 					t.Errorf("Attach() failed: %s", err)
 				}
-				if expectAttach && attachID == "" {
-					t.Errorf("Expected attachID, got nothing")
-				}
-				if !expectAttach && attachID != "" {
+				if attachID != "" {
 					t.Errorf("Expected empty attachID, got %q", attachID)
 				}
 			}(spec, test.expectVolumeAttachment)
@@ -377,12 +383,13 @@ func TestAttacherWithCSIDriver(t *testing.T) {
 				}
 				markVolumeAttached(t, csiAttacher.k8s, fakeWatcher, expectedAttachID, status)
 			}
+			wg.Wait()
 		})
 	}
 }
 
 func TestAttacherWaitForVolumeAttachmentWithCSIDriver(t *testing.T) {
-	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIDriverRegistry, true)()
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIDriverRegistry, true)()
 
 	// In order to detect if the volume plugin would skip WaitForAttach for non-attachable drivers,
 	// we do not instantiate any VolumeAttachment. So if the plugin does not skip attach,  WaitForVolumeAttachment
@@ -417,9 +424,9 @@ func TestAttacherWaitForVolumeAttachmentWithCSIDriver(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			fakeClient := fakeclient.NewSimpleClientset(
-				getCSIDriver("not-attachable", nil, &bFalse),
-				getCSIDriver("attachable", nil, &bTrue),
-				getCSIDriver("nil", nil, nil),
+				getTestCSIDriver("not-attachable", nil, &bFalse),
+				getTestCSIDriver("attachable", nil, &bTrue),
+				getTestCSIDriver("nil", nil, nil),
 			)
 			plug, tmpDir := newTestPlugin(t, fakeClient)
 			defer os.RemoveAll(tmpDir)
@@ -431,7 +438,10 @@ func TestAttacherWaitForVolumeAttachmentWithCSIDriver(t *testing.T) {
 			csiAttacher := attacher.(*csiAttacher)
 			spec := volume.NewSpecFromPersistentVolume(makeTestPV("test-pv", 10, test.driver, "test-vol"), false)
 
-			pluginCanAttach := plug.CanAttach(spec)
+			pluginCanAttach, err := plug.CanAttach(spec)
+			if err != nil {
+				t.Fatalf("plugin.CanAttach test failed: %s", err)
+			}
 			if !pluginCanAttach {
 				t.Log("plugin is not attachable")
 				return
@@ -529,7 +539,7 @@ func TestAttacherWaitForAttach(t *testing.T) {
 }
 
 func TestAttacherWaitForAttachWithInline(t *testing.T) {
-	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIInlineVolume, true)()
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIInlineVolume, true)()
 
 	tests := []struct {
 		name             string
@@ -802,7 +812,7 @@ func TestAttacherVolumesAreAttached(t *testing.T) {
 }
 
 func TestAttacherVolumesAreAttachedWithInline(t *testing.T) {
-	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIInlineVolume, true)()
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIInlineVolume, true)()
 	type attachedSpec struct {
 		volName  string
 		spec     *volume.Spec
@@ -1024,6 +1034,14 @@ func TestAttacherMountDevice(t *testing.T) {
 			spec:            volume.NewSpecFromPersistentVolume(makeTestPV(pvName, 10, testDriver, "test-vol1"), false),
 		},
 		{
+			testName:        "normal PV with mount options",
+			volName:         "test-vol1",
+			devicePath:      "path1",
+			deviceMountPath: "path2",
+			stageUnstageSet: true,
+			spec:            volume.NewSpecFromPersistentVolume(makeTestPVWithMountOptions(pvName, 10, testDriver, "test-vol1", []string{"test-op"}), false),
+		},
+		{
 			testName:        "no vol name",
 			volName:         "",
 			devicePath:      "path1",
@@ -1132,12 +1150,15 @@ func TestAttacherMountDevice(t *testing.T) {
 			if vol.Path != tc.deviceMountPath {
 				t.Errorf("expected mount path: %s. got: %s", tc.deviceMountPath, vol.Path)
 			}
+			if !reflect.DeepEqual(vol.MountFlags, tc.spec.PersistentVolume.Spec.MountOptions) {
+				t.Errorf("expected mount options: %v, got: %v", tc.spec.PersistentVolume.Spec.MountOptions, vol.MountFlags)
+			}
 		}
 	}
 }
 
 func TestAttacherMountDeviceWithInline(t *testing.T) {
-	defer utilfeaturetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIInlineVolume, true)()
+	defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CSIInlineVolume, true)()
 	pvName := "test-pv"
 	testCases := []struct {
 		testName        string
@@ -1435,12 +1456,20 @@ func newTestWatchPlugin(t *testing.T, fakeClient *fakeclient.Clientset) (*csiPlu
 		fakeClient = fakeclient.NewSimpleClientset()
 	}
 	fakeWatcher := watch.NewRaceFreeFake()
-	fakeClient.Fake.AddWatchReactor("*", core.DefaultWatchReactor(fakeWatcher, nil))
+	fakeClient.Fake.PrependWatchReactor("volumeattachments", core.DefaultWatchReactor(fakeWatcher, nil))
+
+	// Start informer for CSIDrivers.
+	factory := informers.NewSharedInformerFactory(fakeClient, csiResyncPeriod)
+	csiDriverInformer := factory.Storage().V1beta1().CSIDrivers()
+	csiDriverLister := csiDriverInformer.Lister()
+	factory.Start(wait.NeverStop)
+
 	host := volumetest.NewFakeVolumeHostWithCSINodeName(
 		tmpDir,
 		fakeClient,
 		nil,
 		"node",
+		csiDriverLister,
 	)
 	plugMgr := &volume.VolumePluginMgr{}
 	plugMgr.InitPlugins(ProbeVolumePlugins(), nil /* prober */, host)
@@ -1458,7 +1487,7 @@ func newTestWatchPlugin(t *testing.T, fakeClient *fakeclient.Clientset) (*csiPlu
 	if utilfeature.DefaultFeatureGate.Enabled(features.CSIDriverRegistry) {
 		// Wait until the informer in CSI volume plugin has all CSIDrivers.
 		wait.PollImmediate(testInformerSyncPeriod, testInformerSyncTimeout, func() (bool, error) {
-			return csiPlug.csiDriverInformer.Informer().HasSynced(), nil
+			return csiDriverInformer.Informer().HasSynced(), nil
 		})
 	}
 

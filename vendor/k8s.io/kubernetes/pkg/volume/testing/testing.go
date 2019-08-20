@@ -21,7 +21,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	clientset "k8s.io/client-go/kubernetes"
+	storagelisters "k8s.io/client-go/listers/storage/v1beta1"
 	"k8s.io/client-go/tools/record"
 	utiltesting "k8s.io/client-go/util/testing"
 	cloudprovider "k8s.io/cloud-provider"
@@ -62,16 +63,20 @@ const (
 
 // fakeVolumeHost is useful for testing volume plugins.
 type fakeVolumeHost struct {
-	rootDir    string
-	kubeClient clientset.Interface
-	pluginMgr  VolumePluginMgr
-	cloud      cloudprovider.Interface
-	mounter    mount.Interface
-	exec       mount.Exec
-	nodeLabels map[string]string
-	nodeName   string
-	subpather  subpath.Interface
+	rootDir         string
+	kubeClient      clientset.Interface
+	pluginMgr       VolumePluginMgr
+	cloud           cloudprovider.Interface
+	mounter         mount.Interface
+	exec            mount.Exec
+	nodeLabels      map[string]string
+	nodeName        string
+	subpather       subpath.Interface
+	csiDriverLister storagelisters.CSIDriverLister
 }
+
+var _ VolumeHost = &fakeVolumeHost{}
+var _ AttachDetachVolumeHost = &fakeVolumeHost{}
 
 func NewFakeVolumeHost(rootDir string, kubeClient clientset.Interface, plugins []VolumePlugin) *fakeVolumeHost {
 	return newFakeVolumeHost(rootDir, kubeClient, plugins, nil, nil)
@@ -87,9 +92,12 @@ func NewFakeVolumeHostWithNodeLabels(rootDir string, kubeClient clientset.Interf
 	return volHost
 }
 
-func NewFakeVolumeHostWithCSINodeName(rootDir string, kubeClient clientset.Interface, plugins []VolumePlugin, nodeName string) *fakeVolumeHost {
+func NewFakeVolumeHostWithCSINodeName(rootDir string, kubeClient clientset.Interface, plugins []VolumePlugin, nodeName string, driverLister storagelisters.CSIDriverLister) *fakeVolumeHost {
 	volHost := newFakeVolumeHost(rootDir, kubeClient, plugins, nil, nil)
 	volHost.nodeName = nodeName
+	if driverLister != nil {
+		volHost.csiDriverLister = driverLister
+	}
 	return volHost
 }
 
@@ -110,27 +118,27 @@ func NewFakeVolumeHostWithMounterFSType(rootDir string, kubeClient clientset.Int
 }
 
 func (f *fakeVolumeHost) GetPluginDir(podUID string) string {
-	return path.Join(f.rootDir, "plugins", podUID)
+	return filepath.Join(f.rootDir, "plugins", podUID)
 }
 
 func (f *fakeVolumeHost) GetVolumeDevicePluginDir(pluginName string) string {
-	return path.Join(f.rootDir, "plugins", pluginName, "volumeDevices")
+	return filepath.Join(f.rootDir, "plugins", pluginName, "volumeDevices")
 }
 
 func (f *fakeVolumeHost) GetPodsDir() string {
-	return path.Join(f.rootDir, "pods")
+	return filepath.Join(f.rootDir, "pods")
 }
 
 func (f *fakeVolumeHost) GetPodVolumeDir(podUID types.UID, pluginName, volumeName string) string {
-	return path.Join(f.rootDir, "pods", string(podUID), "volumes", pluginName, volumeName)
+	return filepath.Join(f.rootDir, "pods", string(podUID), "volumes", pluginName, volumeName)
 }
 
 func (f *fakeVolumeHost) GetPodVolumeDeviceDir(podUID types.UID, pluginName string) string {
-	return path.Join(f.rootDir, "pods", string(podUID), "volumeDevices", pluginName)
+	return filepath.Join(f.rootDir, "pods", string(podUID), "volumeDevices", pluginName)
 }
 
 func (f *fakeVolumeHost) GetPodPluginDir(podUID types.UID, pluginName string) string {
-	return path.Join(f.rootDir, "pods", string(podUID), "plugins", pluginName)
+	return filepath.Join(f.rootDir, "pods", string(podUID), "plugins", pluginName)
 }
 
 func (f *fakeVolumeHost) GetKubeClient() clientset.Interface {
@@ -484,8 +492,12 @@ func (plugin *FakeVolumePlugin) GetNewDetacherCallCount() int {
 	return plugin.NewDetacherCallCount
 }
 
-func (plugin *FakeVolumePlugin) CanAttach(spec *Spec) bool {
-	return true
+func (plugin *FakeVolumePlugin) CanAttach(spec *Spec) (bool, error) {
+	return true, nil
+}
+
+func (plugin *FakeVolumePlugin) CanDeviceMount(spec *Spec) (bool, error) {
+	return true, nil
 }
 
 func (plugin *FakeVolumePlugin) Recycle(pvName string, spec *Spec, eventRecorder recyclerclient.RecycleEventRecorder) error {
@@ -610,6 +622,10 @@ type FakeDeviceMountableVolumePlugin struct {
 	FakeBasicVolumePlugin
 }
 
+func (f *FakeDeviceMountableVolumePlugin) CanDeviceMount(spec *Spec) (bool, error) {
+	return true, nil
+}
+
 func (f *FakeDeviceMountableVolumePlugin) NewDeviceMounter() (DeviceMounter, error) {
 	return f.Plugin.NewDeviceMounter()
 }
@@ -638,8 +654,8 @@ func (f *FakeAttachableVolumePlugin) NewDetacher() (Detacher, error) {
 	return f.Plugin.NewDetacher()
 }
 
-func (f *FakeAttachableVolumePlugin) CanAttach(spec *Spec) bool {
-	return true
+func (f *FakeAttachableVolumePlugin) CanAttach(spec *Spec) (bool, error) {
+	return true, nil
 }
 
 var _ VolumePlugin = &FakeAttachableVolumePlugin{}
@@ -749,11 +765,11 @@ func (fv *FakeVolume) CanMount() error {
 	return nil
 }
 
-func (fv *FakeVolume) SetUp(fsGroup *int64) error {
+func (fv *FakeVolume) SetUp(mounterArgs MounterArgs) error {
 	fv.Lock()
 	defer fv.Unlock()
 	fv.SetUpCallCount++
-	return fv.SetUpAt(fv.getPath(), fsGroup)
+	return fv.SetUpAt(fv.getPath(), mounterArgs)
 }
 
 func (fv *FakeVolume) GetSetUpCallCount() int {
@@ -762,7 +778,7 @@ func (fv *FakeVolume) GetSetUpCallCount() int {
 	return fv.SetUpCallCount
 }
 
-func (fv *FakeVolume) SetUpAt(dir string, fsGroup *int64) error {
+func (fv *FakeVolume) SetUpAt(dir string, mounterArgs MounterArgs) error {
 	return os.MkdirAll(dir, 0750)
 }
 
@@ -773,7 +789,7 @@ func (fv *FakeVolume) GetPath() string {
 }
 
 func (fv *FakeVolume) getPath() string {
-	return path.Join(fv.Plugin.Host.GetPodVolumeDir(fv.PodUID, utilstrings.EscapeQualifiedName(fv.Plugin.PluginName), fv.VolName))
+	return filepath.Join(fv.Plugin.Host.GetPodVolumeDir(fv.PodUID, utilstrings.EscapeQualifiedName(fv.Plugin.PluginName), fv.VolName))
 }
 
 func (fv *FakeVolume) TearDown() error {
@@ -818,7 +834,7 @@ func (fv *FakeVolume) GetGlobalMapPath(spec *Spec) (string, error) {
 
 // Block volume support
 func (fv *FakeVolume) getGlobalMapPath() (string, error) {
-	return path.Join(fv.Plugin.Host.GetVolumeDevicePluginDir(utilstrings.EscapeQualifiedName(fv.Plugin.PluginName)), "pluginDependentPath"), nil
+	return filepath.Join(fv.Plugin.Host.GetVolumeDevicePluginDir(utilstrings.EscapeQualifiedName(fv.Plugin.PluginName)), "pluginDependentPath"), nil
 }
 
 // Block volume support
@@ -838,7 +854,7 @@ func (fv *FakeVolume) GetPodDeviceMapPath() (string, string) {
 
 // Block volume support
 func (fv *FakeVolume) getPodDeviceMapPath() (string, string) {
-	return path.Join(fv.Plugin.Host.GetPodVolumeDeviceDir(fv.PodUID, utilstrings.EscapeQualifiedName(fv.Plugin.PluginName))), fv.VolName
+	return filepath.Join(fv.Plugin.Host.GetPodVolumeDeviceDir(fv.PodUID, utilstrings.EscapeQualifiedName(fv.Plugin.PluginName))), fv.VolName
 }
 
 // Block volume support
@@ -890,6 +906,11 @@ func (fv *FakeVolume) Attach(spec *Spec, nodeName types.NodeName) (string, error
 	if exist {
 		if nodeName == UncertainAttachNode {
 			return "/dev/vdb-test", nil
+		}
+		// even if volume was previously attached to time out, we need to keep returning error
+		// so as reconciler can not confirm this volume as attached.
+		if nodeName == TimeoutAttachNode {
+			return "", fmt.Errorf("Timed out to attach volume %q to node %q", volumeName, nodeName)
 		}
 		if volumeNode == nodeName || volumeNode == MultiAttachNode || nodeName == MultiAttachNode {
 			return "/dev/vdb-test", nil
@@ -1468,4 +1489,17 @@ func ContainsAccessMode(modes []v1.PersistentVolumeAccessMode, mode v1.Persisten
 		}
 	}
 	return false
+}
+
+func (f *fakeVolumeHost) CSIDriverLister() storagelisters.CSIDriverLister {
+	return f.csiDriverLister
+}
+
+func (f *fakeVolumeHost) CSINodeLister() storagelisters.CSINodeLister {
+	// not needed for testing
+	return nil
+}
+
+func (f *fakeVolumeHost) IsAttachDetachController() bool {
+	return true
 }

@@ -26,7 +26,7 @@ import (
 	"github.com/spf13/cobra"
 
 	kubeadmscheme "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/scheme"
-	kubeadmapiv1beta1 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta1"
+	kubeadmapiv1beta2 "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/v1beta2"
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm/validation"
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/options"
 	"k8s.io/kubernetes/cmd/kubeadm/app/cmd/phases"
@@ -46,14 +46,14 @@ import (
 
 var (
 	selfhostingLongDesc = normalizer.LongDesc(`
-		Converts static Pod files for control plane components into self-hosted DaemonSets configured via the Kubernetes API.
+		Convert static Pod files for control plane components into self-hosted DaemonSets configured via the Kubernetes API.
 
 		See the documentation for self-hosting limitations.
 
 		` + cmdutil.AlphaDisclaimer)
 
 	selfhostingExample = normalizer.Examples(`
-		# Converts a static Pod-hosted control plane into a self-hosted one.
+		# Convert a static Pod-hosted control plane into a self-hosted one.
 
 		kubeadm alpha phase self-hosting convert-from-staticpods
 		`)
@@ -64,7 +64,7 @@ func NewCmdSelfhosting(in io.Reader) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "selfhosting",
 		Aliases: []string{"selfhosted", "self-hosting"},
-		Short:   "Makes a kubeadm cluster self-hosted",
+		Short:   "Make a kubeadm cluster self-hosted",
 		Long:    cmdutil.MacroCommandLongDescription,
 	}
 
@@ -75,7 +75,7 @@ func NewCmdSelfhosting(in io.Reader) *cobra.Command {
 // getSelfhostingSubCommand returns sub commands for Self-hosting phase
 func getSelfhostingSubCommand(in io.Reader) *cobra.Command {
 
-	cfg := &kubeadmapiv1beta1.InitConfiguration{}
+	cfg := &kubeadmapiv1beta2.ClusterConfiguration{}
 	// Default values for the cobra help text
 	kubeadmscheme.Scheme.Default(cfg)
 
@@ -86,7 +86,7 @@ func getSelfhostingSubCommand(in io.Reader) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "pivot",
 		Aliases: []string{"from-staticpods"},
-		Short:   "Converts a static Pod-hosted control plane into a self-hosted one",
+		Short:   "Convert a static Pod-hosted control plane into a self-hosted one",
 		Long:    selfhostingLongDesc,
 		Example: selfhostingExample,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -124,10 +124,10 @@ func getSelfhostingSubCommand(in io.Reader) *cobra.Command {
 
 			// KubernetesVersion is not used, but we set it explicitly to avoid the lookup
 			// of the version from the internet when executing LoadOrDefaultInitConfiguration
-			phases.SetKubernetesVersion(&cfg.ClusterConfiguration)
+			phases.SetKubernetesVersion(cfg)
 
 			// This call returns the ready-to-use configuration based on the configuration file that might or might not exist and the default cfg populated by flags
-			internalcfg, err := configutil.LoadOrDefaultInitConfiguration(cfgPath, cfg)
+			internalcfg, err := configutil.LoadOrDefaultInitConfiguration(cfgPath, &kubeadmapiv1beta2.InitConfiguration{}, cfg)
 			kubeadmutil.CheckErr(err)
 
 			// Converts the Static Pod-hosted control plane into a self-hosted one

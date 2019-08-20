@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2elog "k8s.io/kubernetes/test/e2e/framework/log"
 	"k8s.io/kubernetes/test/e2e/upgrades"
 )
 
@@ -65,9 +66,10 @@ func (t *DaemonSetUpgradeTest) Setup(f *framework.Framework) {
 					},
 					Containers: []v1.Container{
 						{
-							Name:  daemonSetName,
-							Image: image,
-							Ports: []v1.ContainerPort{{ContainerPort: 9376}},
+							Name:            daemonSetName,
+							Image:           image,
+							Ports:           []v1.ContainerPort{{ContainerPort: 9376}},
+							SecurityContext: &v1.SecurityContext{},
 						},
 					},
 				},
@@ -132,7 +134,7 @@ func checkRunningOnAllNodes(f *framework.Framework, namespace string, selector m
 	nodeNames := make([]string, 0)
 	for _, node := range nodeList.Items {
 		if len(node.Spec.Taints) != 0 {
-			framework.Logf("Ignore taints %v on Node %v for DaemonSet Pod.", node.Spec.Taints, node.Name)
+			e2elog.Logf("Ignore taints %v on Node %v for DaemonSet Pod.", node.Spec.Taints, node.Name)
 		}
 		// DaemonSet Pods are expected to run on all the nodes in e2e.
 		nodeNames = append(nodeNames, node.Name)
@@ -153,11 +155,11 @@ func checkDaemonPodOnNodes(f *framework.Framework, namespace string, labelSet ma
 	nodesToPodCount := make(map[string]int)
 	for _, pod := range pods {
 		if controller.IsPodActive(&pod) {
-			framework.Logf("Pod name: %v\t Node Name: %v", pod.Name, pod.Spec.NodeName)
+			e2elog.Logf("Pod name: %v\t Node Name: %v", pod.Name, pod.Spec.NodeName)
 			nodesToPodCount[pod.Spec.NodeName]++
 		}
 	}
-	framework.Logf("nodesToPodCount: %v", nodesToPodCount)
+	e2elog.Logf("nodesToPodCount: %v", nodesToPodCount)
 
 	// Ensure that exactly 1 pod is running on all nodes in nodeNames.
 	for _, nodeName := range nodeNames {

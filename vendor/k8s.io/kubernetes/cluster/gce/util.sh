@@ -730,7 +730,6 @@ function construct-common-kubelet-flags {
 function construct-linux-kubelet-flags {
   local master="$1"
   local flags="$(construct-common-kubelet-flags)"
-  flags+=" --allow-privileged=true"
   # Keep in sync with CONTAINERIZED_MOUNTER_HOME in configure-helper.sh
   flags+=" --experimental-mounter-path=/home/kubernetes/containerized_mounter/mounter"
   flags+=" --experimental-check-node-capabilities-before-mount=true"
@@ -746,6 +745,7 @@ function construct-linux-kubelet-flags {
       #TODO(mikedanese): allow static pods to start before creating a client
       #flags+=" --bootstrap-kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig"
       #flags+=" --kubeconfig=/var/lib/kubelet/kubeconfig"
+      flags+=" --register-with-taints=node-role.kubernetes.io/master=:NoSchedule"
       flags+=" --kubeconfig=/var/lib/kubelet/bootstrap-kubeconfig"
       flags+=" --register-schedulable=false"
     fi
@@ -782,8 +782,8 @@ function construct-linux-kubelet-flags {
   if [[ -n "${NODE_TAINTS:-}" ]]; then
     flags+=" --register-with-taints=${NODE_TAINTS}"
   fi
-  if [[ -n "${CONTAINER_RUNTIME:-}" ]]; then
-    flags+=" --container-runtime=${CONTAINER_RUNTIME}"
+  if [[ "${CONTAINER_RUNTIME:-}" != "docker" ]]; then
+    flags+=" --container-runtime=remote"
   fi
   if [[ -n "${CONTAINER_RUNTIME_ENDPOINT:-}" ]]; then
     flags+=" --container-runtime-endpoint=${CONTAINER_RUNTIME_ENDPOINT}"
@@ -868,6 +868,10 @@ function construct-windows-kubelet-flags {
 
   # Turn off kernel memory cgroup notification.
   flags+=" --experimental-kernel-memcg-notification=false"
+
+  # TODO(#78628): Re-enable KubeletPodResources when the issue is fixed.
+  # Force disable KubeletPodResources feature on Windows until #78628 is fixed.
+  flags+=" --feature-gates=KubeletPodResources=false"
 
   KUBELET_ARGS="${flags}"
 }
@@ -1112,6 +1116,8 @@ NODE_PROBLEM_DETECTOR_VERSION: $(yaml-quote ${NODE_PROBLEM_DETECTOR_VERSION:-})
 NODE_PROBLEM_DETECTOR_TAR_HASH: $(yaml-quote ${NODE_PROBLEM_DETECTOR_TAR_HASH:-})
 NODE_PROBLEM_DETECTOR_RELEASE_PATH: $(yaml-quote ${NODE_PROBLEM_DETECTOR_RELEASE_PATH:-})
 NODE_PROBLEM_DETECTOR_CUSTOM_FLAGS: $(yaml-quote ${NODE_PROBLEM_DETECTOR_CUSTOM_FLAGS:-})
+CNI_VERSION: $(yaml-quote ${CNI_VERSION:-})
+CNI_SHA1: $(yaml-quote ${CNI_SHA1:-})
 ENABLE_NODE_LOGGING: $(yaml-quote ${ENABLE_NODE_LOGGING:-false})
 LOGGING_DESTINATION: $(yaml-quote ${LOGGING_DESTINATION:-})
 ELASTICSEARCH_LOGGING_REPLICAS: $(yaml-quote ${ELASTICSEARCH_LOGGING_REPLICAS:-})
@@ -1121,6 +1127,7 @@ ENABLE_NODELOCAL_DNS: $(yaml-quote ${ENABLE_NODELOCAL_DNS:-false})
 DNS_SERVER_IP: $(yaml-quote ${DNS_SERVER_IP:-})
 LOCAL_DNS_IP: $(yaml-quote ${LOCAL_DNS_IP:-})
 DNS_DOMAIN: $(yaml-quote ${DNS_DOMAIN:-})
+DNS_MEMORY_LIMIT: $(yaml-quote ${DNS_MEMORY_LIMIT:-})
 ENABLE_DNS_HORIZONTAL_AUTOSCALER: $(yaml-quote ${ENABLE_DNS_HORIZONTAL_AUTOSCALER:-false})
 KUBE_PROXY_DAEMONSET: $(yaml-quote ${KUBE_PROXY_DAEMONSET:-false})
 KUBE_PROXY_TOKEN: $(yaml-quote ${KUBE_PROXY_TOKEN:-})
@@ -1165,6 +1172,8 @@ ADVANCED_AUDIT_WEBHOOK_THROTTLE_BURST: $(yaml-quote ${ADVANCED_AUDIT_WEBHOOK_THR
 ADVANCED_AUDIT_WEBHOOK_INITIAL_BACKOFF: $(yaml-quote ${ADVANCED_AUDIT_WEBHOOK_INITIAL_BACKOFF:-})
 GCE_API_ENDPOINT: $(yaml-quote ${GCE_API_ENDPOINT:-})
 GCE_GLBC_IMAGE: $(yaml-quote ${GCE_GLBC_IMAGE:-})
+CUSTOM_INGRESS_YAML: |
+$(echo "${CUSTOM_INGRESS_YAML:-}" | sed -e "s/'/''/g")
 ENABLE_NODE_JOURNAL: $(yaml-quote ${ENABLE_NODE_JOURNAL:-false})
 PROMETHEUS_TO_SD_ENDPOINT: $(yaml-quote ${PROMETHEUS_TO_SD_ENDPOINT:-})
 PROMETHEUS_TO_SD_PREFIX: $(yaml-quote ${PROMETHEUS_TO_SD_PREFIX:-})
@@ -1279,7 +1288,6 @@ ETCD_CA_KEY: $(yaml-quote ${ETCD_CA_KEY_BASE64:-})
 ETCD_CA_CERT: $(yaml-quote ${ETCD_CA_CERT_BASE64:-})
 ETCD_PEER_KEY: $(yaml-quote ${ETCD_PEER_KEY_BASE64:-})
 ETCD_PEER_CERT: $(yaml-quote ${ETCD_PEER_CERT_BASE64:-})
-ENCRYPTION_PROVIDER_CONFIG: $(yaml-quote ${ENCRYPTION_PROVIDER_CONFIG:-})
 SERVICEACCOUNT_ISSUER: $(yaml-quote ${SERVICEACCOUNT_ISSUER:-})
 EOF
     # KUBE_APISERVER_REQUEST_TIMEOUT_SEC (if set) controls the --request-timeout
@@ -1402,6 +1410,11 @@ EOF
     if [ -n "${API_SERVER_TEST_LOG_LEVEL:-}" ]; then
       cat >>$file <<EOF
 API_SERVER_TEST_LOG_LEVEL: $(yaml-quote ${API_SERVER_TEST_LOG_LEVEL})
+EOF
+    fi
+    if [ -n "${ETCD_LISTEN_CLIENT_IP:-}" ]; then
+      cat >>$file <<EOF
+ETCD_LISTEN_CLIENT_IP: $(yaml-quote ${ETCD_LISTEN_CLIENT_IP})
 EOF
     fi
 
@@ -1888,8 +1901,11 @@ function make-gcloud-network-argument() {
   if [[ "${enable_ip_alias}" == 'true' ]]; then
     ret="--network-interface"
     ret="${ret} network=${networkURL}"
-    # If address is omitted, instance will not receive an external IP.
-    ret="${ret},address=${address:-}"
+    if [[ "${address:-}" == "no-address" ]]; then
+      ret="${ret},no-address"
+    else
+      ret="${ret},address=${address:-}"
+    fi
     ret="${ret},subnet=${subnetURL}"
     ret="${ret},aliases=pods-default:${alias_size}"
     ret="${ret} --no-can-ip-forward"
@@ -1901,7 +1917,7 @@ function make-gcloud-network-argument() {
     fi
 
     ret="${ret} --can-ip-forward"
-    if [[ -n ${address:-} ]]; then
+    if [[ -n ${address:-} ]] && [[ "$address" != "no-address" ]]; then
       ret="${ret} --address ${address}"
     fi
   fi
@@ -2006,13 +2022,17 @@ function create-node-template() {
     fi
   fi
 
+  local address=""
+  if [[ ${GCE_PRIVATE_CLUSTER:-} == "true" ]]; then
+    address="no-address"
+  fi
 
   local network=$(make-gcloud-network-argument \
     "${NETWORK_PROJECT}" \
     "${REGION}" \
     "${NETWORK}" \
     "${SUBNETWORK:-}" \
-    "" \
+    "${address}" \
     "${ENABLE_IP_ALIASES:-}" \
     "${IP_ALIAS_SIZE:-}")
 
@@ -2020,7 +2040,9 @@ function create-node-template() {
   if [[ "${os}" == 'linux' ]]; then
       node_image_flags="--image-project ${NODE_IMAGE_PROJECT} --image ${NODE_IMAGE}"
   elif [[ "${os}" == 'windows' ]]; then
-      node_image_flags="--image-project ${WINDOWS_NODE_IMAGE_PROJECT} --image-family ${WINDOWS_NODE_IMAGE_FAMILY}"
+      # TODO(pjh): revert back to using WINDOWS_NODE_IMAGE_FAMILY instead of
+      # pinning to the v20190312 image once #76666 is resolved.
+      node_image_flags="--image-project ${WINDOWS_NODE_IMAGE_PROJECT} --image=windows-server-1809-dc-core-for-containers-v20190709"
   else
       echo "Unknown OS ${os}" >&2
       exit 1
@@ -2109,6 +2131,7 @@ function kube-up() {
     create-network
     create-subnetworks
     detect-subnetworks
+    create-cloud-nat-router
     write-cluster-location
     write-cluster-name
     create-autoscaler-config
@@ -2298,6 +2321,26 @@ function detect-subnetworks() {
   echo "${color_red}Could not find subnetwork with region ${REGION}, network ${NETWORK}, and project ${NETWORK_PROJECT}"
 }
 
+# Sets up Cloud NAT for the network.
+# Assumed vars:
+#   NETWORK_PROJECT
+#   REGION
+#   NETWORK
+function create-cloud-nat-router() {
+  if [[ ${GCE_PRIVATE_CLUSTER:-} == "true" ]]; then
+    gcloud compute routers create "$NETWORK-nat-router" \
+      --project $NETWORK_PROJECT \
+      --region $REGION \
+      --network $NETWORK
+    gcloud compute routers nats create "$NETWORK-nat-config" \
+      --project $NETWORK_PROJECT \
+      --router-region $REGION \
+      --router "$NETWORK-nat-router" \
+      --nat-all-subnet-ip-ranges \
+      --auto-allocate-nat-external-ips
+  fi
+}
+
 function delete-all-firewall-rules() {
   if fws=$(gcloud compute firewall-rules list --project "${NETWORK_PROJECT}" --filter="network=${NETWORK}" --format="value(name)"); then
     echo "Deleting firewall rules remaining in network ${NETWORK}: ${fws}"
@@ -2325,6 +2368,15 @@ function delete-network() {
       echo "Failed to delete network '${NETWORK}'. Listing firewall-rules:"
       gcloud compute firewall-rules --project "${NETWORK_PROJECT}" list --filter="network=${NETWORK}"
       return 1
+    fi
+  fi
+}
+
+function delete-cloud-nat-router() {
+  if [[ ${GCE_PRIVATE_CLUSTER:-} == "true" ]]; then
+    if [[ -n $(gcloud compute routers describe --project "${NETWORK_PROJECT}" --region "${REGION}" "${NETWORK}-nat-router" --format='value(name)' 2>/dev/null || true) ]]; then
+      echo "Deleting Cloud NAT router..."
+      gcloud compute routers delete --project "${NETWORK_PROJECT}" --region "${REGION}" --quiet "${NETWORK}-nat-router"
     fi
   fi
 }
@@ -2969,6 +3021,11 @@ function check-cluster() {
 
   # ensures KUBECONFIG is set
   get-kubeconfig-basicauth
+
+  if [[ ${GCE_UPLOAD_KUBCONFIG_TO_MASTER_METADATA:-} == "true" ]]; then
+    gcloud compute instances add-metadata "${MASTER_NAME}" --zone="${ZONE}"  --metadata-from-file="kubeconfig=${KUBECONFIG}" || true
+  fi
+
   echo
   echo -e "${color_green}Kubernetes cluster is running.  The master is running at:"
   echo
@@ -3027,7 +3084,7 @@ function kube-down() {
     # change during a cluster upgrade.)
     local templates=$(get-template "${PROJECT}")
 
-    local all_instance_groups=(${INSTANCE_GROUPS[@]} ${WINDOWS_INSTANCE_GROUPS[@]})
+    local all_instance_groups=(${INSTANCE_GROUPS[@]:-} ${WINDOWS_INSTANCE_GROUPS[@]:-})
     for group in ${all_instance_groups[@]:-}; do
       if gcloud compute instance-groups managed describe "${group}" --project "${PROJECT}" --zone "${ZONE}" &>/dev/null; then
         gcloud compute instance-groups managed delete \
@@ -3205,6 +3262,7 @@ function kube-down() {
       "${NETWORK}-default-internal"  # Pre-1.5 clusters
 
     if [[ "${KUBE_DELETE_NETWORK}" == "true" ]]; then
+      delete-cloud-nat-router
       # Delete all remaining firewall rules in the network.
       delete-all-firewall-rules || true
       delete-subnetworks || true
@@ -3398,6 +3456,13 @@ function check-resources() {
   if gcloud compute addresses describe --project "${PROJECT}" "${MASTER_NAME}-ip" --region "${REGION}" &>/dev/null; then
     KUBE_RESOURCE_FOUND="Master's reserved IP"
     return 1
+  fi
+
+  if [[ ${GCE_PRIVATE_CLUSTER:-} == "true" ]]; then
+    if gcloud compute routers describe --project "${NETWORK_PROJECT}" --region "${REGION}" "${NETWORK}-nat-router" &>/dev/null; then
+      KUBE_RESOURCE_FOUND="Cloud NAT router"
+      return 1
+    fi
   fi
 
   # No resources found.

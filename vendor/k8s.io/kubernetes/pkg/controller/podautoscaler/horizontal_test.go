@@ -26,7 +26,7 @@ import (
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2beta2"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta/testrestmapper"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -330,38 +330,43 @@ func (tc *testCase) prepareTestClient(t *testing.T) (*fake.Clientset, *metricsfa
 	})
 
 	fakeClient.AddReactor("update", "horizontalpodautoscalers", func(action core.Action) (handled bool, ret runtime.Object, err error) {
-		tc.Lock()
-		defer tc.Unlock()
+		handled, obj, err := func() (handled bool, ret *autoscalingv1.HorizontalPodAutoscaler, err error) {
+			tc.Lock()
+			defer tc.Unlock()
 
-		obj := action.(core.UpdateAction).GetObject().(*autoscalingv1.HorizontalPodAutoscaler)
-		assert.Equal(t, namespace, obj.Namespace, "the HPA namespace should be as expected")
-		assert.Equal(t, hpaName, obj.Name, "the HPA name should be as expected")
-		assert.Equal(t, tc.expectedDesiredReplicas, obj.Status.DesiredReplicas, "the desired replica count reported in the object status should be as expected")
-		if tc.verifyCPUCurrent {
-			if assert.NotNil(t, obj.Status.CurrentCPUUtilizationPercentage, "the reported CPU utilization percentage should be non-nil") {
-				assert.Equal(t, tc.CPUCurrent, *obj.Status.CurrentCPUUtilizationPercentage, "the report CPU utilization percentage should be as expected")
+			obj := action.(core.UpdateAction).GetObject().(*autoscalingv1.HorizontalPodAutoscaler)
+			assert.Equal(t, namespace, obj.Namespace, "the HPA namespace should be as expected")
+			assert.Equal(t, hpaName, obj.Name, "the HPA name should be as expected")
+			assert.Equal(t, tc.expectedDesiredReplicas, obj.Status.DesiredReplicas, "the desired replica count reported in the object status should be as expected")
+			if tc.verifyCPUCurrent {
+				if assert.NotNil(t, obj.Status.CurrentCPUUtilizationPercentage, "the reported CPU utilization percentage should be non-nil") {
+					assert.Equal(t, tc.CPUCurrent, *obj.Status.CurrentCPUUtilizationPercentage, "the report CPU utilization percentage should be as expected")
+				}
 			}
+			var actualConditions []autoscalingv1.HorizontalPodAutoscalerCondition
+			if err := json.Unmarshal([]byte(obj.ObjectMeta.Annotations[autoscaling.HorizontalPodAutoscalerConditionsAnnotation]), &actualConditions); err != nil {
+				return true, nil, err
+			}
+			// TODO: it's ok not to sort these becaues statusOk
+			// contains all the conditions, so we'll never be appending.
+			// Default to statusOk when missing any specific conditions
+			if tc.expectedConditions == nil {
+				tc.expectedConditions = statusOkWithOverrides()
+			}
+			// clear the message so that we can easily compare
+			for i := range actualConditions {
+				actualConditions[i].Message = ""
+				actualConditions[i].LastTransitionTime = metav1.Time{}
+			}
+			assert.Equal(t, tc.expectedConditions, actualConditions, "the status conditions should have been as expected")
+			tc.statusUpdated = true
+			// Every time we reconcile HPA object we are updating status.
+			return true, obj, nil
+		}()
+		if obj != nil {
+			tc.processed <- obj.Name
 		}
-		var actualConditions []autoscalingv1.HorizontalPodAutoscalerCondition
-		if err := json.Unmarshal([]byte(obj.ObjectMeta.Annotations[autoscaling.HorizontalPodAutoscalerConditionsAnnotation]), &actualConditions); err != nil {
-			return true, nil, err
-		}
-		// TODO: it's ok not to sort these becaues statusOk
-		// contains all the conditions, so we'll never be appending.
-		// Default to statusOk when missing any specific conditions
-		if tc.expectedConditions == nil {
-			tc.expectedConditions = statusOkWithOverrides()
-		}
-		// clear the message so that we can easily compare
-		for i := range actualConditions {
-			actualConditions[i].Message = ""
-			actualConditions[i].LastTransitionTime = metav1.Time{}
-		}
-		assert.Equal(t, tc.expectedConditions, actualConditions, "the status conditions should have been as expected")
-		tc.statusUpdated = true
-		// Every time we reconcile HPA object we are updating status.
-		tc.processed <- obj.Name
-		return true, obj, nil
+		return handled, obj, err
 	})
 
 	fakeScaleClient := &scalefake.FakeScaleClient{}
@@ -701,15 +706,25 @@ func (tc *testCase) runTestWithController(t *testing.T, hpaController *Horizonta
 	go hpaController.Run(stop)
 
 	tc.Lock()
-	if tc.verifyEvents {
-		tc.Unlock()
+	shouldWait := tc.verifyEvents
+	tc.Unlock()
+
+	if shouldWait {
 		// We need to wait for events to be broadcasted (sleep for longer than record.sleepDuration).
-		time.Sleep(2 * time.Second)
+		timeoutTime := time.Now().Add(2 * time.Second)
+		for now := time.Now(); timeoutTime.After(now); now = time.Now() {
+			sleepUntil := timeoutTime.Sub(now)
+			select {
+			case <-tc.processed:
+				// drain the chan of any sent events to keep it from filling before the timeout
+			case <-time.After(sleepUntil):
+				// timeout reached, ready to verifyResults
+			}
+		}
 	} else {
-		tc.Unlock()
+		// Wait for HPA to be processed.
+		<-tc.processed
 	}
-	// Wait for HPA to be processed.
-	<-tc.processed
 	tc.verifyResults(t)
 }
 
@@ -2418,7 +2433,9 @@ func TestAvoidUncessaryUpdates(t *testing.T) {
 			// wait a tick and then mark that we're finished (otherwise, we have no
 			// way to indicate that we're finished, because the function decides not to do anything)
 			time.Sleep(1 * time.Second)
+			tc.Lock()
 			tc.statusUpdated = true
+			tc.Unlock()
 			tc.processed <- "test-hpa"
 		}()
 
@@ -2493,8 +2510,6 @@ func TestAvoidUncessaryUpdates(t *testing.T) {
 		return true, objv1, nil
 	})
 	testClient.PrependReactor("update", "horizontalpodautoscalers", func(action core.Action) (handled bool, ret runtime.Object, err error) {
-		tc.Lock()
-		defer tc.Unlock()
 		assert.Fail(t, "should not have attempted to update the HPA when nothing changed")
 		// mark that we've processed this HPA
 		tc.processed <- ""
@@ -2651,6 +2666,100 @@ func TestNormalizeDesiredReplicas(t *testing.T) {
 			t.Errorf("[%s] after  stabilization recommendations log has %d entries, expected %d", tc.name, len(hc.recommendations[tc.key]), tc.expectedLogLength)
 		}
 	}
+}
+
+func TestScaleUpOneMetricEmpty(t *testing.T) {
+	tc := testCase{
+		minReplicas:             2,
+		maxReplicas:             6,
+		initialReplicas:         3,
+		expectedDesiredReplicas: 4,
+		CPUTarget:               30,
+		verifyCPUCurrent:        true,
+		metricsTarget: []autoscalingv2.MetricSpec{
+			{
+				Type: autoscalingv2.ExternalMetricSourceType,
+				External: &autoscalingv2.ExternalMetricSource{
+					Metric: autoscalingv2.MetricIdentifier{
+						Name:     "qps",
+						Selector: &metav1.LabelSelector{},
+					},
+					Target: autoscalingv2.MetricTarget{
+						Value: resource.NewMilliQuantity(100, resource.DecimalSI),
+					},
+				},
+			},
+		},
+		reportedLevels:      []uint64{300, 400, 500},
+		reportedCPURequests: []resource.Quantity{resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0")},
+	}
+	_, _, _, testEMClient, _ := tc.prepareTestClient(t)
+	testEMClient.PrependReactor("list", "*", func(action core.Action) (handled bool, ret runtime.Object, err error) {
+		return true, &emapi.ExternalMetricValueList{}, fmt.Errorf("something went wrong")
+	})
+	tc.testEMClient = testEMClient
+	tc.runTest(t)
+}
+
+func TestNoScaleDownOneMetricInvalid(t *testing.T) {
+	tc := testCase{
+		minReplicas:             2,
+		maxReplicas:             6,
+		initialReplicas:         5,
+		expectedDesiredReplicas: 5,
+		CPUTarget:               50,
+		metricsTarget: []autoscalingv2.MetricSpec{
+			{
+				Type: "CheddarCheese",
+			},
+		},
+		reportedLevels:      []uint64{100, 300, 500, 250, 250},
+		reportedCPURequests: []resource.Quantity{resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0")},
+		useMetricsAPI:       true,
+		expectedConditions: []autoscalingv1.HorizontalPodAutoscalerCondition{
+			{Type: autoscalingv1.AbleToScale, Status: v1.ConditionTrue, Reason: "SucceededGetScale"},
+			{Type: autoscalingv1.ScalingActive, Status: v1.ConditionFalse, Reason: "InvalidMetricSourceType"},
+		},
+	}
+
+	tc.runTest(t)
+}
+
+func TestNoScaleDownOneMetricEmpty(t *testing.T) {
+	tc := testCase{
+		minReplicas:             2,
+		maxReplicas:             6,
+		initialReplicas:         5,
+		expectedDesiredReplicas: 5,
+		CPUTarget:               50,
+		metricsTarget: []autoscalingv2.MetricSpec{
+			{
+				Type: autoscalingv2.ExternalMetricSourceType,
+				External: &autoscalingv2.ExternalMetricSource{
+					Metric: autoscalingv2.MetricIdentifier{
+						Name:     "qps",
+						Selector: &metav1.LabelSelector{},
+					},
+					Target: autoscalingv2.MetricTarget{
+						Value: resource.NewMilliQuantity(1000, resource.DecimalSI),
+					},
+				},
+			},
+		},
+		reportedLevels:      []uint64{100, 300, 500, 250, 250},
+		reportedCPURequests: []resource.Quantity{resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0"), resource.MustParse("1.0")},
+		useMetricsAPI:       true,
+		expectedConditions: []autoscalingv1.HorizontalPodAutoscalerCondition{
+			{Type: autoscalingv1.AbleToScale, Status: v1.ConditionTrue, Reason: "SucceededGetScale"},
+			{Type: autoscalingv1.ScalingActive, Status: v1.ConditionFalse, Reason: "FailedGetExternalMetric"},
+		},
+	}
+	_, _, _, testEMClient, _ := tc.prepareTestClient(t)
+	testEMClient.PrependReactor("list", "*", func(action core.Action) (handled bool, ret runtime.Object, err error) {
+		return true, &emapi.ExternalMetricValueList{}, fmt.Errorf("something went wrong")
+	})
+	tc.testEMClient = testEMClient
+	tc.runTest(t)
 }
 
 // TODO: add more tests
