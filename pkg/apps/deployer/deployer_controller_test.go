@@ -1182,6 +1182,7 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.SecurityContext = nil
 				p.Spec.ReadinessGates = nil
 				p.Spec.RuntimeClassName = nil
+				p.Spec.PreemptionPolicy = nil
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}

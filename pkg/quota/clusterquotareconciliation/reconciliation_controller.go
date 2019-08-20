@@ -47,7 +47,7 @@ type ClusterQuotaReconcilationControllerOptions struct {
 	// InformersStarted knows if informers were started.
 	InformersStarted <-chan struct{}
 	// InformerFactory interfaces with informers.
-	InformerFactory resourcequota.InformerFactory
+	InformerFactory controller.InformerFactory
 	// Controls full resync of objects monitored for replenihsment.
 	ReplenishmentResyncPeriod controller.ResyncPeriodFunc
 }
