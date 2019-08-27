@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: machine-config-operator-images
+  namespace: openshift-machine-config-operator
+data:
+  images.json: >
+    {
+      "machineConfigOperator": "registry.svc.ci.openshift.org/openshift:machine-config-operator",
+      "etcd": "registry.svc.ci.openshift.org/openshift:etcd",
+      "infraImage": "registry.svc.ci.openshift.org/openshift:pod",
+      "kubeClientAgentImage": "registry.svc.ci.openshift.org/openshift:kube-client-agent",
+      "keepalivedImage": "registry.svc.ci.openshift.org/openshift:keepalived-ipfailover",
+      "corednsImage": "registry.svc.ci.openshift.org/openshift:coredns",
+      "mdnsPublisherImage": "registry.svc.ci.openshift.org/openshift:mdns-publisher",
+      "haproxyImage": "registry.svc.ci.openshift.org/openshift:haproxy-router",
+      "baremetalRuntimeCfgImage": "registry.svc.ci.openshift.org/openshift:baremetal-runtimecfg"
+    }

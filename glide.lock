@@ -1,5 +1,5 @@
-hash: ec39906d71ee6bffc9d2794220563e27bc225d2a0a84b6b78080b693f610ffa9
-updated: 2019-07-22T09:30:08.580742944-04:00
+hash: 0b4bc0814d60617fa621b6568a1ab9d67224bf57f66349a29fff6a0c88be333b
+updated: 2019-08-31T16:06:18.037379275-04:00
 imports:
 - name: bitbucket.org/ww/goautoneg
   version: 2ae31c8b6b30d2f4c8100c20d527b571e9c433bb
@@ -14,18 +14,27 @@ imports:
   - quantile
 - name: github.com/blang/semver
   version: b38d23b8782a487059e8fc8773e9a5b228a77cb6
+- name: github.com/BurntSushi/toml
+  version: 3012a1dbe2e4bd1391d42b32f0577cb7bbc7f005
 - name: github.com/certifi/gocertifi
   version: ee1a9a0726d2ae45f54118cac878c990d4016ded
+- name: github.com/containerd/continuity
+  version: 75bee3e2ccb6402e3a986ab8bd3b17003fc0fdec
+  subpackages:
+  - pathdriver
 - name: github.com/containers/image
-  version: 4bc6d24282b115f8b61a6d08470ed42ac7c91392
-  repo: https://github.com/openshift/containers-image.git
+  version: abf32c4ea589cb8e96bdca5a478dba68f11980e5
   subpackages:
   - docker
   - docker/policyconfiguration
   - docker/reference
   - image
   - manifest
+  - pkg/blobinfocache/none
+  - pkg/docker/config
   - pkg/strslice
+  - pkg/sysregistriesv2
+  - pkg/tlsclientconfig
   - signature
   - transports
   - types
@@ -72,8 +81,18 @@ imports:
 - name: github.com/docker/docker
   version: a9fbbdc8dd8794b20af358382ab780559bca589d
   subpackages:
+  - api/types/versions
+  - pkg/homedir
+  - pkg/idtools
+  - pkg/mount
+  - pkg/system
   - pkg/term
   - pkg/term/windows
+- name: github.com/docker/docker-credential-helpers
+  version: f78081d1f7fef6ad74ad6b79368de6348386e591
+  subpackages:
+  - client
+  - credentials
 - name: github.com/docker/go-connections
   version: 3ede32e2033de7505e6500d6c868c2b9ed9f169d
   subpackages:
@@ -82,8 +101,10 @@ imports:
   - tlsconfig
 - name: github.com/docker/go-metrics
   version: b84716841b82eab644a0c64fc8b42d480e49add5
+- name: github.com/docker/go-units
+  version: 9e638d38cf6977a37a8ea0078f3ee75a7cdb2dd1
 - name: github.com/docker/libtrust
-  version: 9cbd2a1374f46905c68a4eb3694a130610adc62a
+  version: aabc10ec26b754e797f9028f4589c5b7bd90dc20
 - name: github.com/docker/spdystream
   version: 449fdfce4d962303d702fec724ef0ad181c92528
   subpackages:
@@ -139,7 +160,7 @@ imports:
 - name: github.com/google/gofuzz
   version: 24818f796faf91cd76ec7bddd72458fbced7a6c1
 - name: github.com/google/uuid
-  version: 8c31c18f31ede9fc8eae72290a7e7a8064e9b3e3
+  version: c2e93f3ae59f2904160ceaab466009f965df46d6
 - name: github.com/googleapis/gnostic
   version: 0c5108395e2debce0d731cf0287ddf7242066aba
   subpackages:
@@ -226,7 +247,7 @@ imports:
   - libcontainer/user
   - libcontainer/utils
 - name: github.com/openshift/api
-  version: 9525304a0adb725ab4a4a54539a1a6bf6cc343d3
+  version: 58aab2885e38fd7f4fd57f2615f5f9fe38039e22
   subpackages:
   - annotations
   - apps
@@ -274,7 +295,7 @@ imports:
   - webconsole
   - webconsole/v1
 - name: github.com/openshift/client-go
-  version: a85ea6a6b3a5d2dbe41582ee35695dd4683e1f02
+  version: 5a5508328169b8a6992ea4ef711add89ddce3c6d
   subpackages:
   - apps/clientset/versioned
   - apps/clientset/versioned/fake
@@ -316,6 +337,20 @@ imports:
   - image/informers/externalversions/image/v1
   - image/informers/externalversions/internalinterfaces
   - image/listers/image/v1
+  - operator/clientset/versioned
+  - operator/clientset/versioned/fake
+  - operator/clientset/versioned/scheme
+  - operator/clientset/versioned/typed/operator/v1
+  - operator/clientset/versioned/typed/operator/v1/fake
+  - operator/clientset/versioned/typed/operator/v1alpha1
+  - operator/clientset/versioned/typed/operator/v1alpha1/fake
+  - operator/informers/externalversions
+  - operator/informers/externalversions/internalinterfaces
+  - operator/informers/externalversions/operator
+  - operator/informers/externalversions/operator/v1
+  - operator/informers/externalversions/operator/v1alpha1
+  - operator/listers/operator/v1
+  - operator/listers/operator/v1alpha1
   - quota/clientset/versioned
   - quota/clientset/versioned/fake
   - quota/clientset/versioned/scheme
@@ -352,7 +387,7 @@ imports:
   - template/informers/externalversions/template/v1
   - template/listers/template/v1
 - name: github.com/openshift/library-go
-  version: 83581c469d2eeb6dadfe86a4b6d8033b465ffd15
+  version: 17c171f68900d331bee3a88edf513382a0e9fd50
   subpackages:
   - pkg/apps/appsserialization
   - pkg/apps/appsutil
@@ -377,10 +412,12 @@ imports:
   - pkg/serviceability
   - pkg/template/templateprocessingclient
   - pkg/unidling/unidlingclient
+- name: github.com/openshift/machine-config-operator
+  version: 3b375b425a3bf6ca4189206f8ea4c499376eb71c
+  subpackages:
+  - pkg/controller/container-runtime-config/registries
 - name: github.com/pborman/uuid
   version: ca53cad383cad2479bbba7f7a1a05797ec1386e4
-- name: github.com/pelletier/go-toml
-  version: dba45d427ff48cfb9bcf633db3a8e43b7364e261
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
@@ -418,7 +455,7 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/cobra
-  version: c439c4fa093711d42e1b01acb1235b52004753c1
+  version: ef82de70bb3f60c65fb8eebacbb2d122ef517385
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: go4.org

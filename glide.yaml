@@ -64,6 +64,8 @@ import:
   version: v1.3.1-coreos.6
 - package: github.com/google/cadvisor
   version: v0.32.0
+- package: github.com/openshift/machine-config-operator
+  version: release-4.2
 
 # openshift second
 - package: github.com/openshift/api
@@ -78,9 +80,6 @@ import:
 - package: github.com/onsi/ginkgo
   repo:    https://github.com/openshift/onsi-ginkgo.git
   version: release-v1.2.0
-- package: github.com/containers/image
-  repo:    https://github.com/openshift/containers-image.git
-  version: openshift-3.8
 
 # ours: shared with kube, but forced by openshift
 # master: co-exist with klog

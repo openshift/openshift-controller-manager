@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -60,8 +61,13 @@ func ParseReference(refString string) (types.ImageReference, error) {
 
 // NewReference returns a Docker reference for a named reference. The reference must satisfy !reference.IsNameOnly().
 func NewReference(ref reference.Named) (types.ImageReference, error) {
+	return newReference(ref)
+}
+
+// newReference returns a dockerReference for a named reference.
+func newReference(ref reference.Named) (dockerReference, error) {
 	if reference.IsNameOnly(ref) {
-		return nil, errors.Errorf("Docker reference %s has neither a tag nor a digest", reference.FamiliarString(ref))
+		return dockerReference{}, errors.Errorf("Docker reference %s has neither a tag nor a digest", reference.FamiliarString(ref))
 	}
 	// A github.com/distribution/reference value can have a tag and a digest at the same time!
 	// The docker/distribution API does not really support that (we can’t ask for an image with a specific
@@ -71,8 +77,9 @@ func NewReference(ref reference.Named) (types.ImageReference, error) {
 	_, isTagged := ref.(reference.NamedTagged)
 	_, isDigested := ref.(reference.Canonical)
 	if isTagged && isDigested {
-		return nil, errors.Errorf("Docker references with both a tag and digest are currently not supported")
+		return dockerReference{}, errors.Errorf("Docker references with both a tag and digest are currently not supported")
 	}
+
 	return dockerReference{
 		ref: ref,
 	}, nil
@@ -122,31 +129,30 @@ func (ref dockerReference) PolicyConfigurationNamespaces() []string {
 	return policyconfiguration.DockerReferenceNamespaces(ref.ref)
 }
 
-// NewImage returns a types.Image for this reference, possibly specialized for this ImageTransport.
-// The caller must call .Close() on the returned Image.
+// NewImage returns a types.ImageCloser for this reference, possibly specialized for this ImageTransport.
+// The caller must call .Close() on the returned ImageCloser.
 // NOTE: If any kind of signature verification should happen, build an UnparsedImage from the value returned by NewImageSource,
 // verify that UnparsedImage, and convert it into a real Image via image.FromUnparsedImage.
-func (ref dockerReference) NewImage(ctx *types.SystemContext) (types.Image, error) {
-	return newImage(ctx, ref)
+// WARNING: This may not do the right thing for a manifest list, see image.FromSource for details.
+func (ref dockerReference) NewImage(ctx context.Context, sys *types.SystemContext) (types.ImageCloser, error) {
+	return newImage(ctx, sys, ref)
 }
 
-// NewImageSource returns a types.ImageSource for this reference,
-// asking the backend to use a manifest from requestedManifestMIMETypes if possible.
-// nil requestedManifestMIMETypes means manifest.DefaultRequestedManifestMIMETypes.
+// NewImageSource returns a types.ImageSource for this reference.
 // The caller must call .Close() on the returned ImageSource.
-func (ref dockerReference) NewImageSource(ctx *types.SystemContext, requestedManifestMIMETypes []string) (types.ImageSource, error) {
-	return newImageSource(ctx, ref, requestedManifestMIMETypes)
+func (ref dockerReference) NewImageSource(ctx context.Context, sys *types.SystemContext) (types.ImageSource, error) {
+	return newImageSource(ctx, sys, ref)
 }
 
 // NewImageDestination returns a types.ImageDestination for this reference.
 // The caller must call .Close() on the returned ImageDestination.
-func (ref dockerReference) NewImageDestination(ctx *types.SystemContext) (types.ImageDestination, error) {
-	return newImageDestination(ctx, ref)
+func (ref dockerReference) NewImageDestination(ctx context.Context, sys *types.SystemContext) (types.ImageDestination, error) {
+	return newImageDestination(sys, ref)
 }
 
 // DeleteImage deletes the named image from the registry, if supported.
-func (ref dockerReference) DeleteImage(ctx *types.SystemContext) error {
-	return deleteImage(ctx, ref)
+func (ref dockerReference) DeleteImage(ctx context.Context, sys *types.SystemContext) error {
+	return deleteImage(ctx, sys, ref)
 }
 
 // tagOrDigest returns a tag or digest from the reference.
