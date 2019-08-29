@@ -2025,8 +2025,8 @@ func (bc *BuildController) getAdditionalTrustedCAData(config *configv1.Image) (m
 
 func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Image) (string, error) {
 	registriesConfig := config.Spec.RegistrySources
-	if len(registriesConfig.InsecureRegistries) == 0 {
-		klog.V(4).Info("using default insecure registry settings for builds")
+	if len(registriesConfig.InsecureRegistries) == 0 && len(registriesConfig.BlockedRegistries) == 0 {
+		klog.V(4).Info("using default registry settings for builds")
 		return "", nil
 	}
 	configObj := tomlConfig{
@@ -2039,6 +2039,9 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 			Insecure: registryList{
 				Registries: registriesConfig.InsecureRegistries,
 			},
+			Block: registryList{
+				Registries: registriesConfig.BlockedRegistries,
+			},
 		},
 	}
 
@@ -2047,10 +2050,10 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 		return "", err
 	}
 	if len(configTOML) == 0 {
-		klog.V(4).Info("using default insecure registry settings for builds")
+		klog.V(4).Info("using default registry settings for builds")
 		return "", nil
 	}
-	klog.V(4).Info("overrode insecure registry settings for builds")
+	klog.V(4).Info("overrode registry settings for builds")
 	klog.V(5).Infof("generated registries.conf for build pods: \n%s", string(configTOML))
 	return string(configTOML), nil
 }
