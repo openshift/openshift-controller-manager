@@ -1,6 +1,7 @@
 package build
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,13 +10,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/containers/image/signature"
-	"github.com/pelletier/go-toml"
 	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -32,10 +34,14 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/containers/image/pkg/sysregistriesv2"
+	mco "github.com/openshift/machine-config-operator/pkg/controller/container-runtime-config/registries"
+
 	buildv1 "github.com/openshift/api/build/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	imagev1 "github.com/openshift/api/image/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
+	operatorv1alpha1 "github.com/openshift/api/operator/v1alpha1"
 	buildv1client "github.com/openshift/client-go/build/clientset/versioned"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	buildv1informer "github.com/openshift/client-go/build/informers/externalversions/build/v1"
@@ -44,6 +50,8 @@ import (
 	configv1lister "github.com/openshift/client-go/config/listers/config/v1"
 	imagev1informer "github.com/openshift/client-go/image/informers/externalversions/image/v1"
 	imagev1lister "github.com/openshift/client-go/image/listers/image/v1"
+	operatorv1alpha1informer "github.com/openshift/client-go/operator/informers/externalversions/operator/v1alpha1"
+	operatorv1alpha1lister "github.com/openshift/client-go/operator/listers/operator/v1alpha1"
 	sharedbuildutil "github.com/openshift/library-go/pkg/build/buildutil"
 	"github.com/openshift/library-go/pkg/image/imageutil"
 	"github.com/openshift/library-go/pkg/image/reference"
@@ -112,20 +120,6 @@ func (q *resourceTriggerQueue) Pop(key string) []string {
 	return resources
 }
 
-type registryList struct {
-	Registries []string `toml:"registries"`
-}
-
-type registries struct {
-	Search   registryList `toml:"search"`
-	Insecure registryList `toml:"insecure"`
-	Block    registryList `toml:"block"`
-}
-
-type tomlConfig struct {
-	Registries registries `toml:"registries"`
-}
-
 // BuildController watches builds and synchronizes them with their
 // corresponding build pods. It is also responsible for resolving image
 // stream references in the Build to container images prior to invoking the pod.
@@ -156,6 +150,8 @@ type BuildController struct {
 	kubeClient                  kubernetes.Interface
 	proxyCfgLister              configv1lister.ProxyLister
 
+	imageContentSourcePolicyLister operatorv1alpha1lister.ImageContentSourcePolicyLister
+
 	buildQueue            workqueue.RateLimitingInterface
 	imageStreamQueue      *resourceTriggerQueue
 	buildConfigQueue      workqueue.RateLimitingInterface
@@ -173,6 +169,8 @@ type BuildController struct {
 	buildInformer    cache.SharedIndexInformer
 	proxyCfgInformer cache.SharedIndexInformer
 
+	imageContentSourcePolicyInformer cache.SharedIndexInformer
+
 	buildStoreSynced                      cache.InformerSynced
 	buildControllerConfigStoreSynced      cache.InformerSynced
 	imageConfigStoreSynced                cache.InformerSynced
@@ -183,6 +181,7 @@ type BuildController struct {
 	openshiftConfigConfigMapStoreSynced   cache.InformerSynced
 	controllerManagerConfigMapStoreSynced cache.InformerSynced
 	proxyCfgStoreSynced                   cache.InformerSynced
+	imageContentSourcePolicySynched       cache.InformerSynced
 
 	runPolicies              []policy.RunPolicy
 	createStrategy           buildPodCreationStrategy
@@ -211,6 +210,7 @@ type BuildControllerParams struct {
 	OpenshiftConfigConfigMapInformer   kubeinformers.ConfigMapInformer
 	ControllerManagerConfigMapInformer kubeinformers.ConfigMapInformer
 	ProxyConfigInformer                configv1informer.ProxyInformer
+	ImageContentSourcePolicyInformer   operatorv1alpha1informer.ImageContentSourcePolicyInformer
 	KubeClient                         kubernetes.Interface
 	BuildClient                        buildv1client.Interface
 	DockerBuildStrategy                *strategy.DockerBuildStrategy
@@ -229,26 +229,28 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 	buildLister := params.BuildInformer.Lister()
 	buildConfigGetter := params.BuildConfigInformer.Lister()
 	c := &BuildController{
-		buildPatcher:                    params.BuildClient.BuildV1(),
-		buildLister:                     buildLister,
-		buildConfigLister:               buildConfigGetter,
-		buildDeleter:                    params.BuildClient.BuildV1(),
-		buildControllerConfigLister:     params.BuildControllerConfigInformer.Lister(),
-		proxyCfgLister:                  params.ProxyConfigInformer.Lister(),
-		imageConfigLister:               params.ImageConfigInformer.Lister(),
-		secretStore:                     params.SecretInformer.Lister(),
-		serviceAccountStore:             params.ServiceAccountInformer.Lister(),
-		podClient:                       params.KubeClient.CoreV1(),
-		configMapClient:                 params.KubeClient.CoreV1(),
-		openShiftConfigConfigMapStore:   params.OpenshiftConfigConfigMapInformer.Lister(),
-		controllerManagerConfigMapStore: params.ControllerManagerConfigMapInformer.Lister(),
-		kubeClient:                      params.KubeClient,
-		podInformer:                     params.PodInformer.Informer(),
-		podStore:                        params.PodInformer.Lister(),
-		buildInformer:                   params.BuildInformer.Informer(),
-		buildStore:                      params.BuildInformer.Lister(),
-		proxyCfgInformer:                params.ProxyConfigInformer.Informer(),
-		imageStreamStore:                params.ImageStreamInformer.Lister(),
+		buildPatcher:                     params.BuildClient.BuildV1(),
+		buildLister:                      buildLister,
+		buildConfigLister:                buildConfigGetter,
+		buildDeleter:                     params.BuildClient.BuildV1(),
+		buildControllerConfigLister:      params.BuildControllerConfigInformer.Lister(),
+		proxyCfgLister:                   params.ProxyConfigInformer.Lister(),
+		imageContentSourcePolicyLister:   params.ImageContentSourcePolicyInformer.Lister(),
+		imageConfigLister:                params.ImageConfigInformer.Lister(),
+		secretStore:                      params.SecretInformer.Lister(),
+		serviceAccountStore:              params.ServiceAccountInformer.Lister(),
+		podClient:                        params.KubeClient.CoreV1(),
+		configMapClient:                  params.KubeClient.CoreV1(),
+		openShiftConfigConfigMapStore:    params.OpenshiftConfigConfigMapInformer.Lister(),
+		controllerManagerConfigMapStore:  params.ControllerManagerConfigMapInformer.Lister(),
+		kubeClient:                       params.KubeClient,
+		podInformer:                      params.PodInformer.Informer(),
+		podStore:                         params.PodInformer.Lister(),
+		buildInformer:                    params.BuildInformer.Informer(),
+		buildStore:                       params.BuildInformer.Lister(),
+		proxyCfgInformer:                 params.ProxyConfigInformer.Informer(),
+		imageContentSourcePolicyInformer: params.ImageContentSourcePolicyInformer.Informer(),
+		imageStreamStore:                 params.ImageStreamInformer.Lister(),
 		createStrategy: &typeBasedFactoryStrategy{
 			dockerBuildStrategy: params.DockerBuildStrategy,
 			sourceBuildStrategy: params.SourceBuildStrategy,
@@ -281,6 +283,11 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 		UpdateFunc: c.buildControllerConfigUpdated,
 		DeleteFunc: c.buildControllerConfigDeleted,
 	})
+	c.imageContentSourcePolicyInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.buildControllerConfigAdded,
+		UpdateFunc: c.buildControllerConfigUpdated,
+		DeleteFunc: c.buildControllerConfigDeleted,
+	})
 	params.ImageStreamInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.imageStreamAdded,
 		UpdateFunc: c.imageStreamUpdated,
@@ -304,6 +311,7 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 	c.buildStoreSynced = c.buildInformer.HasSynced
 	c.podStoreSynced = c.podInformer.HasSynced
 	c.proxyCfgStoreSynced = c.proxyCfgInformer.HasSynced
+	c.imageContentSourcePolicySynched = c.imageContentSourcePolicyInformer.HasSynced
 	c.secretStoreSynced = params.SecretInformer.Informer().HasSynced
 	c.serviceAccountStoreSynced = params.ServiceAccountInformer.Informer().HasSynced
 	c.imageStreamStoreSynced = params.ImageStreamInformer.Informer().HasSynced
@@ -1954,6 +1962,7 @@ func (bc *BuildController) readClusterImageConfig() []error {
 	configErrs := []error{}
 	// Get additional CAs from the image config
 	imageConfig, err := bc.imageConfigLister.Get("cluster")
+	imageConfig = imageConfig.DeepCopy()
 	if err != nil && !errors.IsNotFound(err) {
 		configErrs = append(configErrs, err)
 		return configErrs
@@ -1978,7 +1987,15 @@ func (bc *BuildController) readClusterImageConfig() []error {
 		bc.setAdditionalTrustedCAs(additionalCAs)
 	}
 
-	registriesTOML, regErr := bc.createBuildRegistriesConfigData(imageConfig)
+	imageContentSourcePolicies, err := bc.imageContentSourcePolicyLister.List(labels.Everything())
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			configErrs = append(configErrs, err)
+			return configErrs
+		}
+		imageContentSourcePolicies = []*operatorv1alpha1.ImageContentSourcePolicy{}
+	}
+	registriesTOML, regErr := bc.createBuildRegistriesConfigData(imageConfig, imageContentSourcePolicies)
 	if regErr != nil {
 		configErrs = append(configErrs, regErr)
 	} else {
@@ -2023,39 +2040,42 @@ func (bc *BuildController) getAdditionalTrustedCAData(config *configv1.Image) (m
 	return additionalCA.Data, nil
 }
 
-func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Image) (string, error) {
-	registriesConfig := config.Spec.RegistrySources
-	if len(registriesConfig.InsecureRegistries) == 0 && len(registriesConfig.BlockedRegistries) == 0 {
+func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Image, policies []*operatorv1alpha1.ImageContentSourcePolicy) (string, error) {
+
+	blockedRegs := []string{}
+	insecureRegs := []string{}
+	if config != nil {
+		insecureRegs = config.Spec.RegistrySources.InsecureRegistries
+		blockedRegs = config.Spec.RegistrySources.BlockedRegistries
+	}
+	if len(insecureRegs) == 0 && len(blockedRegs) == 0 && len(policies) == 0 {
 		klog.V(4).Info("using default registry settings for builds")
 		return "", nil
 	}
-	configObj := tomlConfig{
-		Registries: registries{
-			// docker.io must be the only entry in the registry search list
-			// See https://github.com/openshift/builder/pull/40
-			Search: registryList{
-				Registries: []string{"docker.io"},
-			},
-			Insecure: registryList{
-				Registries: registriesConfig.InsecureRegistries,
-			},
-			Block: registryList{
-				Registries: registriesConfig.BlockedRegistries,
-			},
-		},
-	}
 
-	configTOML, err := toml.Marshal(configObj)
+	configObj := sysregistriesv2.V2RegistriesConf{}
+	// docker.io must be the only entry in the registry search list
+	// See https://github.com/openshift/builder/pull/40
+	configObj.UnqualifiedSearchRegistries = []string{"docker.io"}
+	err := mco.EditRegistriesConfig(&configObj, insecureRegs, blockedRegs, policies)
 	if err != nil {
+		klog.V(0).Infof("MCO library had problem building registries config: %s", err.Error())
 		return "", err
 	}
-	if len(configTOML) == 0 {
-		klog.V(4).Info("using default registry settings for builds")
+
+	var newData bytes.Buffer
+	encoder := toml.NewEncoder(&newData)
+	if err := encoder.Encode(configObj); err != nil {
+		return "", err
+	}
+
+	if len(newData.Bytes()) == 0 {
+		klog.V(4).Info("using default insecure registry settings for builds")
 		return "", nil
 	}
 	klog.V(4).Info("overrode registry settings for builds")
-	klog.V(5).Infof("generated registries.conf for build pods: \n%s", string(configTOML))
-	return string(configTOML), nil
+	klog.V(5).Infof("generated registries.conf for build pods: \n%s", string(newData.Bytes()))
+	return string(newData.Bytes()), nil
 }
 
 func (bc *BuildController) createBuildSignaturePolicyData(config *configv1.Image) (string, error) {
