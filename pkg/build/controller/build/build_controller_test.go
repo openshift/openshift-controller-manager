@@ -2,13 +2,18 @@ package build
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
+	"github.com/containers/image/pkg/sysregistriesv2"
 	"github.com/containers/image/signature"
+	sysregtypes "github.com/containers/image/types"
 	"github.com/google/uuid"
-	"github.com/pelletier/go-toml"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -40,6 +45,9 @@ import (
 	imagev1client "github.com/openshift/client-go/image/clientset/versioned"
 	fakeimagev1client "github.com/openshift/client-go/image/clientset/versioned/fake"
 	imagev1informer "github.com/openshift/client-go/image/informers/externalversions"
+	operatorv1alphaclient "github.com/openshift/client-go/operator/clientset/versioned"
+	fakeoperatorv1alphaclient "github.com/openshift/client-go/operator/clientset/versioned/fake"
+	operatorv1alpha1informer "github.com/openshift/client-go/operator/informers/externalversions"
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildscheme"
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 	builddefaults "github.com/openshift/openshift-controller-manager/pkg/build/controller/build/defaults"
@@ -1546,7 +1554,7 @@ func TestHandleControllerConfig(t *testing.T) {
 
 			registryConfTOML := bc.registryConfTOML()
 			if isRegistryConfigEmpty(buildRegistriesConfig) {
-				if len(registryConfTOML) > 0 {
+				if len(registryConfTOML) > 0 && !strings.Contains(registryConfTOML, "blocked = true") && registryConfTOML != "unqualified-search-registries = [\"docker.io\"]\n" {
 					t.Errorf("expected empty registries config, got %s", registryConfTOML)
 				}
 			}
@@ -1555,18 +1563,45 @@ func TestHandleControllerConfig(t *testing.T) {
 				t.Errorf("unexpected error decoding registries config: %v", err)
 			}
 
-			if !equality.Semantic.DeepEqual(registriesConfig.Registries.Insecure.Registries,
+			// Ensure that the generated configuration is actually valid.
+			registriesConf, err := ioutil.TempFile("", "registries.conf")
+			defer os.Remove(registriesConf.Name())
+			if err != nil {
+				t.Errorf("unexpected error creating temp file: %s", err.Error())
+			}
+			_, err = registriesConf.Write([]byte(registryConfTOML))
+			if err != nil {
+				t.Errorf("unexpected error writing to temp file: %s", err.Error())
+			}
+			_, err = sysregistriesv2.GetRegistries(&sysregtypes.SystemContext{
+				SystemRegistriesConfPath: registriesConf.Name(),
+			})
+			if err != nil {
+				t.Errorf("unexpected error parsing registry.conf string: %s", err.Error())
+			}
+
+			insecureRegistries := []string{}
+			blockedRegistries := []string{}
+			for _, registry := range registriesConfig.Registries {
+				if registry.Insecure {
+					insecureRegistries = append(insecureRegistries, registry.Location)
+				}
+				if registry.Blocked {
+					blockedRegistries = append(blockedRegistries, registry.Location)
+				}
+			}
+			if !equality.Semantic.DeepEqual(insecureRegistries,
 				buildRegistriesConfig.InsecureRegistries) {
 				t.Errorf("expected insecure registries to equal %v, got %v",
 					buildRegistriesConfig.InsecureRegistries,
-					registriesConfig.Registries.Insecure.Registries)
+					insecureRegistries)
 			}
 
-			if !equality.Semantic.DeepEqual(registriesConfig.Registries.Block.Registries,
+			if !equality.Semantic.DeepEqual(blockedRegistries,
 				buildRegistriesConfig.BlockedRegistries) {
 				t.Errorf("expected blocked registries to equal %v, got %v",
 					buildRegistriesConfig.BlockedRegistries,
-					registriesConfig.Registries.Block.Registries)
+					blockedRegistries)
 			}
 
 			expectedSearchRegistries := []string{}
@@ -1574,11 +1609,11 @@ func TestHandleControllerConfig(t *testing.T) {
 			if !isRegistryConfigEmpty(buildRegistriesConfig) {
 				expectedSearchRegistries = []string{"docker.io"}
 			}
-			if !equality.Semantic.DeepEqual(registriesConfig.Registries.Search.Registries,
+			if !equality.Semantic.DeepEqual(registriesConfig.UnqualifiedSearchRegistries,
 				expectedSearchRegistries) {
 				t.Errorf("expected search registries to equal %v, got %v",
 					expectedSearchRegistries,
-					registriesConfig.Registries.Search.Registries)
+					registriesConfig.UnqualifiedSearchRegistries)
 			}
 
 			signatureJSON := bc.signaturePolicyJSON()
@@ -1650,8 +1685,8 @@ func isRegistryConfigEmpty(config configv1.RegistrySources) bool {
 	return len(config.InsecureRegistries) == 0 && len(config.BlockedRegistries) == 0
 }
 
-func decodeRegistries(configTOML string) (*tomlConfig, error) {
-	config := &tomlConfig{}
+func decodeRegistries(configTOML string) (*sysregistriesv2.V2RegistriesConf, error) {
+	config := &sysregistriesv2.V2RegistriesConf{}
 	err := toml.Unmarshal([]byte(configTOML), config)
 	return config, err
 }
@@ -1782,6 +1817,10 @@ func fakeConfigClient(objects ...runtime.Object) configv1client.Interface {
 	return fakeconfigv1client.NewSimpleClientset(objects...)
 }
 
+func fakeOperatorClient(objects ...runtime.Object) operatorv1alphaclient.Interface {
+	return fakeoperatorv1alphaclient.NewSimpleClientset(objects...)
+}
+
 func fakeKubeExternalClientSet(objects ...runtime.Object) kubernetes.Interface {
 	builderSA := &corev1.ServiceAccount{}
 	builderSA.Name = "builder"
@@ -1858,10 +1897,14 @@ func newFakeBuildController(buildClient buildv1client.Interface, imageClient ima
 		configClient = fakeConfigClient()
 	}
 
+	operatorClient := fakeOperatorClient()
+
 	kubeExternalInformers := fakeKubeExternalInformers(kubeExternalClient)
 	buildInformers := buildv1informer.NewSharedInformerFactory(buildClient, 0)
 	imageInformers := imagev1informer.NewSharedInformerFactory(imageClient, 0)
 	configInformers := configv1informer.NewSharedInformerFactory(configClient, 0)
+	operatorInformers := operatorv1alpha1informer.NewSharedInformerFactory(operatorClient, 0)
+
 	stopChan := make(chan struct{})
 
 	// For tests, use the kubeExternalInformers for pods, secrets, and configMaps.
@@ -1871,6 +1914,7 @@ func newFakeBuildController(buildClient buildv1client.Interface, imageClient ima
 		BuildConfigInformer:                buildInformers.Build().V1().BuildConfigs(),
 		ImageStreamInformer:                imageInformers.Image().V1().ImageStreams(),
 		ProxyConfigInformer:                configInformers.Config().V1().Proxies(),
+		ImageContentSourcePolicyInformer:   operatorInformers.Operator().V1alpha1().ImageContentSourcePolicies(),
 		PodInformer:                        kubeExternalInformers.Core().V1().Pods(),
 		SecretInformer:                     kubeExternalInformers.Core().V1().Secrets(),
 		ServiceAccountInformer:             kubeExternalInformers.Core().V1().ServiceAccounts(),

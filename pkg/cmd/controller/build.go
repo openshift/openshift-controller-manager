@@ -47,6 +47,7 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 	openshiftConfigConfigMapInformer := ctx.OpenshiftConfigKubernetesInformers.Core().V1().ConfigMaps()
 	controllerManagerConfigMapInformer := ctx.ControllerManagerKubeInformers.Core().V1().ConfigMaps()
 	proxyCfgInformer := ctx.ConfigInformers.Config().V1().Proxies()
+	imageContentSourcePolicyInformer := ctx.OperatorInformers.Operator().V1alpha1().ImageContentSourcePolicies()
 
 	buildControllerParams := &buildcontroller.BuildControllerParams{
 		BuildInformer:                      buildInformer,
@@ -60,6 +61,7 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 		OpenshiftConfigConfigMapInformer:   openshiftConfigConfigMapInformer,
 		ControllerManagerConfigMapInformer: controllerManagerConfigMapInformer,
 		ProxyConfigInformer:                proxyCfgInformer,
+		ImageContentSourcePolicyInformer:   imageContentSourcePolicyInformer,
 		KubeClient:                         externalKubeClient,
 		BuildClient:                        buildClient,
 		DockerBuildStrategy: &buildstrategy.DockerBuildStrategy{

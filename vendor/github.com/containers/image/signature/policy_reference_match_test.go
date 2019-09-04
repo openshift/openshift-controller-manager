@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/containers/image/docker/reference"
+	"github.com/containers/image/internal/testing/mocks"
 	"github.com/containers/image/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,7 @@ const (
 	fullRHELRef       = "registry.access.redhat.com/rhel7/rhel:7.2.3"
 	untaggedRHELRef   = "registry.access.redhat.com/rhel7/rhel"
 	digestSuffix      = "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	digestSuffixOther = "@sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	digestSuffixOther = "@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 )
 
 func TestParseImageAndDockerReference(t *testing.T) {
@@ -61,10 +62,13 @@ func (ref refImageMock) Reference() types.ImageReference {
 func (ref refImageMock) Close() error {
 	panic("unexpected call to a mock function")
 }
-func (ref refImageMock) Manifest() ([]byte, string, error) {
+func (ref refImageMock) Manifest(ctx context.Context) ([]byte, string, error) {
 	panic("unexpected call to a mock function")
 }
 func (ref refImageMock) Signatures(context.Context) ([][]byte, error) {
+	panic("unexpected call to a mock function")
+}
+func (ref refImageMock) LayerInfosForCopy(ctx context.Context) ([]types.BlobInfo, error) {
 	panic("unexpected call to a mock function")
 }
 
@@ -74,7 +78,7 @@ type refImageReferenceMock struct{ reference.Named }
 func (ref refImageReferenceMock) Transport() types.ImageTransport {
 	// We use this in error messages, so sady we must return something. But right now we do so only when DockerReference is nil, so restrict to that.
 	if ref.Named == nil {
-		return nameImageTransportMock("== Transport mock")
+		return mocks.NameImageTransport("== Transport mock")
 	}
 	panic("unexpected call to a mock function")
 }
@@ -94,29 +98,16 @@ func (ref refImageReferenceMock) PolicyConfigurationIdentity() string {
 func (ref refImageReferenceMock) PolicyConfigurationNamespaces() []string {
 	panic("unexpected call to a mock function")
 }
-func (ref refImageReferenceMock) NewImage(ctx *types.SystemContext) (types.Image, error) {
+func (ref refImageReferenceMock) NewImage(ctx context.Context, sys *types.SystemContext) (types.ImageCloser, error) {
 	panic("unexpected call to a mock function")
 }
-func (ref refImageReferenceMock) NewImageSource(ctx *types.SystemContext, requestedManifestMIMETypes []string) (types.ImageSource, error) {
+func (ref refImageReferenceMock) NewImageSource(ctx context.Context, sys *types.SystemContext) (types.ImageSource, error) {
 	panic("unexpected call to a mock function")
 }
-func (ref refImageReferenceMock) NewImageDestination(ctx *types.SystemContext) (types.ImageDestination, error) {
+func (ref refImageReferenceMock) NewImageDestination(ctx context.Context, sys *types.SystemContext) (types.ImageDestination, error) {
 	panic("unexpected call to a mock function")
 }
-func (ref refImageReferenceMock) DeleteImage(ctx *types.SystemContext) error {
-	panic("unexpected call to a mock function")
-}
-
-// nameImageTransportMock is a mock of types.ImageTransport which returns itself in Name.
-type nameImageTransportMock string
-
-func (name nameImageTransportMock) Name() string {
-	return string(name)
-}
-func (name nameImageTransportMock) ParseReference(reference string) (types.ImageReference, error) {
-	panic("unexpected call to a mock function")
-}
-func (name nameImageTransportMock) ValidatePolicyConfigurationScope(scope string) error {
+func (ref refImageReferenceMock) DeleteImage(ctx context.Context, sys *types.SystemContext) error {
 	panic("unexpected call to a mock function")
 }
 
@@ -326,10 +317,13 @@ func (ref forbiddenImageMock) Reference() types.ImageReference {
 func (ref forbiddenImageMock) Close() error {
 	panic("unexpected call to a mock function")
 }
-func (ref forbiddenImageMock) Manifest() ([]byte, string, error) {
+func (ref forbiddenImageMock) Manifest(ctx context.Context) ([]byte, string, error) {
 	panic("unexpected call to a mock function")
 }
 func (ref forbiddenImageMock) Signatures(context.Context) ([][]byte, error) {
+	panic("unexpected call to a mock function")
+}
+func (ref forbiddenImageMock) LayerInfosForCopy(ctx context.Context) ([]types.BlobInfo, error) {
 	panic("unexpected call to a mock function")
 }
 

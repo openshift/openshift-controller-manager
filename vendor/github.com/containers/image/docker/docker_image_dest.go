@@ -12,32 +12,20 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/containers/image/docker/reference"
 	"github.com/containers/image/manifest"
+	"github.com/containers/image/pkg/blobinfocache/none"
 	"github.com/containers/image/types"
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/docker/distribution/registry/api/v2"
 	"github.com/docker/distribution/registry/client"
 	"github.com/opencontainers/go-digest"
+	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
-
-var manifestMIMETypes = []string{
-	// TODO(runcom): we'll add OCI as part of another PR here
-	manifest.DockerV2Schema2MediaType,
-	manifest.DockerV2Schema1SignedMediaType,
-	manifest.DockerV2Schema1MediaType,
-}
-
-func supportedManifestMIMETypesMap() map[string]bool {
-	m := make(map[string]bool, len(manifestMIMETypes))
-	for _, mt := range manifestMIMETypes {
-		m[mt] = true
-	}
-	return m
-}
 
 type dockerImageDestination struct {
 	ref dockerReference
@@ -47,8 +35,8 @@ type dockerImageDestination struct {
 }
 
 // newImageDestination creates a new ImageDestination for the specified image reference.
-func newImageDestination(ctx *types.SystemContext, ref dockerReference) (types.ImageDestination, error) {
-	c, err := newDockerClient(ctx, ref, true, "pull,push")
+func newImageDestination(sys *types.SystemContext, ref dockerReference) (types.ImageDestination, error) {
+	c, err := newDockerClientFromRef(sys, ref, true, "pull,push")
 	if err != nil {
 		return nil, err
 	}
@@ -70,13 +58,18 @@ func (d *dockerImageDestination) Close() error {
 }
 
 func (d *dockerImageDestination) SupportedManifestMIMETypes() []string {
-	return manifestMIMETypes
+	return []string{
+		imgspecv1.MediaTypeImageManifest,
+		manifest.DockerV2Schema2MediaType,
+		manifest.DockerV2Schema1SignedMediaType,
+		manifest.DockerV2Schema1MediaType,
+	}
 }
 
 // SupportsSignatures returns an error (to be displayed to the user) if the destination certainly can't store signatures.
 // Note: It is still possible for PutSignatures to fail if SupportsSignatures returns nil.
-func (d *dockerImageDestination) SupportsSignatures() error {
-	if err := d.c.detectProperties(context.TODO()); err != nil {
+func (d *dockerImageDestination) SupportsSignatures(ctx context.Context) error {
+	if err := d.c.detectProperties(ctx); err != nil {
 		return err
 	}
 	switch {
@@ -89,9 +82,8 @@ func (d *dockerImageDestination) SupportsSignatures() error {
 	}
 }
 
-// ShouldCompressLayers returns true iff it is desirable to compress layer blobs written to this destination.
-func (d *dockerImageDestination) ShouldCompressLayers() bool {
-	return true
+func (d *dockerImageDestination) DesiredLayerCompression() types.LayerCompression {
+	return types.Compress
 }
 
 // AcceptsForeignLayerURLs returns false iff foreign layers in manifest should be actually
@@ -105,6 +97,13 @@ func (d *dockerImageDestination) MustMatchRuntimeOS() bool {
 	return false
 }
 
+// IgnoresEmbeddedDockerReference returns true iff the destination does not care about Image.EmbeddedDockerReferenceConflicts(),
+// and would prefer to receive an unmodified manifest instead of one modified for the destination.
+// Does not make a difference if Reference().DockerReference() is nil.
+func (d *dockerImageDestination) IgnoresEmbeddedDockerReference() bool {
+	return false // We do want the manifest updated; older registry versions refuse manifests if the embedded reference does not match.
+}
+
 // sizeCounter is an io.Writer which only counts the total size of its input.
 type sizeCounter struct{ size int64 }
 
@@ -113,34 +112,43 @@ func (c *sizeCounter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+// HasThreadSafePutBlob indicates whether PutBlob can be executed concurrently.
+func (d *dockerImageDestination) HasThreadSafePutBlob() bool {
+	return true
+}
+
 // PutBlob writes contents of stream and returns data representing the result (with all data filled in).
 // inputInfo.Digest can be optionally provided if known; it is not mandatory for the implementation to verify it.
 // inputInfo.Size is the expected length of stream, if known.
+// May update cache.
 // WARNING: The contents of stream are being verified on the fly.  Until stream.Read() returns io.EOF, the contents of the data SHOULD NOT be available
 // to any other readers for download using the supplied digest.
 // If stream.Read() at any time, ESPECIALLY at end of input, returns an error, PutBlob MUST 1) fail, and 2) delete any data stored so far.
-func (d *dockerImageDestination) PutBlob(stream io.Reader, inputInfo types.BlobInfo) (types.BlobInfo, error) {
+func (d *dockerImageDestination) PutBlob(ctx context.Context, stream io.Reader, inputInfo types.BlobInfo, cache types.BlobInfoCache, isConfig bool) (types.BlobInfo, error) {
 	if inputInfo.Digest.String() != "" {
-		haveBlob, size, err := d.HasBlob(inputInfo)
+		// This should not really be necessary, at least the copy code calls TryReusingBlob automatically.
+		// Still, we need to check, if only because the "initiate upload" endpoint does not have a documented "blob already exists" return value.
+		// But we do that with NoCache, so that it _only_ checks the primary destination, instead of trying all mount candidates _again_.
+		haveBlob, reusedInfo, err := d.TryReusingBlob(ctx, inputInfo, none.NoCache, false)
 		if err != nil {
 			return types.BlobInfo{}, err
 		}
 		if haveBlob {
-			return types.BlobInfo{Digest: inputInfo.Digest, Size: size}, nil
+			return reusedInfo, nil
 		}
 	}
 
 	// FIXME? Chunked upload, progress reporting, etc.
 	uploadPath := fmt.Sprintf(blobUploadPath, reference.Path(d.ref.ref))
 	logrus.Debugf("Uploading %s", uploadPath)
-	res, err := d.c.makeRequest(context.TODO(), "POST", uploadPath, nil, nil)
+	res, err := d.c.makeRequest(ctx, "POST", uploadPath, nil, nil, v2Auth, nil)
 	if err != nil {
 		return types.BlobInfo{}, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusAccepted {
 		logrus.Debugf("Error initiating layer upload, response %#v", *res)
-		return types.BlobInfo{}, errors.Errorf("Error initiating layer upload to %s, status %d", uploadPath, res.StatusCode)
+		return types.BlobInfo{}, errors.Wrapf(client.HandleErrorResponse(res), "Error initiating layer upload to %s in %s", uploadPath, d.c.registry)
 	}
 	uploadLocation, err := res.Location()
 	if err != nil {
@@ -150,7 +158,7 @@ func (d *dockerImageDestination) PutBlob(stream io.Reader, inputInfo types.BlobI
 	digester := digest.Canonical.Digester()
 	sizeCounter := &sizeCounter{}
 	tee := io.TeeReader(stream, io.MultiWriter(digester.Hash(), sizeCounter))
-	res, err = d.c.makeRequestToResolvedURL(context.TODO(), "PATCH", uploadLocation.String(), map[string][]string{"Content-Type": {"application/octet-stream"}}, tee, inputInfo.Size, true)
+	res, err = d.c.makeRequestToResolvedURL(ctx, "PATCH", uploadLocation.String(), map[string][]string{"Content-Type": {"application/octet-stream"}}, tee, inputInfo.Size, v2Auth, nil)
 	if err != nil {
 		logrus.Debugf("Error uploading layer chunked, response %#v", res)
 		return types.BlobInfo{}, err
@@ -163,38 +171,34 @@ func (d *dockerImageDestination) PutBlob(stream io.Reader, inputInfo types.BlobI
 		return types.BlobInfo{}, errors.Wrap(err, "Error determining upload URL")
 	}
 
-	// FIXME: DELETE uploadLocation on failure
+	// FIXME: DELETE uploadLocation on failure (does not really work in docker/distribution servers, which incorrectly require the "delete" action in the token's scope)
 
 	locationQuery := uploadLocation.Query()
 	// TODO: check inputInfo.Digest == computedDigest https://github.com/containers/image/pull/70#discussion_r77646717
 	locationQuery.Set("digest", computedDigest.String())
 	uploadLocation.RawQuery = locationQuery.Encode()
-	res, err = d.c.makeRequestToResolvedURL(context.TODO(), "PUT", uploadLocation.String(), map[string][]string{"Content-Type": {"application/octet-stream"}}, nil, -1, true)
+	res, err = d.c.makeRequestToResolvedURL(ctx, "PUT", uploadLocation.String(), map[string][]string{"Content-Type": {"application/octet-stream"}}, nil, -1, v2Auth, nil)
 	if err != nil {
 		return types.BlobInfo{}, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusCreated {
 		logrus.Debugf("Error uploading layer, response %#v", *res)
-		return types.BlobInfo{}, errors.Errorf("Error uploading layer to %s, status %d", uploadLocation, res.StatusCode)
+		return types.BlobInfo{}, errors.Wrapf(client.HandleErrorResponse(res), "Error uploading layer to %s", uploadLocation)
 	}
 
 	logrus.Debugf("Upload of layer %s complete", computedDigest)
+	cache.RecordKnownLocation(d.ref.Transport(), bicTransportScope(d.ref), computedDigest, newBICLocationReference(d.ref))
 	return types.BlobInfo{Digest: computedDigest, Size: sizeCounter.size}, nil
 }
 
-// HasBlob returns true iff the image destination already contains a blob with the matching digest which can be reapplied using ReapplyBlob.
-// Unlike PutBlob, the digest can not be empty.  If HasBlob returns true, the size of the blob must also be returned.
-// If the destination does not contain the blob, or it is unknown, HasBlob ordinarily returns (false, -1, nil);
+// blobExists returns true iff repo contains a blob with digest, and if so, also its size.
+// If the destination does not contain the blob, or it is unknown, blobExists ordinarily returns (false, -1, nil);
 // it returns a non-nil error only on an unexpected failure.
-func (d *dockerImageDestination) HasBlob(info types.BlobInfo) (bool, int64, error) {
-	if info.Digest == "" {
-		return false, -1, errors.Errorf(`"Can not check for a blob with unknown digest`)
-	}
-	checkPath := fmt.Sprintf(blobsPath, reference.Path(d.ref.ref), info.Digest.String())
-
+func (d *dockerImageDestination) blobExists(ctx context.Context, repo reference.Named, digest digest.Digest, extraScope *authScope) (bool, int64, error) {
+	checkPath := fmt.Sprintf(blobsPath, reference.Path(repo), digest.String())
 	logrus.Debugf("Checking %s", checkPath)
-	res, err := d.c.makeRequest(context.TODO(), "HEAD", checkPath, nil, nil)
+	res, err := d.c.makeRequest(ctx, "HEAD", checkPath, nil, nil, v2Auth, extraScope)
 	if err != nil {
 		return false, -1, err
 	}
@@ -205,24 +209,144 @@ func (d *dockerImageDestination) HasBlob(info types.BlobInfo) (bool, int64, erro
 		return true, getBlobSize(res), nil
 	case http.StatusUnauthorized:
 		logrus.Debugf("... not authorized")
-		return false, -1, errors.Errorf("not authorized to read from destination repository %s", reference.Path(d.ref.ref))
+		return false, -1, errors.Wrapf(client.HandleErrorResponse(res), "Error checking whether a blob %s exists in %s", digest, repo.Name())
 	case http.StatusNotFound:
 		logrus.Debugf("... not present")
 		return false, -1, nil
 	default:
-		return false, -1, errors.Errorf("failed to read from destination repository %s: %v", reference.Path(d.ref.ref), http.StatusText(res.StatusCode))
+		return false, -1, errors.Errorf("failed to read from destination repository %s: %d (%s)", reference.Path(d.ref.ref), res.StatusCode, http.StatusText(res.StatusCode))
 	}
 }
 
-func (d *dockerImageDestination) ReapplyBlob(info types.BlobInfo) (types.BlobInfo, error) {
-	return info, nil
+// mountBlob tries to mount blob srcDigest from srcRepo to the current destination.
+func (d *dockerImageDestination) mountBlob(ctx context.Context, srcRepo reference.Named, srcDigest digest.Digest, extraScope *authScope) error {
+	u := url.URL{
+		Path: fmt.Sprintf(blobUploadPath, reference.Path(d.ref.ref)),
+		RawQuery: url.Values{
+			"mount": {srcDigest.String()},
+			"from":  {reference.Path(srcRepo)},
+		}.Encode(),
+	}
+	mountPath := u.String()
+	logrus.Debugf("Trying to mount %s", mountPath)
+	res, err := d.c.makeRequest(ctx, "POST", mountPath, nil, nil, v2Auth, extraScope)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	switch res.StatusCode {
+	case http.StatusCreated:
+		logrus.Debugf("... mount OK")
+		return nil
+	case http.StatusAccepted:
+		// Oops, the mount was ignored - either the registry does not support that yet, or the blob does not exist; the registry has started an ordinary upload process.
+		// Abort, and let the ultimate caller do an upload when its ready, instead.
+		// NOTE: This does not really work in docker/distribution servers, which incorrectly require the "delete" action in the token's scope, and is thus entirely untested.
+		uploadLocation, err := res.Location()
+		if err != nil {
+			return errors.Wrap(err, "Error determining upload URL after a mount attempt")
+		}
+		logrus.Debugf("... started an upload instead of mounting, trying to cancel at %s", uploadLocation.String())
+		res2, err := d.c.makeRequestToResolvedURL(ctx, "DELETE", uploadLocation.String(), nil, nil, -1, v2Auth, extraScope)
+		if err != nil {
+			logrus.Debugf("Error trying to cancel an inadvertent upload: %s", err)
+		} else {
+			defer res2.Body.Close()
+			if res2.StatusCode != http.StatusNoContent {
+				logrus.Debugf("Error trying to cancel an inadvertent upload, status %s", http.StatusText(res.StatusCode))
+			}
+		}
+		// Anyway, if canceling the upload fails, ignore it and return the more important error:
+		return fmt.Errorf("Mounting %s from %s to %s started an upload instead", srcDigest, srcRepo.Name(), d.ref.ref.Name())
+	default:
+		logrus.Debugf("Error mounting, response %#v", *res)
+		return errors.Wrapf(client.HandleErrorResponse(res), "Error mounting %s from %s to %s", srcDigest, srcRepo.Name(), d.ref.ref.Name())
+	}
+}
+
+// TryReusingBlob checks whether the transport already contains, or can efficiently reuse, a blob, and if so, applies it to the current destination
+// (e.g. if the blob is a filesystem layer, this signifies that the changes it describes need to be applied again when composing a filesystem tree).
+// info.Digest must not be empty.
+// If canSubstitute, TryReusingBlob can use an equivalent equivalent of the desired blob; in that case the returned info may not match the input.
+// If the blob has been succesfully reused, returns (true, info, nil); info must contain at least a digest and size.
+// If the transport can not reuse the requested blob, TryReusingBlob returns (false, {}, nil); it returns a non-nil error only on an unexpected failure.
+// May use and/or update cache.
+func (d *dockerImageDestination) TryReusingBlob(ctx context.Context, info types.BlobInfo, cache types.BlobInfoCache, canSubstitute bool) (bool, types.BlobInfo, error) {
+	if info.Digest == "" {
+		return false, types.BlobInfo{}, errors.Errorf(`"Can not check for a blob with unknown digest`)
+	}
+
+	// First, check whether the blob happens to already exist at the destination.
+	exists, size, err := d.blobExists(ctx, d.ref.ref, info.Digest, nil)
+	if err != nil {
+		return false, types.BlobInfo{}, err
+	}
+	if exists {
+		cache.RecordKnownLocation(d.ref.Transport(), bicTransportScope(d.ref), info.Digest, newBICLocationReference(d.ref))
+		return true, types.BlobInfo{Digest: info.Digest, Size: size}, nil
+	}
+
+	// Then try reusing blobs from other locations.
+	for _, candidate := range cache.CandidateLocations(d.ref.Transport(), bicTransportScope(d.ref), info.Digest, canSubstitute) {
+		candidateRepo, err := parseBICLocationReference(candidate.Location)
+		if err != nil {
+			logrus.Debugf("Error parsing BlobInfoCache location reference: %s", err)
+			continue
+		}
+		logrus.Debugf("Trying to reuse cached location %s in %s", candidate.Digest.String(), candidateRepo.Name())
+
+		// Sanity checks:
+		if reference.Domain(candidateRepo) != reference.Domain(d.ref.ref) {
+			logrus.Debugf("... Internal error: domain %s does not match destination %s", reference.Domain(candidateRepo), reference.Domain(d.ref.ref))
+			continue
+		}
+		if candidateRepo.Name() == d.ref.ref.Name() && candidate.Digest == info.Digest {
+			logrus.Debug("... Already tried the primary destination")
+			continue
+		}
+
+		// Whatever happens here, don't abort the entire operation.  It's likely we just don't have permissions, and if it is a critical network error, we will find out soon enough anyway.
+
+		// Checking candidateRepo, and mounting from it, requires an
+		// expanded token scope.
+		extraScope := &authScope{
+			remoteName: reference.Path(candidateRepo),
+			actions:    "pull",
+		}
+		// This existence check is not, strictly speaking, necessary: We only _really_ need it to get the blob size, and we could record that in the cache instead.
+		// But a "failed" d.mountBlob currently leaves around an unterminated server-side upload, which we would try to cancel.
+		// So, without this existence check, it would be 1 request on success, 2 requests on failure; with it, it is 2 requests on success, 1 request on failure.
+		// On success we avoid the actual costly upload; so, in a sense, the success case is "free", but failures are always costly.
+		// Even worse, docker/distribution does not actually reasonably implement canceling uploads
+		// (it would require a "delete" action in the token, and Quay does not give that to anyone, so we can't ask);
+		// so, be a nice client and don't create unnecesary upload sessions on the server.
+		exists, size, err := d.blobExists(ctx, candidateRepo, candidate.Digest, extraScope)
+		if err != nil {
+			logrus.Debugf("... Failed: %v", err)
+			continue
+		}
+		if !exists {
+			// FIXME? Should we drop the blob from cache here (and elsewhere?)?
+			continue // logrus.Debug() already happened in blobExists
+		}
+		if candidateRepo.Name() != d.ref.ref.Name() {
+			if err := d.mountBlob(ctx, candidateRepo, candidate.Digest, extraScope); err != nil {
+				logrus.Debugf("... Mount failed: %v", err)
+				continue
+			}
+		}
+		cache.RecordKnownLocation(d.ref.Transport(), bicTransportScope(d.ref), candidate.Digest, newBICLocationReference(d.ref))
+		return true, types.BlobInfo{Digest: candidate.Digest, Size: size}, nil
+	}
+
+	return false, types.BlobInfo{}, nil
 }
 
 // PutManifest writes manifest to the destination.
 // FIXME? This should also receive a MIME type if known, to differentiate between schema versions.
 // If the destination is in principle available, refuses this manifest type (e.g. it does not recognize the schema),
 // but may accept a different manifest type, the returned error must be an ManifestTypeRejectedError.
-func (d *dockerImageDestination) PutManifest(m []byte) error {
+func (d *dockerImageDestination) PutManifest(ctx context.Context, m []byte) error {
 	digest, err := manifest.Digest(m)
 	if err != nil {
 		return err
@@ -240,13 +364,13 @@ func (d *dockerImageDestination) PutManifest(m []byte) error {
 	if mimeType != "" {
 		headers["Content-Type"] = []string{mimeType}
 	}
-	res, err := d.c.makeRequest(context.TODO(), "PUT", path, headers, bytes.NewReader(m))
+	res, err := d.c.makeRequest(ctx, "PUT", path, headers, bytes.NewReader(m), v2Auth, nil)
 	if err != nil {
 		return err
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusCreated {
-		err = errors.Wrapf(client.HandleErrorResponse(res), "Error uploading manifest to %s", path)
+	if !successStatus(res.StatusCode) {
+		err = errors.Wrapf(client.HandleErrorResponse(res), "Error uploading manifest %s to %s", refTail, d.ref.ref.Name())
 		if isManifestInvalidError(errors.Cause(err)) {
 			err = types.ManifestTypeRejectedError{Err: err}
 		}
@@ -255,35 +379,56 @@ func (d *dockerImageDestination) PutManifest(m []byte) error {
 	return nil
 }
 
+// successStatus returns true if the argument is a successful HTTP response
+// code (in the range 200 - 399 inclusive).
+func successStatus(status int) bool {
+	return status >= 200 && status <= 399
+}
+
 // isManifestInvalidError returns true iff err from client.HandleErrorReponse is a “manifest invalid” error.
 func isManifestInvalidError(err error) bool {
 	errors, ok := err.(errcode.Errors)
 	if !ok || len(errors) == 0 {
 		return false
 	}
-	ec, ok := errors[0].(errcode.ErrorCoder)
+	err = errors[0]
+	ec, ok := err.(errcode.ErrorCoder)
 	if !ok {
 		return false
 	}
+
+	switch ec.ErrorCode() {
 	// ErrorCodeManifestInvalid is returned by OpenShift with acceptschema2=false.
+	case v2.ErrorCodeManifestInvalid:
+		return true
 	// ErrorCodeTagInvalid is returned by docker/distribution (at least as of commit ec87e9b6971d831f0eff752ddb54fb64693e51cd)
 	// when uploading to a tag (because it can’t find a matching tag inside the manifest)
-	return ec.ErrorCode() == v2.ErrorCodeManifestInvalid || ec.ErrorCode() == v2.ErrorCodeTagInvalid
+	case v2.ErrorCodeTagInvalid:
+		return true
+	// ErrorCodeUnsupported with 'Invalid JSON syntax' is returned by AWS ECR when
+	// uploading an OCI manifest that is (correctly, according to the spec) missing
+	// a top-level media type. See libpod issue #1719
+	// FIXME: remove this case when ECR behavior is fixed
+	case errcode.ErrorCodeUnsupported:
+		return strings.Contains(err.Error(), "Invalid JSON syntax")
+	default:
+		return false
+	}
 }
 
-func (d *dockerImageDestination) PutSignatures(signatures [][]byte) error {
+func (d *dockerImageDestination) PutSignatures(ctx context.Context, signatures [][]byte) error {
 	// Do not fail if we don’t really need to support signatures.
 	if len(signatures) == 0 {
 		return nil
 	}
-	if err := d.c.detectProperties(context.TODO()); err != nil {
+	if err := d.c.detectProperties(ctx); err != nil {
 		return err
 	}
 	switch {
 	case d.c.signatureBase != nil:
 		return d.putSignaturesToLookaside(signatures)
 	case d.c.supportsSignatures:
-		return d.putSignaturesToAPIExtension(signatures)
+		return d.putSignaturesToAPIExtension(ctx, signatures)
 	default:
 		return errors.Errorf("X-Registry-Supports-Signatures extension not supported, and lookaside is not configured")
 	}
@@ -382,7 +527,7 @@ func (c *dockerClient) deleteOneSignature(url *url.URL) (missing bool, err error
 }
 
 // putSignaturesToAPIExtension implements PutSignatures() using the X-Registry-Supports-Signatures API extension.
-func (d *dockerImageDestination) putSignaturesToAPIExtension(signatures [][]byte) error {
+func (d *dockerImageDestination) putSignaturesToAPIExtension(ctx context.Context, signatures [][]byte) error {
 	// Skip dealing with the manifest digest, or reading the old state, if not necessary.
 	if len(signatures) == 0 {
 		return nil
@@ -397,7 +542,7 @@ func (d *dockerImageDestination) putSignaturesToAPIExtension(signatures [][]byte
 	// always adds signatures.  Eventually we should also allow removing signatures,
 	// but the X-Registry-Supports-Signatures API extension does not support that yet.
 
-	existingSignatures, err := d.c.getExtensionsSignatures(context.TODO(), d.ref, d.manifestDigest)
+	existingSignatures, err := d.c.getExtensionsSignatures(ctx, d.ref, d.manifestDigest)
 	if err != nil {
 		return err
 	}
@@ -439,7 +584,7 @@ sigExists:
 		}
 
 		path := fmt.Sprintf(extensionsSignaturePath, reference.Path(d.ref.ref), d.manifestDigest.String())
-		res, err := d.c.makeRequest(context.TODO(), "PUT", path, nil, bytes.NewReader(body))
+		res, err := d.c.makeRequest(ctx, "PUT", path, nil, bytes.NewReader(body), v2Auth, nil)
 		if err != nil {
 			return err
 		}
@@ -450,7 +595,7 @@ sigExists:
 				logrus.Debugf("Error body %s", string(body))
 			}
 			logrus.Debugf("Error uploading signature, status %d, %#v", res.StatusCode, res)
-			return errors.Errorf("Error uploading signature to %s, status %d", path, res.StatusCode)
+			return errors.Wrapf(client.HandleErrorResponse(res), "Error uploading signature to %s in %s", path, d.c.registry)
 		}
 	}
 
@@ -461,6 +606,6 @@ sigExists:
 // WARNING: This does not have any transactional semantics:
 // - Uploaded data MAY be visible to others before Commit() is called
 // - Uploaded data MAY be removed or MAY remain around if Close() is called without Commit() (i.e. rollback is allowed but not guaranteed)
-func (d *dockerImageDestination) Commit() error {
+func (d *dockerImageDestination) Commit(ctx context.Context) error {
 	return nil
 }

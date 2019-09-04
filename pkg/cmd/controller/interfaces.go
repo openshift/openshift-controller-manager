@@ -27,6 +27,8 @@ import (
 	configinformer "github.com/openshift/client-go/config/informers/externalversions"
 	imageclient "github.com/openshift/client-go/image/clientset/versioned"
 	imageinformer "github.com/openshift/client-go/image/informers/externalversions"
+	operatorclient "github.com/openshift/client-go/operator/clientset/versioned"
+	operatorinformer "github.com/openshift/client-go/operator/informers/externalversions"
 	quotaclient "github.com/openshift/client-go/quota/clientset/versioned"
 	quotainformer "github.com/openshift/client-go/quota/informers/externalversions"
 	routeclient "github.com/openshift/client-go/route/clientset/versioned"
@@ -93,6 +95,10 @@ func NewControllerContext(
 	if err != nil {
 		return nil, err
 	}
+	operatorClient, err := operatorclient.NewForConfig(clientConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	openshiftControllerContext := &ControllerContext{
 		OpenshiftControllerConfig: config,
@@ -112,6 +118,7 @@ func NewControllerContext(
 		BuildInformers:                     buildinformer.NewSharedInformerFactory(buildClient, defaultInformerResyncPeriod),
 		ConfigInformers:                    configinformer.NewSharedInformerFactory(configClient, defaultInformerResyncPeriod),
 		ImageInformers:                     imageinformer.NewSharedInformerFactory(imageClient, defaultInformerResyncPeriod),
+		OperatorInformers:                  operatorinformer.NewSharedInformerFactory(operatorClient, defaultInformerResyncPeriod),
 		QuotaInformers:                     quotainformer.NewSharedInformerFactory(quotaClient, defaultInformerResyncPeriod),
 		RouteInformers:                     routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
 		TemplateInformers:                  templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
@@ -166,10 +173,11 @@ type ControllerContext struct {
 	QuotaInformers    quotainformer.SharedInformerFactory
 	RouteInformers    routeinformer.SharedInformerFactory
 
-	AppsInformers   appsinformer.SharedInformerFactory
-	BuildInformers  buildinformer.SharedInformerFactory
-	ConfigInformers configinformer.SharedInformerFactory
-	ImageInformers  imageinformer.SharedInformerFactory
+	AppsInformers     appsinformer.SharedInformerFactory
+	BuildInformers    buildinformer.SharedInformerFactory
+	ConfigInformers   configinformer.SharedInformerFactory
+	ImageInformers    imageinformer.SharedInformerFactory
+	OperatorInformers operatorinformer.SharedInformerFactory
 
 	GenericResourceInformer genericinformers.GenericResourceInformer
 	RestMapper              meta.RESTMapper
@@ -197,6 +205,7 @@ func (c *ControllerContext) StartInformers(stopCh <-chan struct{}) {
 	c.TemplateInformers.Start(stopCh)
 	c.QuotaInformers.Start(stopCh)
 	c.RouteInformers.Start(stopCh)
+	c.OperatorInformers.Start(stopCh)
 
 	c.informersStartedLock.Lock()
 	defer c.informersStartedLock.Unlock()
@@ -234,6 +243,9 @@ type ControllerClientBuilder interface {
 
 	OpenshiftQuotaClient(name string) (quotaclient.Interface, error)
 	OpenshiftQuotaClientOrDie(name string) quotaclient.Interface
+
+	OpenshiftOperatorClient(name string) (operatorclient.Interface, error)
+	OpenshiftOperatorClientOrDie(name string) operatorclient.Interface
 }
 
 // InitFunc is used to launch a particular controller.  It may run additional "should I activate checks".
@@ -243,6 +255,22 @@ type InitFunc func(ctx *ControllerContext) (bool, error)
 
 type OpenshiftControllerClientBuilder struct {
 	controller.ControllerClientBuilder
+}
+
+func (b OpenshiftControllerClientBuilder) OpenshiftOperatorClient(name string) (operatorclient.Interface, error) {
+	clientConfig, err := b.Config(name)
+	if err != nil {
+		return nil, err
+	}
+	return operatorclient.NewForConfig(clientConfig)
+}
+
+func (b OpenshiftControllerClientBuilder) OpenshiftOperatorClientOrDie(name string) operatorclient.Interface {
+	client, err := b.OpenshiftOperatorClient(name)
+	if err != nil {
+		klog.Fatal(err)
+	}
+	return client
 }
 
 // OpenshiftInternalTemplateClient provides a REST client for the template API.
