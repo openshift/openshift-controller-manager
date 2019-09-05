@@ -64,6 +64,8 @@ import:
   version: v1.3.1-coreos.6
 - package: github.com/google/cadvisor
   version: v0.32.0
+- package: github.com/containers/image
+  version: v3.0.2
 - package: github.com/openshift/machine-config-operator
   version: release-4.2
 

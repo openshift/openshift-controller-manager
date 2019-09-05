@@ -1,5 +1,5 @@
-hash: 0b4bc0814d60617fa621b6568a1ab9d67224bf57f66349a29fff6a0c88be333b
-updated: 2019-08-31T16:06:18.037379275-04:00
+hash: 6d6cf387f5c136f77d7c997680dcd6079500ac5f3f8c6e16c684e5a227fa29a6
+updated: 2019-09-05T11:26:29.682517051-04:00
 imports:
 - name: bitbucket.org/ww/goautoneg
   version: 2ae31c8b6b30d2f4c8100c20d527b571e9c433bb
@@ -23,7 +23,7 @@ imports:
   subpackages:
   - pathdriver
 - name: github.com/containers/image
-  version: abf32c4ea589cb8e96bdca5a478dba68f11980e5
+  version: 186df8702a61dd6ed16a88532ed9a10ddc679132
   subpackages:
   - docker
   - docker/policyconfiguration
@@ -32,6 +32,7 @@ imports:
   - manifest
   - pkg/blobinfocache/none
   - pkg/docker/config
+  - pkg/keyctl
   - pkg/strslice
   - pkg/sysregistriesv2
   - pkg/tlsclientconfig
@@ -247,7 +248,7 @@ imports:
   - libcontainer/user
   - libcontainer/utils
 - name: github.com/openshift/api
-  version: 58aab2885e38fd7f4fd57f2615f5f9fe38039e22
+  version: a25bb2adc83e68c68e3696332ff1d21694a34bb0
   subpackages:
   - annotations
   - apps
@@ -387,7 +388,7 @@ imports:
   - template/informers/externalversions/template/v1
   - template/listers/template/v1
 - name: github.com/openshift/library-go
-  version: 17c171f68900d331bee3a88edf513382a0e9fd50
+  version: 7d4acc018c610623ee1413b1e7aebe2ac675d35f
   subpackages:
   - pkg/apps/appsserialization
   - pkg/apps/appsutil
@@ -413,7 +414,7 @@ imports:
   - pkg/template/templateprocessingclient
   - pkg/unidling/unidlingclient
 - name: github.com/openshift/machine-config-operator
-  version: 3b375b425a3bf6ca4189206f8ea4c499376eb71c
+  version: 49d703c2c17a1719c611e3a899a7a5c28e17fa09
   subpackages:
   - pkg/controller/container-runtime-config/registries
 - name: github.com/pborman/uuid
@@ -455,7 +456,7 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/cobra
-  version: ef82de70bb3f60c65fb8eebacbb2d122ef517385
+  version: f2b07da1e2c38d5f12845a4f607e2e1018cbb1f5
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: go4.org
