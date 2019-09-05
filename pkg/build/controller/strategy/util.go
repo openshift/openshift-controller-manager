@@ -550,7 +550,7 @@ func setupBuildCAs(build *buildv1.Build, pod *corev1.Pod, additionalCAs map[stri
 			//the TBD global CA injector will update the ConfigMapVolumeSource keyToPath items
 			Items: []corev1.KeyToPath{
 				{
-					Key:  "ca-bundle.crt",
+					Key:  buildutil.GlobalCAConfigMapKey,
 					Path: "tls-ca-bundle.pem",
 				},
 			},

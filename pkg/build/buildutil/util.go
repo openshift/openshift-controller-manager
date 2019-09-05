@@ -36,13 +36,12 @@ const (
 	BuildBlobsContentCache = "/var/cache/blobs"
 
 	// buildPodSuffix is the suffix used to append to a build pod name given a build name
-	buildPodSuffix          = "build"
-	caConfigMapSuffix       = "ca"
-	globalCAConfigMapSuffix = "global-ca"
-	// GlobalCAConfigMapLabel is the annotation key to set on a config map so that the platform's
-	// global CA support that will inject any required CA's needed for external communication.
-	GlobalCAConfigMapLabel   = "config.openshift.io/inject-trusted-cabundle"
+	buildPodSuffix           = "build"
+	caConfigMapSuffix        = "ca"
+	globalCAConfigMapSuffix  = "global-ca"
 	sysConfigConfigMapSuffix = "sys-config"
+	// GlobalCAConfigMapKey is the key into the config map data for the injected CA data
+	GlobalCAConfigMapKey = "ca-bundle.crt"
 )
 
 func HasTriggerType(triggerType buildv1.BuildTriggerType, bc *buildv1.BuildConfig) bool {
