@@ -36,7 +36,11 @@ func (s *containerImageSignatureDownloader) DownloadImageSignatures(image *image
 	if err != nil {
 		return nil, err
 	}
-	source, err := reference.NewImageSource(nil, nil)
+
+	ctx, cancel := context.WithTimeout(s.ctx, s.timeout)
+	defer cancel()
+
+	source, err := reference.NewImageSource(ctx, nil)
 	if err != nil {
 		// In case we fail to talk to registry to get the image metadata (private
 		// registry, internal registry, etc...), do not fail with error to avoid
@@ -45,9 +49,6 @@ func (s *containerImageSignatureDownloader) DownloadImageSignatures(image *image
 		return []imagev1.ImageSignature{}, nil
 	}
 	defer source.Close()
-
-	ctx, cancel := context.WithTimeout(s.ctx, s.timeout)
-	defer cancel()
 
 	signatures, err := source.GetSignatures(ctx, nil)
 	if err != nil {
