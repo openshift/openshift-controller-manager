@@ -13,6 +13,7 @@ import (
 
 	imagev1 "github.com/openshift/api/image/v1"
 	imagev1lister "github.com/openshift/client-go/image/listers/image/v1"
+	imageref "github.com/openshift/library-go/pkg/image/reference"
 	metrics "github.com/openshift/openshift-controller-manager/pkg/image/metrics/prometheus"
 )
 
@@ -179,6 +180,13 @@ func resetScheduledTags(stream *imagev1.ImageStream) {
 	next := stream.Generation + 1
 	for tag, tagRef := range stream.Spec.Tags {
 		if tagImportable(tagRef) && tagRef.ImportPolicy.Scheduled {
+			if ref, err := imageref.Parse(tagRef.From.Name); err != nil && len(tagRef.From.Name) > 0 {
+				continue
+			} else if len(ref.ID) > 0 && !tagNeedsImport(stream, tagRef, true) {
+				// ref.ID is set if this is a canonical, sha/digest ref;
+				// we allow scheduled import of those, but only until the initially succeed
+				continue
+			}
 			tagRef.Generation = &next
 			stream.Spec.Tags[tag] = tagRef
 		}
@@ -189,6 +197,13 @@ func resetScheduledTags(stream *imagev1.ImageStream) {
 func needsScheduling(stream *imagev1.ImageStream) bool {
 	for _, tagRef := range stream.Spec.Tags {
 		if tagImportable(tagRef) && tagRef.ImportPolicy.Scheduled {
+			if ref, err := imageref.Parse(tagRef.From.Name); err != nil && len(tagRef.From.Name) > 0 {
+				return false
+			} else if len(ref.ID) > 0 && !tagNeedsImport(stream, tagRef, true) {
+				// ref.ID is set if this is a canonical, sha/digest ref;
+				// we allow scheduled import of those, but only until the initially succeed
+				return false
+			}
 			return true
 		}
 	}
