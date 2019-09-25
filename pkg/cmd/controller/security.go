@@ -1,7 +1,18 @@
 package controller
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"time"
+
+	"k8s.io/api/core/v1"
+	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/klog"
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	"github.com/openshift/library-go/pkg/security/uid"
 	sccallocation "github.com/openshift/openshift-controller-manager/pkg/security/controller"
@@ -34,7 +45,44 @@ func RunNamespaceSecurityAllocationController(ctx *ControllerContext) (bool, err
 		uidRange,
 		sccallocation.DefaultMCSAllocation(uidRange, mcsRange, ctx.OpenshiftControllerConfig.SecurityAllocator.MCSLabelsPerProject),
 	)
-	go controller.Run(ctx.Stop)
+	controllerRun := func(cntx context.Context) {
+		controller.Run(cntx.Done())
+	}
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+	eventRecorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "cluster-policy-controller"})
+	id, err := os.Hostname()
+	if err != nil {
+		return false, err
+	}
+	rl, err := resourcelock.New(
+		"configmaps",
+		// namespace where cluster-policy-controller container runs in static pod
+		"openshift-kube-controller-manager",
+		"cluster-policy-controller",
+		kubeClient.CoreV1(),
+		kubeClient.CoordinationV1(),
+		resourcelock.ResourceLockConfig{
+			Identity:      id,
+			EventRecorder: eventRecorder,
+		})
+	if err != nil {
+		return false, err
+	}
+	go leaderelection.RunOrDie(context.Background(),
+		leaderelection.LeaderElectionConfig{
+			Lock:          rl,
+			LeaseDuration: 60 * time.Second,
+			RenewDeadline: 15 * time.Second,
+			RetryPeriod:   5 * time.Second,
+			Callbacks: leaderelection.LeaderCallbacks{
+				OnStartedLeading: controllerRun,
+				OnStoppedLeading: func() {
+					klog.Fatalf("leaderelection lost")
+				},
+			},
+		})
 
 	return true, nil
 }
