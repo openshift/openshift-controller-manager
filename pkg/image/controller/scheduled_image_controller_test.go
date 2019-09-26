@@ -124,3 +124,131 @@ func TestScheduledImport(t *testing.T) {
 		t.Fatalf("should have not added item to scheduler: %#v", sched.scheduler)
 	}
 }
+
+func TestSchedulingChecks(t *testing.T) {
+	one := int64(1)
+	tests := map[string]struct {
+		is             *imagev1.ImageStream
+		expectedResult bool
+	}{
+		"none scheduled": {
+			is: &imagev1.ImageStream{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test", Namespace: "other", UID: "1", ResourceVersion: "1",
+					Annotations: map[string]string{imagev1.DockerImageRepositoryCheckAnnotation: "done"},
+					Generation:  1,
+				},
+				Spec: imagev1.ImageStreamSpec{
+					Tags: []imagev1.TagReference{
+						{
+							Name:         "default",
+							From:         &corev1.ObjectReference{Kind: "DockerImage", Name: "mysql:latest"},
+							Generation:   &one,
+							ImportPolicy: imagev1.TagImportPolicy{},
+						},
+					},
+				},
+				Status: imagev1.ImageStreamStatus{
+					Tags: []imagev1.NamedTagEventList{
+						{
+							Tag:   "default",
+							Items: []imagev1.TagEvent{{Generation: 1}},
+						},
+					},
+				},
+			},
+			expectedResult: false,
+		},
+		"sha ref not imported": {
+			is: &imagev1.ImageStream{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test", Namespace: "other", UID: "1", ResourceVersion: "1",
+					Annotations: map[string]string{imagev1.DockerImageRepositoryCheckAnnotation: "done"},
+					Generation:  1,
+				},
+				Spec: imagev1.ImageStreamSpec{
+					Tags: []imagev1.TagReference{
+						{
+							Name:         "default",
+							From:         &corev1.ObjectReference{Kind: "DockerImage", Name: "abc@sha256:3c87c572822935df60f0f5d3665bd376841a7fcfeb806b5f212de6a00e9a7b25"},
+							Generation:   &one,
+							ImportPolicy: imagev1.TagImportPolicy{Scheduled: true},
+						},
+					},
+				},
+				Status: imagev1.ImageStreamStatus{},
+			},
+			expectedResult: true,
+		},
+		"sha ref imported": {
+			is: &imagev1.ImageStream{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test", Namespace: "other", UID: "1", ResourceVersion: "1",
+					Annotations: map[string]string{imagev1.DockerImageRepositoryCheckAnnotation: "done"},
+					Generation:  1,
+				},
+				Spec: imagev1.ImageStreamSpec{
+					Tags: []imagev1.TagReference{
+						{
+							Name:         "default",
+							From:         &corev1.ObjectReference{Kind: "DockerImage", Name: "abc@sha256:3c87c572822935df60f0f5d3665bd376841a7fcfeb806b5f212de6a00e9a7b25"},
+							Generation:   &one,
+							ImportPolicy: imagev1.TagImportPolicy{Scheduled: true},
+						},
+					},
+				},
+				Status: imagev1.ImageStreamStatus{
+					Tags: []imagev1.NamedTagEventList{
+						{
+							Tag:   "default",
+							Items: []imagev1.TagEvent{{Generation: 1}},
+						},
+					},
+				},
+			},
+			expectedResult: false,
+		},
+		"standard docker image ref with tag": {
+			is: &imagev1.ImageStream{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test", Namespace: "other", UID: "1", ResourceVersion: "1",
+					Annotations: map[string]string{imagev1.DockerImageRepositoryCheckAnnotation: "done"},
+					Generation:  1,
+				},
+				Spec: imagev1.ImageStreamSpec{
+					Tags: []imagev1.TagReference{
+						{
+							Name:         "default",
+							From:         &corev1.ObjectReference{Kind: "DockerImage", Name: "mysql:latest"},
+							Generation:   &one,
+							ImportPolicy: imagev1.TagImportPolicy{Scheduled: true},
+						},
+					},
+				},
+				Status: imagev1.ImageStreamStatus{
+					Tags: []imagev1.NamedTagEventList{
+						{
+							Tag:   "default",
+							Items: []imagev1.TagEvent{{Generation: 1}},
+						},
+					},
+				},
+			},
+			expectedResult: true,
+		},
+	}
+
+	for name, test := range tests {
+		result := needsScheduling(test.is)
+		if result != test.expectedResult {
+			t.Fatalf("needsScheduling test for %s failed", name)
+		}
+		resetScheduledTags(test.is)
+		if test.expectedResult && *test.is.Spec.Tags[0].Generation <= one {
+			t.Fatalf("resetScheduledTags did not bump generation when it should for %s", name)
+		}
+		if !test.expectedResult && *test.is.Spec.Tags[0].Generation > one {
+			t.Fatalf("resetScheduledTags bumped generation when it should not have for %s", name)
+		}
+	}
+}
