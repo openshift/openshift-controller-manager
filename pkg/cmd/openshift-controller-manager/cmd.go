@@ -26,8 +26,6 @@ import (
 	"github.com/openshift/library-go/pkg/serviceability"
 )
 
-const RecommendedStartControllerManagerName = "openshift-controller-manager"
-
 type OpenShiftControllerManager struct {
 	ConfigFilePath string
 	Output         io.Writer

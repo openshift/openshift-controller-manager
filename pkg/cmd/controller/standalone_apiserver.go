@@ -62,7 +62,7 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 	handler = apiserverfilters.WithPanicRecovery(handler)
 	handler = apifilters.WithRequestInfo(handler, requestInfoResolver)
 
-	return serveControllers(servingInfo, handler)
+	return serveControllers(servingInfo, handler, clientCAs)
 }
 
 // initReadinessCheckRoute initializes an HTTP endpoint for readiness checking
@@ -80,7 +80,7 @@ func initReadinessCheckRoute(mux *genericmux.PathRecorderMux, path string, ready
 }
 
 // serve starts serving the provided http.Handler using security settings derived from the MasterConfig
-func serveControllers(servingInfo configv1.HTTPServingInfo, handler http.Handler) error {
+func serveControllers(servingInfo configv1.HTTPServingInfo, handler http.Handler, clientCAs *x509.CertPool) error {
 	timeout := servingInfo.RequestTimeoutSeconds
 	if timeout == -1 {
 		timeout = 0
@@ -92,11 +92,6 @@ func serveControllers(servingInfo configv1.HTTPServingInfo, handler http.Handler
 		ReadTimeout:    time.Duration(timeout) * time.Second,
 		WriteTimeout:   time.Duration(timeout) * time.Second,
 		MaxHeaderBytes: 1 << 20,
-	}
-
-	clientCAs, err := getClientCertCAPool(servingInfo)
-	if err != nil {
-		return err
 	}
 
 	go utilwait.Forever(func() {
