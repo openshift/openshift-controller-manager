@@ -114,11 +114,6 @@ func (o *OpenShiftControllerManager) RunControllerManager() error {
 	configFileLocation := path.Dir(absoluteConfigFile)
 
 	config := obj.(*openshiftcontrolplanev1.OpenShiftControllerManagerConfig)
-	/// this isn't allowed to be nil when by itself.
-	// TODO remove this when the old path is gone.
-	if config.ServingInfo == nil {
-		config.ServingInfo = &configv1.HTTPServingInfo{}
-	}
 	if err := helpers.ResolvePaths(getOpenShiftControllerConfigFileReferences(config), configFileLocation); err != nil {
 		return err
 	}

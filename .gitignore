@@ -1,4 +1,5 @@
 /openshift-controller-manager
+/dev_env
 .vscode/
 vendor/github.com/prometheus/client_model/.classpath
 vendor/github.com/prometheus/client_model/.project

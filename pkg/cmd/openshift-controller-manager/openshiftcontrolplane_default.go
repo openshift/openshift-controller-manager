@@ -3,6 +3,9 @@ package openshift_controller_manager
 import (
 	"time"
 
+	"k8s.io/klog"
+
+	configv1 "github.com/openshift/api/config/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	"github.com/openshift/library-go/pkg/config/configdefaults"
 	"github.com/openshift/library-go/pkg/config/helpers"
@@ -10,7 +13,13 @@ import (
 )
 
 func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig) {
-	configdefaults.SetRecommendedHTTPServingInfoDefaults(config.ServingInfo)
+	if config.ServingInfo == nil {
+		config.ServingInfo = &configv1.HTTPServingInfo{}
+		configdefaults.SetRecommendedHTTPServingInfoDefaults(config.ServingInfo)
+	} else if config.ServingInfo != nil && len(config.ServingInfo.BindAddress) == 0 {
+		klog.Warning("config.ServingInfo will be ignored as it contains an empty BindAddress")
+		config.ServingInfo = nil
+	}
 	configdefaults.SetRecommendedKubeClientConfigDefaults(&config.KubeClientConfig)
 	config.LeaderElection = leaderelectionconverter.LeaderElectionDefaulting(config.LeaderElection, "kube-system", "openshift-master-controllers")
 
@@ -64,7 +73,9 @@ func getOpenShiftControllerConfigFileReferences(config *openshiftcontrolplanev1.
 
 	refs := []*string{}
 
-	refs = append(refs, helpers.GetHTTPServingInfoFileReferences(config.ServingInfo)...)
+	if config.ServingInfo != nil {
+		refs = append(refs, helpers.GetHTTPServingInfoFileReferences(config.ServingInfo)...)
+	}
 	refs = append(refs, helpers.GetKubeClientConfigFileReferences(&config.KubeClientConfig)...)
 
 	return refs
