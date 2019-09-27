@@ -198,11 +198,11 @@ func needsScheduling(stream *imagev1.ImageStream) bool {
 	for _, tagRef := range stream.Spec.Tags {
 		if tagImportable(tagRef) && tagRef.ImportPolicy.Scheduled {
 			if ref, err := imageref.Parse(tagRef.From.Name); err != nil && len(tagRef.From.Name) > 0 {
-				return false
+				continue
 			} else if len(ref.ID) > 0 && !tagNeedsImport(stream, tagRef, true) {
 				// ref.ID is set if this is a canonical, sha/digest ref;
 				// we allow scheduled import of those, but only until the initially succeed
-				return false
+				continue
 			}
 			return true
 		}
