@@ -14,9 +14,11 @@ import (
 
 func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig) {
 	if config.ServingInfo == nil {
+		// apply recommended HTTPS serving info if none were provided
 		config.ServingInfo = &configv1.HTTPServingInfo{}
 		configdefaults.SetRecommendedHTTPServingInfoDefaults(config.ServingInfo)
 	} else if config.ServingInfo != nil && len(config.ServingInfo.BindAddress) == 0 {
+		// disable serving if already set with empty bind address, used in dev setup
 		klog.Warning("config.ServingInfo will be ignored as it contains an empty BindAddress")
 		config.ServingInfo = nil
 	}
