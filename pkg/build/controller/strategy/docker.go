@@ -90,7 +90,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 							MountPath: buildutil.BuildBlobsMetaCache,
 						},
 					},
-					ImagePullPolicy: v1.PullIfNotPresent,
+					ImagePullPolicy: v1.PullAlways,
 					Resources:       build.Spec.Resources,
 				},
 			},
@@ -138,7 +138,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					MountPath: buildutil.BuildWorkDirMount,
 				},
 			},
-			ImagePullPolicy: v1.PullIfNotPresent,
+			ImagePullPolicy: v1.PullAlways,
 			Resources:       build.Spec.Resources,
 		}
 		if build.Spec.Source.Binary != nil {
@@ -173,7 +173,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					MountPath: buildutil.BuildBlobsMetaCache,
 				},
 			},
-			ImagePullPolicy: v1.PullIfNotPresent,
+			ImagePullPolicy: v1.PullAlways,
 			Resources:       build.Spec.Resources,
 		}
 		setupDockerSecrets(pod, &extractImageContentContainer, build.Spec.Output.PushSecret, strategy.PullSecret, build.Spec.Source.Images)
@@ -193,7 +193,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					MountPath: buildutil.BuildWorkDirMount,
 				},
 			},
-			ImagePullPolicy: v1.PullIfNotPresent,
+			ImagePullPolicy: v1.PullAlways,
 			Resources:       build.Spec.Resources,
 		},
 	)
