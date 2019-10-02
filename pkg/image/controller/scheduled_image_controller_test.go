@@ -130,6 +130,7 @@ func TestSchedulingChecks(t *testing.T) {
 	tests := map[string]struct {
 		is             *imagev1.ImageStream
 		expectedResult bool
+		tagToBump      int
 	}{
 		"none scheduled": {
 			is: &imagev1.ImageStream{
@@ -169,16 +170,30 @@ func TestSchedulingChecks(t *testing.T) {
 				Spec: imagev1.ImageStreamSpec{
 					Tags: []imagev1.TagReference{
 						{
-							Name:         "default",
+							Name:         "default1",
+							From:         &corev1.ObjectReference{Kind: "DockerImage", Name: "abc@sha256:3c87c572822935df60f0f5d3665bd376841a7fcfeb806b5f212de6a00e9a7b25"},
+							Generation:   &one,
+							ImportPolicy: imagev1.TagImportPolicy{Scheduled: true},
+						},
+						{
+							Name:         "default2",
 							From:         &corev1.ObjectReference{Kind: "DockerImage", Name: "abc@sha256:3c87c572822935df60f0f5d3665bd376841a7fcfeb806b5f212de6a00e9a7b25"},
 							Generation:   &one,
 							ImportPolicy: imagev1.TagImportPolicy{Scheduled: true},
 						},
 					},
 				},
-				Status: imagev1.ImageStreamStatus{},
+				Status: imagev1.ImageStreamStatus{
+					Tags: []imagev1.NamedTagEventList{
+						{
+							Tag:   "default1",
+							Items: []imagev1.TagEvent{{Generation: 1}},
+						},
+					},
+				},
 			},
 			expectedResult: true,
+			tagToBump:      1,
 		},
 		"sha ref imported": {
 			is: &imagev1.ImageStream{
@@ -244,10 +259,10 @@ func TestSchedulingChecks(t *testing.T) {
 			t.Fatalf("needsScheduling test for %s failed", name)
 		}
 		resetScheduledTags(test.is)
-		if test.expectedResult && *test.is.Spec.Tags[0].Generation <= one {
+		if test.expectedResult && *test.is.Spec.Tags[test.tagToBump].Generation <= one {
 			t.Fatalf("resetScheduledTags did not bump generation when it should for %s", name)
 		}
-		if !test.expectedResult && *test.is.Spec.Tags[0].Generation > one {
+		if !test.expectedResult && *test.is.Spec.Tags[test.tagToBump].Generation > one {
 			t.Fatalf("resetScheduledTags bumped generation when it should not have for %s", name)
 		}
 	}
