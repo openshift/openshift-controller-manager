@@ -966,7 +966,18 @@ func (bc *BuildController) resolveImageStreamTag(ref *corev1.ObjectReference, li
 		}
 		return nil, fmt.Errorf("the referenced image stream %s/%s could not be found: %v", namespace, name, err)
 	}
-	if newRef, ok := imageutil.ResolveLatestTaggedImage(stream, tag); ok {
+	newRef := ""
+	ok = false
+	if len(stream.Status.DockerImageRepository) > 0 {
+		newRef, ok = imageutil.ResolveLatestTaggedImage(stream, tag)
+	} else {
+		streamCopy := stream.DeepCopy()
+		// in case the api server has not yet picked up the internal registry hostname from the cluster wide
+		// OCM config, we use our copy here to facilitate leveraging pull through with local tag reference policy
+		streamCopy.Status.DockerImageRepository = bc.internalRegistryHostname
+		newRef, ok = imageutil.ResolveLatestTaggedImage(streamCopy, tag)
+	}
+	if ok {
 		// generate informational event if
 		// a) tag has spec
 		// b) tag is local reference
