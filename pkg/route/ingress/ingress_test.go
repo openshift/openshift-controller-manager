@@ -369,7 +369,6 @@ func TestController_sync(t *testing.T) {
 			Spec: v1.ServiceSpec{
 				Ports: []v1.ServicePort{
 					{
-						Name:       "80-tcp",
 						Port:       80,
 						TargetPort: intstr.FromString("http"),
 					},
@@ -653,6 +652,60 @@ func TestController_sync(t *testing.T) {
 						},
 						Port: &routev1.RoutePort{
 							TargetPort: intstr.FromString("http"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "create route - targetPort int",
+			fields: fields{
+				i: &ingressLister{Items: []*extensionsv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: extensionsv1beta1.IngressSpec{
+							Rules: []extensionsv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: extensionsv1beta1.IngressRuleValue{
+										HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
+											Paths: []extensionsv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: extensionsv1beta1.IngressBackend{
+														ServiceName: "service-2",
+														ServicePort: intstr.FromInt(80),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{},
+			},
+			args:        queueKey{namespace: "test", name: "1"},
+			wantExpects: []queueKey{{namespace: "test", name: "1"}},
+			wantCreates: []*routev1.Route{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "<generated>",
+						Namespace:       "test",
+						OwnerReferences: []metav1.OwnerReference{{APIVersion: "extensions/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+					},
+					Spec: routev1.RouteSpec{
+						Host: "test.com",
+						Path: "/",
+						To: routev1.RouteTargetReference{
+							Name: "service-2",
+						},
+						Port: &routev1.RoutePort{
+							TargetPort: intstr.FromInt(80),
 						},
 					},
 				},
