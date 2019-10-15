@@ -204,7 +204,7 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 					{
 						Name:       "http",
 						Port:       80,
-						TargetPort: intstr.FromString("http"),
+						TargetPort: intstr.FromInt(8080),
 					},
 				},
 			},
@@ -219,7 +219,7 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 					{
 						Name:       "80-tcp",
 						Port:       80,
-						TargetPort: intstr.FromString("http"),
+						TargetPort: intstr.FromInt(8080),
 					},
 				},
 			},
@@ -356,7 +356,7 @@ func TestController_sync(t *testing.T) {
 					{
 						Name:       "http",
 						Port:       80,
-						TargetPort: intstr.FromString("http"),
+						TargetPort: intstr.FromInt(8080),
 					},
 				},
 			},
@@ -370,7 +370,7 @@ func TestController_sync(t *testing.T) {
 				Ports: []v1.ServicePort{
 					{
 						Port:       80,
-						TargetPort: intstr.FromString("http"),
+						TargetPort: intstr.FromInt(8080),
 					},
 				},
 			},
