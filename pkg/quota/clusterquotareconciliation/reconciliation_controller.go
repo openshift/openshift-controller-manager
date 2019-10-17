@@ -47,7 +47,7 @@ type ClusterQuotaReconcilationControllerOptions struct {
 	// InformersStarted knows if informers were started.
 	InformersStarted <-chan struct{}
 	// InformerFactory interfaces with informers.
-	InformerFactory resourcequota.InformerFactory
+	InformerFactory controller.InformerFactory
 	// Controls full resync of objects monitored for replenihsment.
 	ReplenishmentResyncPeriod controller.ResyncPeriodFunc
 }
@@ -136,7 +136,7 @@ func (c *ClusterQuotaReconcilationController) Run(workers int, stopCh <-chan str
 	// the controllers that replenish other resources to respond rapidly to state changes
 	go c.quotaMonitor.Run(stopCh)
 
-	if !controller.WaitForCacheSync("cluster resource quota", stopCh, c.informerSyncedFuncs...) {
+	if !cache.WaitForNamedCacheSync("cluster resource quota", stopCh, c.informerSyncedFuncs...) {
 		return
 	}
 
@@ -194,7 +194,7 @@ func (c *ClusterQuotaReconcilationController) Sync(discoveryFunc resourcequota.N
 			utilruntime.HandleError(fmt.Errorf("failed to sync resource monitors: %v", err))
 			return
 		}
-		if c.quotaMonitor != nil && !controller.WaitForCacheSync("cluster resource quota", stopCh, c.quotaMonitor.IsSynced) {
+		if c.quotaMonitor != nil && !cache.WaitForNamedCacheSync("cluster resource quota", stopCh, c.quotaMonitor.IsSynced) {
 			utilruntime.HandleError(fmt.Errorf("timed out waiting for quota monitor sync"))
 		}
 	}, period, stopCh)

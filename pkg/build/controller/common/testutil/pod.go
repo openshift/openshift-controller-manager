@@ -91,6 +91,7 @@ func (p *TestPod) ToAttributes() admission.Attributes {
 		corev1.Resource("pods").WithVersion("version"),
 		"",
 		admission.Create,
+		nil,
 		false,
 		nil)
 }

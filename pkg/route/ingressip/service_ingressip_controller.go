@@ -9,7 +9,7 @@ import (
 
 	"k8s.io/klog"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -112,8 +112,8 @@ func NewIngressIPController(services cache.SharedIndexInformer, kc kclientset.In
 	ic.changeHandler = ic.processChange
 	ic.persistenceHandler = persistService
 
-	ic.ipAllocator = ipallocator.NewAllocatorCIDRRange(ipNet, func(max int, rangeSpec string) allocator.Interface {
-		return allocator.NewAllocationMap(max, rangeSpec)
+	ic.ipAllocator, _ = ipallocator.NewAllocatorCIDRRange(ipNet, func(max int, rangeSpec string) (allocator.Interface, error) {
+		return allocator.NewAllocationMap(max, rangeSpec), nil
 	})
 
 	ic.allocationMap = make(map[string]string)

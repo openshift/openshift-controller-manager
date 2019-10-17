@@ -11,8 +11,8 @@ import (
 
 func TestAllocate(t *testing.T) {
 	ranger, _ := uid.NewRange(0, 9, 2)
-	r := New(ranger, func(max int, rangeSpec string) allocator.Interface {
-		return allocator.NewContiguousAllocationMap(max, rangeSpec)
+	r, _ := New(ranger, func(max int, rangeSpec string) (allocator.Interface, error) {
+		return allocator.NewContiguousAllocationMap(max, rangeSpec), nil
 	})
 	if f := r.Free(); f != 5 {
 		t.Errorf("unexpected free %d", f)

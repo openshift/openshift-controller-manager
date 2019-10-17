@@ -20,7 +20,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	coreapi "k8s.io/kubernetes/pkg/apis/core"
-	"k8s.io/kubernetes/pkg/controller"
 
 	securityv1 "github.com/openshift/api/security/v1"
 	securityv1client "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1"
@@ -85,7 +84,7 @@ func (c *NamespaceSCCAllocationController) Run(stopCh <-chan struct{}) {
 	defer klog.V(1).Infof("Shutting down")
 
 	// Wait for the stores to fill
-	if !controller.WaitForCacheSync(controllerName, stopCh, c.nsListerSynced) {
+	if !cache.WaitForNamedCacheSync(controllerName, stopCh, c.nsListerSynced) {
 		return
 	}
 
@@ -234,7 +233,10 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 		uidRange = &securityv1.RangeAllocation{ObjectMeta: metav1.ObjectMeta{Name: rangeName}}
 	}
 
-	uids := uidallocator.NewInMemory(c.requiredUIDRange)
+	uids, err := uidallocator.NewInMemory(c.requiredUIDRange)
+	if err != nil {
+		return err
+	}
 	nsList, err := c.nsLister.List(labels.Everything())
 	if err != nil {
 		return err
