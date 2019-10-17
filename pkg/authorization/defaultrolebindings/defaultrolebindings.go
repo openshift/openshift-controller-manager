@@ -147,7 +147,7 @@ func (c *DefaultRoleBindingController) Run(workers int, stopCh <-chan struct{}) 
 	klog.Infof("Starting DefaultRoleBindingController")
 	defer klog.Infof("Shutting down DefaultRoleBindingController")
 
-	if !cache.WaitForCacheSync(stopCh, c.roleBindingSynced, c.namespaceSynced) {
+	if !cache.WaitForNamedCacheSync("DefaultRoleBindingController", stopCh, c.roleBindingSynced, c.namespaceSynced) {
 		return
 	}
 
