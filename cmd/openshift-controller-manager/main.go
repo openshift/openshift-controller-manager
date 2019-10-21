@@ -24,7 +24,6 @@ import (
 	"github.com/openshift/api/image"
 	"github.com/openshift/api/oauth"
 	"github.com/openshift/api/project"
-	"github.com/openshift/api/security"
 	"github.com/openshift/api/template"
 	"github.com/openshift/api/user"
 
@@ -41,7 +40,6 @@ func init() {
 	utilruntime.Must(image.Install(legacyscheme.Scheme))
 	utilruntime.Must(oauth.Install(legacyscheme.Scheme))
 	utilruntime.Must(project.Install(legacyscheme.Scheme))
-	utilruntime.Must(security.Install(legacyscheme.Scheme))
 	utilruntime.Must(template.Install(legacyscheme.Scheme))
 	utilruntime.Must(user.Install(legacyscheme.Scheme))
 }
