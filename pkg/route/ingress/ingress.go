@@ -583,16 +583,26 @@ func targetPortForService(namespace string, path *extensionsv1beta1.HTTPIngressP
 		expect := path.Backend.ServicePort.StrVal
 		for _, port := range service.Spec.Ports {
 			if port.Name == expect {
-				targetPort := intstr.FromString(port.Name)
-				return &targetPort
+				if port.TargetPort.Type == intstr.String {
+					targetPort := intstr.FromString(port.Name)
+					return &targetPort
+				}
+				return &port.TargetPort
 			}
 		}
 	} else {
 		for _, port := range service.Spec.Ports {
 			expect := path.Backend.ServicePort.IntVal
 			if port.Port == expect {
-				targetPort := intstr.FromInt(int(port.Port))
-				return &targetPort
+				if port.TargetPort.Type == intstr.String {
+					if &port.Name == nil {
+						// TODO lookup numeric port in endpoint
+						return nil
+					}
+					targetPort := intstr.FromString(port.Name)
+					return &targetPort
+				}
+				return &port.TargetPort
 			}
 		}
 	}
