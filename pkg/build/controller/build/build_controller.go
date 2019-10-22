@@ -1208,25 +1208,65 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		return update, nil
 	}
 
-	klog.V(4).Infof("Pod %s/%s for build %s is about to be created", build.Namespace, buildPod.Name, buildDesc(build))
-	pod, err := bc.podClient.Pods(build.Namespace).Create(buildPod)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		// Log an event if the pod is not created (most likely due to quota denial).
-		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build pod: %v", err)
-		update.setReason(buildv1.StatusReasonCannotCreateBuildPod)
-		update.setMessage("Failed creating build pod.")
-		return update, fmt.Errorf("failed to create build pod: %v", err)
+	existingPod, err := bc.podClient.Pods(build.Namespace).Get(
+		buildPod.Name, metav1.GetOptions{},
+	)
+	if err != nil && !errors.IsNotFound(err) {
+		update.setReason(buildv1.StatusReasonError)
+		update.setMessage("Failed getting build pod.")
+		return update, fmt.Errorf("failed to get build pod: %v", err)
+	} else if errors.IsNotFound(err) {
+		// Before starting a new pod we need to make sure the namespace
+		// doesnt contain pre filled in ConfigMaps as these may contain
+		// invalid content.
+		if tainted, err := bc.taintedNamespace(build); err != nil {
+			update.setReason(buildv1.StatusReasonError)
+			update.setMessage("Failed verifying namespace.")
+			return update, fmt.Errorf("failed verifying namespace: %v", err)
+		} else if tainted {
+			update = transitionToPhase(
+				buildv1.BuildPhaseFailed,
+				buildv1.StatusReasonError,
+				"Tainted environment",
+			)
+			return update, fmt.Errorf("tainted environment")
+		}
 
-	} else if err != nil {
-		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Pod already exists: %s/%s", buildPod.Namespace, buildPod.Name)
-		klog.V(4).Infof("Build pod %s/%s for build %s already exists", build.Namespace, buildPod.Name, buildDesc(build))
+		klog.V(4).Infof(
+			"Pod %s/%s for build %s is about to be created",
+			build.Namespace, buildPod.Name, buildDesc(build),
+		)
 
-		// If the existing pod was not created by this build, switch to the
-		// Error state.
-		existingPod, err := bc.podClient.Pods(build.Namespace).Get(buildPod.Name, metav1.GetOptions{})
+		pod, err := bc.podClient.Pods(build.Namespace).Create(buildPod)
+		if err != nil {
+			bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build pod: %v", err)
+			update.setReason(buildv1.StatusReasonCannotCreateBuildPod)
+			update.setMessage("Failed creating build pod.")
+			return update, fmt.Errorf("failed to create build pod: %v", err)
+		}
+
+		klog.V(4).Infof("Created pod %s/%s for build %s", build.Namespace, buildPod.Name, buildDesc(build))
+
+		// Create the CA ConfigMap to mount certificate authorities to the build pod
+		update, err = bc.createBuildCAConfigMap(build, pod, update, additionalCAs)
+		if err != nil {
+			return update, err
+		}
+
+		// Create the registry config ConfigMap to mount the registry configuration into the build pod
+		update, err = bc.createBuildSystemConfConfigMap(build, pod, update)
 		if err != nil {
 			return nil, err
 		}
+
+		update, err = bc.createBuildGlobalCAConfigMap(build, pod, update)
+		if err != nil {
+			return update, err
+		}
+
+	} else {
+		klog.V(4).Infof("Build pod %s/%s for build %s already exists", build.Namespace, buildPod.Name, buildDesc(build))
+
 		if !strategy.HasOwnerReference(existingPod, build) {
 			klog.V(4).Infof("Did not recognise pod %s/%s as belonging to build %s", build.Namespace, buildPod.Name, buildDesc(build))
 			update = transitionToPhase(buildv1.BuildPhaseError, buildv1.StatusReasonBuildPodExists, "The pod for this build already exists and is older than the build.")
@@ -1268,25 +1308,6 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 				return update, err
 			}
 		}
-
-	} else {
-		klog.V(4).Infof("Created pod %s/%s for build %s", build.Namespace, buildPod.Name, buildDesc(build))
-		// Create the CA ConfigMap to mount certificate authorities to the build pod
-		update, err = bc.createBuildCAConfigMap(build, pod, update, additionalCAs)
-		if err != nil {
-			return update, err
-		}
-		// Create the registry config ConfigMap to mount the registry configuration into the build pod
-		update, err = bc.createBuildSystemConfConfigMap(build, pod, update)
-		if err != nil {
-			return nil, err
-		}
-
-		update, err = bc.createBuildGlobalCAConfigMap(build, pod, update)
-		if err != nil {
-			return update, err
-		}
-
 	}
 
 	update = transitionToPhase(buildv1.BuildPhasePending, "", "")
@@ -1868,6 +1889,39 @@ func (bc *BuildController) findOwnedConfigMap(owner *corev1.Pod, namespace strin
 	}
 	if hasRef := hasBuildPodOwnerRef(owner, cm); !hasRef {
 		return true, fmt.Errorf("configMap %s/%s is not owned by build pod %s/%s", cm.Namespace, cm.Name, owner.Namespace, owner.Name)
+	}
+	return true, nil
+}
+
+// taintedNamespace looks in the build namespace for pre existing ConfigMaps.
+//
+// These ConfigMaps should not exist if we are starting a new build. They should
+// be created only during the build boostrap process, not prior to it.
+func (bc *BuildController) taintedNamespace(build *buildv1.Build) (bool, error) {
+	for _, name := range []string{
+		buildutil.GetBuildCAConfigMapName(build),
+		buildutil.GetBuildGlobalCAConfigMapName(build),
+		buildutil.GetBuildSystemConfigMapName(build),
+	} {
+		if hasCM, err := bc.findConfigMap(
+			build.Namespace, name,
+		); err != nil {
+			return false, err
+		} else if hasCM {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// findConfigMap finds the ConfigMap with the given name and namespace.
+func (bc *BuildController) findConfigMap(namespace string, name string) (bool, error) {
+	_, err := bc.configMapClient.ConfigMaps(namespace).Get(name, metav1.GetOptions{})
+	if err != nil && errors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
 	}
 	return true, nil
 }
