@@ -74,8 +74,8 @@ func RunImageTriggerController(ctx *ControllerContext) (bool, error) {
 	})
 	sources = append(sources, imagetriggercontroller.TriggerSource{
 		Resource:  schema.GroupResource{Group: "apps", Resource: "statefulsets"},
-		Informer:  ctx.KubernetesInformers.Apps().V1beta1().StatefulSets().Informer(),
-		Store:     ctx.KubernetesInformers.Apps().V1beta1().StatefulSets().Informer().GetIndexer(),
+		Informer:  ctx.KubernetesInformers.Apps().V1().StatefulSets().Informer(),
+		Store:     ctx.KubernetesInformers.Apps().V1().StatefulSets().Informer().GetIndexer(),
 		TriggerFn: triggerannotations.NewAnnotationTriggerIndexer,
 		Reactor:   &triggerutil.AnnotationReactor{Updater: updater},
 	})
