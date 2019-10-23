@@ -189,7 +189,7 @@ github.com/opencontainers/image-spec/specs-go/v1
 github.com/opencontainers/image-spec/specs-go
 # github.com/opencontainers/runc v1.0.0-rc2.0.20190611121236-6cc515888830
 github.com/opencontainers/runc/libcontainer/user
-# github.com/openshift/api v0.0.0-20190904155310-a25bb2adc83e
+# github.com/openshift/api v3.9.1-0.20191023182535-bace76a80722+incompatible
 github.com/openshift/api/apps
 github.com/openshift/api/authorization
 github.com/openshift/api/build
@@ -231,12 +231,10 @@ github.com/openshift/api/osin
 github.com/openshift/api/quota
 github.com/openshift/api/route
 github.com/openshift/api/servicecertsigner
-github.com/openshift/api/webconsole
 github.com/openshift/api/kubecontrolplane/v1
 github.com/openshift/api/network/v1
 github.com/openshift/api/servicecertsigner/v1alpha1
-github.com/openshift/api/webconsole/v1
-# github.com/openshift/client-go v0.0.0-20190813201236-5a5508328169
+# github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
 github.com/openshift/client-go/apps/clientset/versioned
 github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1
 github.com/openshift/client-go/apps/informers/externalversions/apps/v1
@@ -326,7 +324,7 @@ github.com/openshift/client-go/quota/clientset/versioned/typed/quota/v1/fake
 github.com/openshift/client-go/route/clientset/versioned/typed/route/v1/fake
 github.com/openshift/client-go/template/clientset/versioned/typed/template/v1/fake
 github.com/openshift/client-go/operator/listers/operator/v1
-# github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
+# github.com/openshift/library-go v0.0.0-20191023165747-08c2fd1b4525
 github.com/openshift/library-go/pkg/serviceability
 github.com/openshift/library-go/alpha-build-machinery
 github.com/openshift/library-go/pkg/apps/appsserialization

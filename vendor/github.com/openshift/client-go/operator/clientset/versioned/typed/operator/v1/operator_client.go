@@ -5,7 +5,6 @@ package v1
 import (
 	v1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/client-go/operator/clientset/versioned/scheme"
-	serializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	rest "k8s.io/client-go/rest"
 )
 
@@ -19,6 +18,7 @@ type OperatorV1Interface interface {
 	KubeAPIServersGetter
 	KubeControllerManagersGetter
 	KubeSchedulersGetter
+	KubeStorageVersionMigratorsGetter
 	NetworksGetter
 	OpenShiftAPIServersGetter
 	OpenShiftControllerManagersGetter
@@ -62,6 +62,10 @@ func (c *OperatorV1Client) KubeControllerManagers() KubeControllerManagerInterfa
 
 func (c *OperatorV1Client) KubeSchedulers() KubeSchedulerInterface {
 	return newKubeSchedulers(c)
+}
+
+func (c *OperatorV1Client) KubeStorageVersionMigrators() KubeStorageVersionMigratorInterface {
+	return newKubeStorageVersionMigrators(c)
 }
 
 func (c *OperatorV1Client) Networks() NetworkInterface {
@@ -120,7 +124,7 @@ func setConfigDefaults(config *rest.Config) error {
 	gv := v1.SchemeGroupVersion
 	config.GroupVersion = &gv
 	config.APIPath = "/apis"
-	config.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
+	config.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
 
 	if config.UserAgent == "" {
 		config.UserAgent = rest.DefaultKubernetesUserAgent()
