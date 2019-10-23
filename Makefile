@@ -4,7 +4,6 @@ all: build
 # Include the library makefile
 include $(addprefix ./vendor/github.com/openshift/library-go/alpha-build-machinery/make/, \
 	golang.mk \
-	targets/openshift/deps.mk \
 	targets/openshift/images.mk \
 )
 
@@ -21,3 +20,7 @@ clean:
 .PHONY: clean
 
 GO_TEST_PACKAGES :=./pkg/... ./cmd/...
+
+verify-deps:
+	echo "TODO: replace with test compatible with go modules"
+.PHONY: verify-deps
