@@ -1,6 +1,0 @@
-apiVersion: machineconfiguration.openshift.io/v1
-kind: ControllerConfig
-metadata:
-  name: machine-config-controller
-spec:
-{{toYAML .ControllerConfig | toString | indent 2}}
