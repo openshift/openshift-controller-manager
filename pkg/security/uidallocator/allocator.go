@@ -34,17 +34,21 @@ type Allocator struct {
 var _ Interface = &Allocator{}
 
 // New creates a Allocator over a UID range, calling factory to construct the backing store.
-func New(r *uid.Range, factory allocator.AllocatorFactory) *Allocator {
+func New(r *uid.Range, factory allocator.AllocatorFactory) (*Allocator, error) {
+	alloc, err := factory(int(r.Size()), r.String())
+	if err != nil {
+		return nil, err
+	}
 	return &Allocator{
 		r:     r,
-		alloc: factory(int(r.Size()), r.String()),
-	}
+		alloc: alloc,
+	}, nil
 }
 
 // NewInMemory creates an in-memory Allocator
-func NewInMemory(r *uid.Range) *Allocator {
-	factory := func(max int, rangeSpec string) allocator.Interface {
-		return allocator.NewContiguousAllocationMap(max, rangeSpec)
+func NewInMemory(r *uid.Range) (*Allocator, error) {
+	factory := func(max int, rangeSpec string) (allocator.Interface, error) {
+		return allocator.NewContiguousAllocationMap(max, rangeSpec), nil
 	}
 	return New(r, factory)
 }
