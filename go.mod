@@ -27,9 +27,9 @@ require (
 	github.com/mtrmac/gpgme v0.0.0-20170102180018-b2432428689c // indirect
 	github.com/onsi/ginkgo v1.10.2 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
-	github.com/openshift/api v0.0.0-20190904155310-a25bb2adc83e
-	github.com/openshift/client-go v0.0.0-20190813201236-5a5508328169
-	github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
+	github.com/openshift/api v3.9.1-0.20191023182535-bace76a80722+incompatible
+	github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
+	github.com/openshift/library-go v0.0.0-20191023165747-08c2fd1b4525
 	github.com/openshift/machine-config-operator v0.0.0-20190904184504-49d703c2c17a
 	github.com/pkg/profile v1.3.0 // indirect
 	github.com/prometheus/client_golang v0.9.2
