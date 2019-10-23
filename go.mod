@@ -13,17 +13,15 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/docker-credential-helpers v0.0.0-20190720063934-f78081d1f7fe // indirect
 	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
+	github.com/docker/go-units v0.4.0 // indirect
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
-	github.com/elazarl/goproxy v0.0.0-20191011121108-aa519ddbe484 // indirect
 	github.com/getsentry/raven-go v0.0.0-20171206001108-32a13797442c // indirect
-	github.com/go-openapi/strfmt v0.19.3 // indirect
-	github.com/go-openapi/validate v0.19.4 // indirect
+	github.com/go-openapi/spec v0.19.3 // indirect
 	github.com/google/btree v0.0.0-20190326150332-20236160a414 // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/gofuzz v1.0.0
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
-	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/mtrmac/gpgme v0.0.0-20170102180018-b2432428689c // indirect
@@ -44,12 +42,12 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.uber.org/zap v1.11.0 // indirect
+	golang.org/x/crypto v0.0.0-20190617133340-57b3e21c3d56 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.0.0
 	k8s.io/apiserver v0.0.0
 	k8s.io/client-go v0.0.0
 	k8s.io/component-base v0.0.0
-	k8s.io/cri-api v0.0.0
 	k8s.io/klog v0.4.0
 	k8s.io/kubernetes v1.16.2
 	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
