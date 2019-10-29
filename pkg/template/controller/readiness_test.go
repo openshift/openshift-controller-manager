@@ -8,7 +8,6 @@ import (
 	kappsv1beta1 "k8s.io/api/apps/v1beta1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	kextensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -142,43 +141,6 @@ func TestCheckReadiness(t *testing.T) {
 					Conditions: []kappsv1.DeploymentCondition{
 						{
 							Type:   kappsv1.DeploymentProgressing,
-							Status: corev1.ConditionFalse,
-						},
-					},
-				},
-			},
-			expectedFailed: true,
-		},
-		{
-			groupVersionKind: groupVersionKind(kextensionsv1beta1.SchemeGroupVersion, "Deployment"),
-			object:           &kextensionsv1beta1.Deployment{},
-		},
-		{
-			groupVersionKind: groupVersionKind(kextensionsv1beta1.SchemeGroupVersion, "Deployment"),
-			object: &kextensionsv1beta1.Deployment{
-				Status: kextensionsv1beta1.DeploymentStatus{
-					Conditions: []kextensionsv1beta1.DeploymentCondition{
-						{
-							Type:   kextensionsv1beta1.DeploymentProgressing,
-							Status: corev1.ConditionTrue,
-							Reason: deploymentutil.NewRSAvailableReason,
-						},
-						{
-							Type:   kextensionsv1beta1.DeploymentAvailable,
-							Status: corev1.ConditionTrue,
-						},
-					},
-				},
-			},
-			expectedReady: true,
-		},
-		{
-			groupVersionKind: groupVersionKind(kextensionsv1beta1.SchemeGroupVersion, "Deployment"),
-			object: &kextensionsv1beta1.Deployment{
-				Status: kextensionsv1beta1.DeploymentStatus{
-					Conditions: []kextensionsv1beta1.DeploymentCondition{
-						{
-							Type:   kextensionsv1beta1.DeploymentProgressing,
 							Status: corev1.ConditionFalse,
 						},
 					},

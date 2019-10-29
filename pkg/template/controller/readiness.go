@@ -9,7 +9,6 @@ import (
 	kappsv1beta2 "k8s.io/api/apps/v1beta2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	kextensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +30,6 @@ func init() {
 	kappsv1.AddToScheme(readinessScheme)
 	kappsv1beta1.AddToScheme(readinessScheme)
 	kappsv1beta2.AddToScheme(readinessScheme)
-	kextensionsv1beta1.AddToScheme(readinessScheme)
 	batchv1.AddToScheme(readinessScheme)
 	corev1.AddToScheme(readinessScheme)
 	appsv1.Install(readinessScheme)
@@ -124,16 +122,6 @@ func checkDeploymentReadiness(obj runtime.Object) (bool, bool, error) {
 			case kappsv1beta2.DeploymentProgressing:
 				progressing = newDeploymentCondition(condition.Status, condition.Reason)
 			case kappsv1beta2.DeploymentAvailable:
-				available = newDeploymentCondition(condition.Status, condition.Reason)
-			}
-		}
-	case *kextensionsv1beta1.Deployment:
-		isSynced = d.Status.ObservedGeneration == d.Generation
-		for _, condition := range d.Status.Conditions {
-			switch condition.Type {
-			case kextensionsv1beta1.DeploymentProgressing:
-				progressing = newDeploymentCondition(condition.Status, condition.Reason)
-			case kextensionsv1beta1.DeploymentAvailable:
 				available = newDeploymentCondition(condition.Status, condition.Reason)
 			}
 		}
@@ -260,14 +248,13 @@ var readinessCheckers = map[schema.GroupVersionKind]func(runtime.Object) (bool, 
 	{Group: "", Version: "v1", Kind: "Route"}:            checkRouteReadiness,
 
 	// Kubernetes kinds:
-	groupVersionKind(kappsv1.SchemeGroupVersion, "Deployment"):            checkDeploymentReadiness,
-	groupVersionKind(kappsv1beta1.SchemeGroupVersion, "Deployment"):       checkDeploymentReadiness,
-	groupVersionKind(kappsv1beta2.SchemeGroupVersion, "Deployment"):       checkDeploymentReadiness,
-	groupVersionKind(kextensionsv1beta1.SchemeGroupVersion, "Deployment"): checkDeploymentReadiness,
-	groupVersionKind(kappsv1.SchemeGroupVersion, "StatefulSet"):           checkStatefulSetReadiness,
-	groupVersionKind(kappsv1beta1.SchemeGroupVersion, "StatefulSet"):      checkStatefulSetReadiness,
-	groupVersionKind(kappsv1beta2.SchemeGroupVersion, "StatefulSet"):      checkStatefulSetReadiness,
-	groupVersionKind(batchv1.SchemeGroupVersion, "Job"):                   checkJobReadiness,
+	groupVersionKind(kappsv1.SchemeGroupVersion, "Deployment"):       checkDeploymentReadiness,
+	groupVersionKind(kappsv1beta1.SchemeGroupVersion, "Deployment"):  checkDeploymentReadiness,
+	groupVersionKind(kappsv1beta2.SchemeGroupVersion, "Deployment"):  checkDeploymentReadiness,
+	groupVersionKind(kappsv1.SchemeGroupVersion, "StatefulSet"):      checkStatefulSetReadiness,
+	groupVersionKind(kappsv1beta1.SchemeGroupVersion, "StatefulSet"): checkStatefulSetReadiness,
+	groupVersionKind(kappsv1beta2.SchemeGroupVersion, "StatefulSet"): checkStatefulSetReadiness,
+	groupVersionKind(batchv1.SchemeGroupVersion, "Job"):              checkJobReadiness,
 }
 
 // CanCheckReadiness indicates whether a readiness check exists for a GK.
