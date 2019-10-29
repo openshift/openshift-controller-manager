@@ -41,21 +41,21 @@ github.com/containers/image/pkg/keyctl
 github.com/containers/storage/pkg/homedir
 # github.com/coreos/etcd v3.3.15+incompatible
 github.com/coreos/etcd/clientv3
-github.com/coreos/etcd/pkg/transport
+github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes
+github.com/coreos/etcd/mvcc/mvccpb
 github.com/coreos/etcd/auth/authpb
 github.com/coreos/etcd/clientv3/balancer
 github.com/coreos/etcd/clientv3/balancer/picker
 github.com/coreos/etcd/clientv3/balancer/resolver/endpoint
 github.com/coreos/etcd/clientv3/credentials
-github.com/coreos/etcd/etcdserver/api/v3rpc/rpctypes
 github.com/coreos/etcd/etcdserver/etcdserverpb
-github.com/coreos/etcd/mvcc/mvccpb
 github.com/coreos/etcd/pkg/logutil
 github.com/coreos/etcd/pkg/types
-github.com/coreos/etcd/pkg/tlsutil
+github.com/coreos/etcd/pkg/transport
 github.com/coreos/etcd/clientv3/balancer/connectivity
 github.com/coreos/etcd/pkg/systemd
 github.com/coreos/etcd/raft
+github.com/coreos/etcd/pkg/tlsutil
 github.com/coreos/etcd/raft/raftpb
 # github.com/coreos/go-systemd v0.0.0-20180511133405-39ca1b05acc7
 github.com/coreos/go-systemd/daemon
@@ -129,9 +129,9 @@ github.com/golang/groupcache/lru
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes
+github.com/golang/protobuf/protoc-gen-go/descriptor
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
-github.com/golang/protobuf/protoc-gen-go/descriptor
 # github.com/google/btree v0.0.0-20190326150332-20236160a414
 github.com/google/btree
 # github.com/google/go-cmp v0.3.1
@@ -189,7 +189,7 @@ github.com/opencontainers/image-spec/specs-go/v1
 github.com/opencontainers/image-spec/specs-go
 # github.com/opencontainers/runc v1.0.0-rc2.0.20190611121236-6cc515888830
 github.com/opencontainers/runc/libcontainer/user
-# github.com/openshift/api v0.0.0-20190904155310-a25bb2adc83e
+# github.com/openshift/api v3.9.1-0.20191028134408-abf28f93703b+incompatible
 github.com/openshift/api/apps
 github.com/openshift/api/authorization
 github.com/openshift/api/build
@@ -230,13 +230,11 @@ github.com/openshift/api/quota
 github.com/openshift/api/route
 github.com/openshift/api/security
 github.com/openshift/api/servicecertsigner
-github.com/openshift/api/webconsole
 github.com/openshift/api/kubecontrolplane/v1
 github.com/openshift/api/network/v1
 github.com/openshift/api/quota/v1
 github.com/openshift/api/servicecertsigner/v1alpha1
-github.com/openshift/api/webconsole/v1
-# github.com/openshift/client-go v0.0.0-20190813201236-5a5508328169
+# github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
 github.com/openshift/client-go/apps/clientset/versioned
 github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1
 github.com/openshift/client-go/apps/informers/externalversions/apps/v1
@@ -315,7 +313,7 @@ github.com/openshift/client-go/operator/informers/externalversions/operator/v1
 github.com/openshift/client-go/route/clientset/versioned/typed/route/v1/fake
 github.com/openshift/client-go/template/clientset/versioned/typed/template/v1/fake
 github.com/openshift/client-go/operator/listers/operator/v1
-# github.com/openshift/library-go v0.0.0-20190904120025-7d4acc018c61
+# github.com/openshift/library-go v0.0.0-20191029093732-d368763acf52
 github.com/openshift/library-go/pkg/serviceability
 github.com/openshift/library-go/alpha-build-machinery
 github.com/openshift/library-go/pkg/apps/appsserialization
@@ -408,8 +406,8 @@ golang.org/x/net/idna
 golang.org/x/net/websocket
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/proxy
-golang.org/x/net/context
 golang.org/x/net/trace
+golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/internal/timeseries
 # golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
@@ -441,19 +439,22 @@ google.golang.org/appengine/internal/datastore
 google.golang.org/appengine/internal/log
 google.golang.org/appengine/internal/remote_api
 # google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
-google.golang.org/genproto/googleapis/rpc/status
 google.golang.org/genproto/googleapis/api/annotations
+google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.23.0
 google.golang.org/grpc
-google.golang.org/grpc/status
 google.golang.org/grpc/codes
 google.golang.org/grpc/credentials
 google.golang.org/grpc/grpclog
 google.golang.org/grpc/keepalive
 google.golang.org/grpc/metadata
+google.golang.org/grpc/status
 google.golang.org/grpc/balancer
-google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/connectivity
+google.golang.org/grpc/resolver
+google.golang.org/grpc/resolver/dns
+google.golang.org/grpc/resolver/passthrough
+google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/internal
@@ -467,9 +468,6 @@ google.golang.org/grpc/internal/grpcsync
 google.golang.org/grpc/internal/transport
 google.golang.org/grpc/naming
 google.golang.org/grpc/peer
-google.golang.org/grpc/resolver
-google.golang.org/grpc/resolver/dns
-google.golang.org/grpc/resolver/passthrough
 google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/tap
@@ -609,6 +607,7 @@ k8s.io/apiserver/pkg/server/mux
 k8s.io/apiserver/pkg/server/routes
 k8s.io/apiserver/plugin/pkg/authenticator/token/webhook
 k8s.io/apiserver/plugin/pkg/authorizer/webhook
+k8s.io/apiserver/pkg/storage/etcd3
 k8s.io/apiserver/pkg/authentication/user
 k8s.io/apiserver/pkg/admission/plugin/namespace/lifecycle
 k8s.io/apiserver/pkg/admission/plugin/webhook/mutating
@@ -636,7 +635,10 @@ k8s.io/apiserver/pkg/server/httplog
 k8s.io/apiserver/pkg/endpoints/metrics
 k8s.io/apiserver/pkg/storage/etcd3/metrics
 k8s.io/apiserver/pkg/util/webhook
+k8s.io/apiserver/pkg/features
 k8s.io/apiserver/pkg/storage
+k8s.io/apiserver/pkg/storage/value
+k8s.io/apiserver/pkg/util/feature
 k8s.io/apiserver/pkg/storage/names
 k8s.io/apiserver/pkg/admission/initializer
 k8s.io/apiserver/pkg/admission/configuration
@@ -655,20 +657,16 @@ k8s.io/apiserver/pkg/authentication/token/tokenfile
 k8s.io/apiserver/pkg/endpoints/handlers
 k8s.io/apiserver/pkg/endpoints/handlers/fieldmanager
 k8s.io/apiserver/pkg/endpoints/handlers/negotiation
-k8s.io/apiserver/pkg/features
-k8s.io/apiserver/pkg/util/feature
 k8s.io/apiserver/pkg/util/flushwriter
 k8s.io/apiserver/pkg/util/wsstream
 k8s.io/apiserver/pkg/storage/storagebackend
 k8s.io/apiserver/pkg/storage/storagebackend/factory
-k8s.io/apiserver/pkg/storage/value
 k8s.io/apiserver/pkg/admission/plugin/webhook/config
 k8s.io/apiserver/pkg/admission/plugin/webhook/namespace
 k8s.io/apiserver/pkg/admission/plugin/webhook/object
 k8s.io/apiserver/pkg/admission/plugin/webhook/rules
 k8s.io/apiserver/pkg/util/dryrun
 k8s.io/apiserver/pkg/endpoints/handlers/fieldmanager/internal
-k8s.io/apiserver/pkg/storage/etcd3
 k8s.io/apiserver/pkg/admission/plugin/webhook/config/apis/webhookadmission
 k8s.io/apiserver/pkg/admission/plugin/webhook/config/apis/webhookadmission/v1alpha1
 # k8s.io/cli-runtime v0.0.0 => k8s.io/cli-runtime v0.0.0-20191016114015-74ad18325ed5
