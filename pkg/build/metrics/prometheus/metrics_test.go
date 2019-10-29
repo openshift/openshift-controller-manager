@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/component-base/metrics/legacyregistry"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	buildv1lister "github.com/openshift/client-go/build/listers/build/v1"
@@ -57,7 +57,6 @@ func TestMetrics(t *testing.T) {
 		"openshift_build_active_time_seconds{name=\"testname2\",namespace=\"testnamespace\",phase=\"Pending\",reason=\"\",strategy=\"\"} 123",
 		"openshift_build_active_time_seconds{name=\"testname3\",namespace=\"testnamespace\",phase=\"Running\",reason=\"\",strategy=\"\"} 123",
 	}
-	registry := prometheus.NewRegistry()
 
 	buildLister := &fakeLister{
 		{
@@ -129,9 +128,9 @@ func TestMetrics(t *testing.T) {
 		lister: buildLister,
 	}
 
-	registry.MustRegister(&bc)
+	legacyregistry.MustRegister(&bc)
 
-	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{ErrorHandling: promhttp.PanicOnError})
+	h := promhttp.HandlerFor(legacyregistry.DefaultGatherer, promhttp.HandlerOpts{ErrorHandling: promhttp.PanicOnError})
 	rw := &fakeResponseWriter{header: http.Header{}}
 	h.ServeHTTP(rw, &http.Request{})
 

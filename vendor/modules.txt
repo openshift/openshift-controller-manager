@@ -908,8 +908,8 @@ k8s.io/client-go/third_party/forked/golang/template
 # k8s.io/component-base v0.0.0 => k8s.io/component-base v0.0.0-20191016111319-039242c015a9
 k8s.io/component-base/cli/flag
 k8s.io/component-base/logs
-k8s.io/component-base/metrics
 k8s.io/component-base/metrics/legacyregistry
+k8s.io/component-base/metrics
 k8s.io/component-base/config
 k8s.io/component-base/version
 k8s.io/component-base/featuregate
