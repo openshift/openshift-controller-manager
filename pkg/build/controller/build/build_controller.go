@@ -472,6 +472,8 @@ func (bc *BuildController) Run(workers int, stopCh <-chan struct{}) {
 	}
 
 	klog.Infof("Starting build controller")
+	// Report image registry host to ensure local imagestreams resolve properly
+	klog.Infof("OpenShift image registry hostname: %s", bc.internalRegistryHostname)
 
 	// Only need one worker to manage config
 	go wait.Until(bc.controllerConfigWorker, time.Second, stopCh)
