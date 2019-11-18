@@ -18,7 +18,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/controller"
 )
 
 var defaultRoleBindingNames = GetBootstrapServiceAccountProjectRoleBindingNames()
@@ -148,7 +147,7 @@ func (c *DefaultRoleBindingController) Run(workers int, stopCh <-chan struct{}) 
 	klog.Infof("Starting DefaultRoleBindingController")
 	defer klog.Infof("Shutting down DefaultRoleBindingController")
 
-	if !controller.WaitForCacheSync("DefaultRoleBindingController", stopCh, c.roleBindingSynced, c.namespaceSynced) {
+	if !cache.WaitForNamedCacheSync("DefaultRoleBindingController", stopCh, c.roleBindingSynced, c.namespaceSynced) {
 		return
 	}
 

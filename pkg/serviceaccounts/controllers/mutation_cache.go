@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apiserver/pkg/storage/etcd"
+	etcd "k8s.io/apiserver/pkg/storage/etcd3"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/controller"
 )

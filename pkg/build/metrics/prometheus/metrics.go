@@ -1,12 +1,15 @@
 package prometheus
 
 import (
-	"k8s.io/klog"
+	"sync"
 
+	"github.com/blang/semver"
 	"github.com/prometheus/client_golang/prometheus"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kselector "k8s.io/apimachinery/pkg/labels"
+	"k8s.io/component-base/metrics/legacyregistry"
+	"k8s.io/klog"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	buildlister "github.com/openshift/client-go/build/listers/build/v1"
@@ -35,7 +38,6 @@ var (
 		nil,
 	)
 	bc             = buildCollector{}
-	registered     = false
 	cancelledPhase = string(buildv1.BuildPhaseCancelled)
 	completePhase  = string(buildv1.BuildPhaseComplete)
 	failedPhase    = string(buildv1.BuildPhaseFailed)
@@ -46,21 +48,36 @@ var (
 )
 
 type buildCollector struct {
-	lister buildlister.BuildLister
+	lister     buildlister.BuildLister
+	isCreated  bool
+	createOnce sync.Once
+	createLock sync.RWMutex
 }
 
-// InitializeMetricsCollector calls into prometheus to register the buildCollector struct as a Collector in prometheus
-// for the terminal and active build metrics; note, in comparing with how kube-state-metrics integrates with prometheus,
-// kube-state-metrics leverages the prometheus.Registerer function, but it does not exist in the version of prometheus
-// vendored into origin as of this writing
+// IntializeMetricsCollector calls into prometheus to register the buildCollector struct as a
+// Collector in prometheus for the terminal and active build metrics.
 func IntializeMetricsCollector(buildLister buildlister.BuildLister) {
-	bc.lister = buildLister
-	// unit tests unearthed multiple (sequential, not in parallel) registrations with prometheus via multiple calls to new build controller
-	if !registered {
-		prometheus.MustRegister(&bc)
-		registered = true
+	if !bc.IsCreated() {
+		bc.lister = buildLister
+		legacyregistry.MustRegister(&bc)
 	}
 	klog.V(4).Info("build metrics registered with prometheus")
+}
+
+// Create satisfies the k8s metrics.Registerable interface. It is called when the metric is
+// registered with Prometheus via k8s metrics.
+func (bc *buildCollector) Create(v *semver.Version) bool {
+	bc.createOnce.Do(func() {
+		bc.createLock.Lock()
+		defer bc.createLock.Unlock()
+		bc.isCreated = true
+	})
+	return bc.IsCreated()
+}
+
+// IsCreated indicates if the build metrics were created and registered with Prometheus.
+func (bc *buildCollector) IsCreated() bool {
+	return bc.isCreated
 }
 
 // Describe implements the prometheus.Collector interface.
