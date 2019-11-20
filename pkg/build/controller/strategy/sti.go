@@ -192,6 +192,9 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 
 	setOwnerReference(pod, build)
 	setupDockerSecrets(pod, &pod.Spec.Containers[0], build.Spec.Output.PushSecret, strategy.PullSecret, build.Spec.Source.Images)
+	if strategy.Incremental != nil && *strategy.Incremental {
+		mountSecretVolume(pod, &pod.Spec.Containers[0], build.Spec.Output.PushSecret.Name, DockerPullSecretMountPath, "pull-incremental")
+	}
 	// For any secrets the user wants to reference from their Assemble script or Dockerfile, mount those
 	// secrets into the main container.  The main container includes logic to copy them from the mounted
 	// location into the working directory.
