@@ -545,6 +545,9 @@ func (bc *BuildController) buildConfigWork() bool {
 		return false
 	}
 
+	if len(strings.TrimSpace(namespace)) == 0 || len(strings.TrimSpace(name)) == 0 {
+		return false
+	}
 	err = bc.handleBuildConfig(namespace, name)
 	bc.handleBuildConfigError(err, key)
 	return false
@@ -1516,10 +1519,13 @@ func (bc *BuildController) updateBuild(build *buildv1.Build, update *buildUpdate
 
 func (bc *BuildController) handleBuildCompletion(build *buildv1.Build) {
 	bcName := sharedbuildutil.ConfigNameForBuild(build)
-	bc.enqueueBuildConfig(build.Namespace, bcName)
-	if err := common.HandleBuildPruning(bcName, build.Namespace, bc.buildLister, bc.buildConfigLister, bc.buildDeleter); err != nil {
-		utilruntime.HandleError(fmt.Errorf("failed to prune builds for %s/%s: %v", build.Namespace, build.Name, err))
+	if len(strings.TrimSpace(bcName)) != 0 {
+		bc.enqueueBuildConfig(build.Namespace, bcName)
+		if err := common.HandleBuildPruning(bcName, build.Namespace, bc.buildLister, bc.buildConfigLister, bc.buildDeleter); err != nil {
+			utilruntime.HandleError(fmt.Errorf("failed to prune builds for %s/%s: %v", build.Namespace, build.Name, err))
+		}
 	}
+
 }
 
 func (bc *BuildController) enqueueBuildConfig(ns, name string) {
@@ -1680,7 +1686,9 @@ func (bc *BuildController) buildDeleted(obj interface{}) {
 	// If the build was not in a complete state, poke the buildconfig to run the next build
 	if !buildutil.IsBuildComplete(build) {
 		bcName := sharedbuildutil.ConfigNameForBuild(build)
-		bc.enqueueBuildConfig(build.Namespace, bcName)
+		if len(strings.TrimSpace(bcName)) != 0 {
+			bc.enqueueBuildConfig(build.Namespace, bcName)
+		}
 	}
 }
 

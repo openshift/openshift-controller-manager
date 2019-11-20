@@ -48,6 +48,7 @@ import (
 	operatorv1alphaclient "github.com/openshift/client-go/operator/clientset/versioned"
 	fakeoperatorv1alphaclient "github.com/openshift/client-go/operator/clientset/versioned/fake"
 	operatorv1alpha1informer "github.com/openshift/client-go/operator/informers/externalversions"
+	sharedbuildutil "github.com/openshift/library-go/pkg/build/buildutil"
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildscheme"
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 	builddefaults "github.com/openshift/openshift-controller-manager/pkg/build/controller/build/defaults"
@@ -176,6 +177,7 @@ func TestHandleBuild(t *testing.T) {
 		errorOnPodCreate       bool
 		errorOnBuildUpdate     bool
 		errorOnConfigMapCreate bool
+		noBC                   bool
 
 		// Expected Result
 		expectUpdate           *buildUpdate
@@ -310,6 +312,18 @@ func TestHandleBuild(t *testing.T) {
 				update,
 		},
 		{
+			name:  "running -> complete no BC",
+			build: build(buildv1.BuildPhaseRunning),
+			pod:   pod(corev1.PodSucceeded),
+			noBC:  true,
+			expectUpdate: newUpdate().
+				phase(buildv1.BuildPhaseComplete).
+				reason("").
+				message("").
+				startTime(now).
+				completionTime(now).
+				update,
+		}, {
 			name:         "running -> running",
 			build:        build(buildv1.BuildPhaseRunning),
 			pod:          pod(corev1.PodRunning),
@@ -418,6 +432,11 @@ func TestHandleBuild(t *testing.T) {
 			}
 			bc.runPolicies = []policy.RunPolicy{runPolicy}
 
+			if tc.noBC {
+				delete(tc.build.Annotations, buildv1.BuildConfigAnnotation)
+				delete(tc.build.Labels, buildv1.BuildConfigLabel)
+			}
+
 			err := bc.handleBuild(tc.build)
 			if err != nil {
 				if !tc.expectError {
@@ -463,6 +482,13 @@ func TestHandleBuild(t *testing.T) {
 						t.Errorf("%s: did not get expected update on build. \nUpdate: %v\nPatch: %s\n", tc.name, tc.expectUpdate, appliedPatch)
 					}
 				*/
+			}
+			completedBuild := tc.build.Status.Phase == buildv1.BuildPhaseComplete && !tc.build.Status.Cancelled
+			if !tc.noBC && !bc.enqueueBCCalled && completedBuild {
+				t.Errorf("%s: enqueueBuildConfig should have been called with bc %s", tc.name, sharedbuildutil.ConfigNameForBuild(tc.build))
+			}
+			if tc.noBC && bc.enqueueBCCalled && completedBuild {
+				t.Errorf("%s: enqueueBuildConfig should not have been called with bc %s", tc.name, sharedbuildutil.ConfigNameForBuild(tc.build))
 			}
 		}()
 	}
@@ -1850,6 +1876,7 @@ type fakeBuildController struct {
 	imageInformers        imagev1informer.SharedInformerFactory
 	configInformers       configv1informer.SharedInformerFactory
 	stopChan              chan struct{}
+	enqueueBCCalled       bool
 }
 
 func (c *fakeBuildController) start() {
@@ -1874,6 +1901,10 @@ func (c *fakeBuildController) start() {
 
 func (c *fakeBuildController) stop() {
 	close(c.stopChan)
+}
+
+func (c *fakeBuildController) enqueueBuildConfig(ns string, name string) {
+	c.enqueueBCCalled = true
 }
 
 func newFakeBuildController(buildClient buildv1client.Interface, imageClient imagev1client.Interface, kubeExternalClient kubernetes.Interface, kubeInternalClient kubernetes.Interface, configClient configv1client.Interface) *fakeBuildController {
