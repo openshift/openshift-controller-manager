@@ -35,6 +35,12 @@ func NewDockercfgTokenDeletedController(secrets informers.SecretInformer, cl kcl
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {
+				// case cache.DeletedFinalStateUnknown:
+				// 	secret, ok := t.Obj.(*v1.Secret)
+				// 	if !ok {
+				// 		return false
+				// 	}
+				// 	return secret.Type == v1.SecretTypeServiceAccountToken
 				case *v1.Secret:
 					return t.Type == v1.SecretTypeServiceAccountToken
 				default:
@@ -78,8 +84,18 @@ func (e *DockercfgTokenDeletedController) Run(stopCh <-chan struct{}) {
 func (e *DockercfgTokenDeletedController) secretDeleted(obj interface{}) {
 	tokenSecret, ok := obj.(*v1.Secret)
 	if !ok {
+		// tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		// if !ok {
+		// 	return
+		// }
+		// tokenSecret, ok = tombstone.Obj.(*v1.Secret)
+		// if !ok {
+		// 	return
+		// }
 		return
 	}
+
+	klog.Infof("Token secret %s/%s deleted, finding associated dockercfg secrets to delete", tokenSecret.Namespace, tokenSecret.Name)
 
 	dockercfgSecrets, err := e.findDockercfgSecrets(tokenSecret)
 	if err != nil {
@@ -87,11 +103,13 @@ func (e *DockercfgTokenDeletedController) secretDeleted(obj interface{}) {
 		return
 	}
 	if len(dockercfgSecrets) == 0 {
+		klog.Infof("No dockercfg secrets found for %s/%s", tokenSecret.Namespace, tokenSecret.Name)
 		return
 	}
 
 	// remove the reference token secrets
 	for _, dockercfgSecret := range dockercfgSecrets {
+		klog.Infof("Deleting dockercfg secret %s/%s because associated token secret %s has been deleted.", dockercfgSecret.Namespace, dockercfgSecret.Name, tokenSecret.Name)
 		if err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(dockercfgSecret.Name, nil); (err != nil) && !apierrors.IsNotFound(err) {
 			utilruntime.HandleError(err)
 		}

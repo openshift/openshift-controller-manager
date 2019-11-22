@@ -84,11 +84,15 @@ func (e *DockercfgDeletedController) secretDeleted(obj interface{}) {
 	if !ok {
 		return
 	}
-	if _, exists := dockercfgSecret.Annotations[ServiceAccountTokenSecretNameKey]; !exists {
+	klog.Infof("Dockercfg secret %s/%s deleted, finding associated token secret to delte", dockercfgSecret.Namespace, dockercfgSecret.Name)
+	tokenSecretName, exists := dockercfgSecret.Annotations[ServiceAccountTokenSecretNameKey]
+	if !exists {
+		klog.Warningf("Dockercfg secret %s/%s is missing token secret annotation %s", dockercfgSecret.Namespace, dockercfgSecret.Name, ServiceAccountTokenSecretNameKey)
 		return
 	}
 
 	for i := 1; i <= NumServiceAccountUpdateRetries; i++ {
+		klog.Infof("Attempting to remove secret reference %s/%s from its associated service account.", dockercfgSecret.Namespace, dockercfgSecret.Name)
 		if err := e.removeDockercfgSecretReference(dockercfgSecret); err != nil {
 			if kapierrors.IsConflict(err) && i < NumServiceAccountUpdateRetries {
 				time.Sleep(wait.Jitter(100*time.Millisecond, 0.0))
@@ -103,7 +107,8 @@ func (e *DockercfgDeletedController) secretDeleted(obj interface{}) {
 	}
 
 	// remove the reference token secret
-	if err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(dockercfgSecret.Annotations[ServiceAccountTokenSecretNameKey], nil); (err != nil) && !kapierrors.IsNotFound(err) {
+	klog.Infof("Deleting token secret %s/%s", dockercfgSecret.Namespace, tokenSecretName)
+	if err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(tokenSecretName, nil); (err != nil) && !kapierrors.IsNotFound(err) {
 		utilruntime.HandleError(err)
 	}
 }
