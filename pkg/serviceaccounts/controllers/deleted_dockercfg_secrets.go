@@ -84,7 +84,7 @@ func (e *DockercfgDeletedController) secretDeleted(obj interface{}) {
 	if !ok {
 		return
 	}
-	klog.Infof("Dockercfg secret %s/%s deleted, finding associated token secret to delte", dockercfgSecret.Namespace, dockercfgSecret.Name)
+	klog.Infof("Dockercfg secret %s/%s deleted, finding associated token secret to delete", dockercfgSecret.Namespace, dockercfgSecret.Name)
 	tokenSecretName, exists := dockercfgSecret.Annotations[ServiceAccountTokenSecretNameKey]
 	if !exists {
 		klog.Warningf("Dockercfg secret %s/%s is missing token secret annotation %s", dockercfgSecret.Namespace, dockercfgSecret.Name, ServiceAccountTokenSecretNameKey)
@@ -102,7 +102,6 @@ func (e *DockercfgDeletedController) secretDeleted(obj interface{}) {
 			klog.Error(err)
 			break
 		}
-
 		break
 	}
 

@@ -78,7 +78,7 @@ func NewDockercfgController(serviceAccounts informers.ServiceAccountInformer, se
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				serviceAccount := obj.(*v1.ServiceAccount)
-				klog.V(5).Infof("Adding service account %s", serviceAccount.Name)
+				klog.Infof("Adding service account %s", serviceAccount.Name)
 				e.enqueueServiceAccount(serviceAccount)
 			},
 			UpdateFunc: func(old, cur interface{}) {
@@ -152,7 +152,7 @@ func (e *DockercfgController) handleTokenSecretUpdate(oldObj, newObj interface{}
 		wasPopulated = len(oldSecret.Data[v1.ServiceAccountTokenKey]) > 0
 		klog.V(5).Infof("Updating token secret %s/%s", secret.Namespace, secret.Name)
 	} else {
-		klog.V(5).Infof("Adding token secret %s/%s", secret.Namespace, secret.Name)
+		klog.Infof("Adding token secret %s/%s", secret.Namespace, secret.Name)
 	}
 
 	if !wasPopulated && isPopulated {
@@ -176,11 +176,13 @@ func (e *DockercfgController) handleTokenSecretDelete(obj interface{}) {
 			return
 		}
 	}
+	klog.Infof("Processing secret %s/%s deletion", secret.Namespace, secret.Name)
 	if secret.Annotations[DeprecatedKubeCreatedByAnnotation] != CreateDockercfgSecretsController {
+		klog.Infof("Ignoring deletion of token secret %s/%s as it was not created by %s", secret.Namespace, secret.Name, CreateDockercfgSecretsController)
 		return
 	}
 	if len(secret.Data[v1.ServiceAccountTokenKey]) > 0 {
-		// Let deleted_token_secrets handle deletion of populated tokens
+		klog.Infof("Token secret %s/%s has a service account token, handling via deleted_token_secrets controller", secret.Namespace, secret.Name)
 		return
 	}
 	e.enqueueServiceAccountForToken(secret)
@@ -199,6 +201,7 @@ func (e *DockercfgController) enqueueServiceAccountForToken(tokenSecret *v1.Secr
 		utilruntime.HandleError(fmt.Errorf("error syncing token secret %s/%s: %v", tokenSecret.Namespace, tokenSecret.Name, err))
 		return
 	}
+	klog.Infof("Adding %s to sync queue", key)
 	e.queue.Add(key)
 }
 
