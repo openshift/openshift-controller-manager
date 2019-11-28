@@ -39,6 +39,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 
 	privileged := true
 	strategy := build.Spec.Strategy.DockerStrategy
+	hostPathFile := v1.HostPathFile
 
 	containerEnv := []v1.EnvVar{
 		{Name: "BUILD", Value: string(data)},
@@ -77,6 +78,10 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 					VolumeMounts: []v1.VolumeMount{
 						{
+							Name:      "node-pullsecrets",
+							MountPath: buildutil.NodePullSecretsPath,
+						},
+						{
 							Name:      "buildworkdir",
 							MountPath: buildutil.BuildWorkDirMount,
 						},
@@ -100,6 +105,15 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					Name: "buildworkdir",
 					VolumeSource: v1.VolumeSource{
 						EmptyDir: &v1.EmptyDirVolumeSource{},
+					},
+				},
+				{
+					Name: "node-pullsecrets",
+					VolumeSource: v1.VolumeSource{
+						HostPath: &v1.HostPathVolumeSource{
+							Path: buildutil.NodePullSecretsPath,
+							Type: &hostPathFile,
+						},
 					},
 				},
 			},
@@ -146,6 +160,10 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 			},
 			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 			VolumeMounts: []v1.VolumeMount{
+				{
+					Name:      "node-pullsecrets",
+					MountPath: buildutil.NodePullSecretsPath,
+				},
 				{
 					Name:      "buildworkdir",
 					MountPath: buildutil.BuildWorkDirMount,

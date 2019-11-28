@@ -64,6 +64,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		serviceAccount = buildutil.BuilderServiceAccountName
 	}
 
+	hostPathFile := corev1.HostPathFile
 	privileged := true
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -86,6 +87,10 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 					VolumeMounts: []corev1.VolumeMount{
 						{
+							Name:      "node-pullsecrets",
+							MountPath: buildutil.NodePullSecretsPath,
+						},
+						{
 							Name:      "buildworkdir",
 							MountPath: buildutil.BuildWorkDirMount,
 						},
@@ -99,6 +104,15 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 				},
 			},
 			Volumes: []corev1.Volume{
+				{
+					Name: "node-pullsecrets",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: buildutil.NodePullSecretsPath,
+							Type: &hostPathFile,
+						},
+					},
+				},
 				{
 					Name: "buildcachedir",
 					VolumeSource: corev1.VolumeSource{
@@ -152,6 +166,10 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 			},
 			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "node-pullsecrets",
+					MountPath: buildutil.NodePullSecretsPath,
+				},
 				{
 					Name:      "buildworkdir",
 					MountPath: buildutil.BuildWorkDirMount,

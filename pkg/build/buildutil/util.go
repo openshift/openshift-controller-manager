@@ -20,6 +20,8 @@ import (
 )
 
 const (
+	// NodePullSecretsPath is the file where node pull secrets are stored.
+	NodePullSecretsPath = "/var/lib/kubelet/config.json"
 
 	// BuildWorkDirMount is the working directory within the build pod, mounted as a volume.
 	BuildWorkDirMount = "/tmp/build"
