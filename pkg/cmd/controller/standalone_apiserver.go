@@ -40,12 +40,12 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 	genericroutes.MetricsWithReset{}.Install(mux)
 
 	// TODO: replace me with a service account for controller manager
-	tokenReview := kubeExternal.AuthenticationV1beta1().TokenReviews()
+	tokenReview := kubeExternal.AuthenticationV1().TokenReviews()
 	authn, err := newRemoteAuthenticator(tokenReview, clientCAs, 5*time.Minute)
 	if err != nil {
 		return err
 	}
-	sarClient := kubeExternal.AuthorizationV1beta1().SubjectAccessReviews()
+	sarClient := kubeExternal.AuthorizationV1().SubjectAccessReviews()
 	remoteAuthz, err := authzwebhook.NewFromInterface(sarClient, 5*time.Minute, 5*time.Minute)
 	if err != nil {
 		return err
