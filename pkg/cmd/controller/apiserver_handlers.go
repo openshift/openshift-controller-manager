@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"context"
+
 	"k8s.io/apimachinery/pkg/util/sets"
 	kauthorizer "k8s.io/apiserver/pkg/authorization/authorizer"
 )
@@ -16,9 +18,9 @@ func newBypassAuthorizer(auth kauthorizer.Authorizer, paths ...string) kauthoriz
 	return bypassAuthorizer{paths: sets.NewString(paths...), authorizer: auth}
 }
 
-func (a bypassAuthorizer) Authorize(attributes kauthorizer.Attributes) (allowed kauthorizer.Decision, reason string, err error) {
+func (a bypassAuthorizer) Authorize(ctx context.Context, attributes kauthorizer.Attributes) (allowed kauthorizer.Decision, reason string, err error) {
 	if !attributes.IsResourceRequest() && a.paths.Has(attributes.GetPath()) {
 		return kauthorizer.DecisionAllow, "always allowed", nil
 	}
-	return a.authorizer.Authorize(attributes)
+	return a.authorizer.Authorize(ctx, attributes)
 }
