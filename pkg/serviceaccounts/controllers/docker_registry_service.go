@@ -247,29 +247,41 @@ func getDockerRegistryLocations(lister listers.ServiceLister, location serviceLo
 		return []string{}
 	}
 
-	hasClusterIP := (len(service.Spec.ClusterIP) > 0) && (net.ParseIP(service.Spec.ClusterIP) != nil)
-	if hasClusterIP && len(service.Spec.Ports) > 0 {
-		svcPort := service.Spec.Ports[0].Port
-		ret := []string{
-			net.JoinHostPort(service.Spec.ClusterIP, fmt.Sprintf("%d", svcPort)),
-			net.JoinHostPort(fmt.Sprintf("%s.%s.svc", service.Name, service.Namespace), fmt.Sprintf("%d", svcPort)),
-		}
-		// Bug 1701422: if using HTTP/S default ports, add locations without the port number
-		if svcPort == 80 || svcPort == 443 {
-			ret = append(ret, service.Spec.ClusterIP, fmt.Sprintf("%s.%s.svc", service.Name, service.Namespace))
-		}
-		if len(clusterDNSSuffix) > 0 {
-			ret = append(ret, net.JoinHostPort(fmt.Sprintf("%s.%s.svc."+clusterDNSSuffix, service.Name, service.Namespace), fmt.Sprintf("%d", svcPort)))
-			// Bug 1701422: if using HTTP/S default ports, add locations without the port number
-			if svcPort == 80 || svcPort == 443 {
-				ret = append(ret, fmt.Sprintf("%s.%s.svc."+clusterDNSSuffix, service.Name, service.Namespace))
-			}
-		}
-
-		return ret
+	ip := net.ParseIP(service.Spec.ClusterIP)
+	if ip == nil {
+		return []string{}
 	}
 
-	return []string{}
+	if len(service.Spec.Ports) == 0 {
+		return []string{}
+	}
+
+	svcPort := service.Spec.Ports[0].Port
+	ret := []string{
+		net.JoinHostPort(fmt.Sprintf("%s.%s.svc", service.Name, service.Namespace), fmt.Sprintf("%d", svcPort)),
+	}
+
+	// Bug 1780376: add ClusterIP as a location if service supports IPv4
+	// IPv6 addresses are not valid locations in an image pull spec
+	ipv4 := ip.To4()
+	if ipv4 != nil {
+		ret = append(ret, net.JoinHostPort(ipv4.String(), fmt.Sprintf("%d", svcPort)))
+	}
+	// Bug 1701422: if using HTTP/S default ports, add locations without the port number
+	if svcPort == 80 || svcPort == 443 {
+		ret = append(ret, fmt.Sprintf("%s.%s.svc", service.Name, service.Namespace))
+		if ipv4 != nil {
+			ret = append(ret, ipv4.String())
+		}
+	}
+	if len(clusterDNSSuffix) > 0 {
+		ret = append(ret, net.JoinHostPort(fmt.Sprintf("%s.%s.svc."+clusterDNSSuffix, service.Name, service.Namespace), fmt.Sprintf("%d", svcPort)))
+		// Bug 1701422: if using HTTP/S default ports, add locations without the port number
+		if svcPort == 80 || svcPort == 443 {
+			ret = append(ret, fmt.Sprintf("%s.%s.svc."+clusterDNSSuffix, service.Name, service.Namespace))
+		}
+	}
+	return ret
 }
 
 // syncRegistryLocationChange goes through all service account dockercfg secrets and updates them to point at a new docker-registry location
