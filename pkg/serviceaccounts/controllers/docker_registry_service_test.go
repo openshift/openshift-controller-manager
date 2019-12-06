@@ -24,10 +24,24 @@ const (
 )
 
 var (
-	registryService = &v1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: registryName, Namespace: registryNamespace},
+	registryServiceIPV4 = &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      registryName,
+			Namespace: registryNamespace,
+		},
 		Spec: v1.ServiceSpec{
-			ClusterIP: "172.16.123.123",
+			// Bug 1780376: Use ipv4InIPv6 format
+			ClusterIP: "::FFFF:172.16.123.123",
+			Ports:     []v1.ServicePort{{Port: 443}},
+		},
+	}
+	registryServiceIPV6 = &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      registryName,
+			Namespace: registryNamespace,
+		},
+		Spec: v1.ServiceSpec{
+			ClusterIP: "fd12:3456:789a:1::1",
 			Ports:     []v1.ServicePort{{Port: 443}},
 		},
 	}
@@ -95,7 +109,7 @@ func TestNoChangeNoOp(t *testing.T) {
 	defer close(stopChannel)
 	received := make(chan bool)
 
-	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{registryService}, t, stopChannel)
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4}, t, stopChannel)
 	kubeclient.PrependReactor("update", "secrets", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, &v1.Secret{}, fmt.Errorf("%v unexpected", action)
 	})
@@ -113,7 +127,7 @@ func TestNoChangeNoOp(t *testing.T) {
 		t.Fatalf("failed to become ready")
 	}
 
-	fakeWatch.Modify(registryService)
+	fakeWatch.Modify(registryServiceIPV4)
 
 	t.Log("Waiting to reach syncRegistryLocationHandler")
 	select {
@@ -161,7 +175,7 @@ func TestUpdateNewStyleSecretAndDNSSuffixAndAdditionalURLs(t *testing.T) {
 		t.Fatalf("initialSecretsCheckDone should be false")
 	}
 
-	fakeWatch.Modify(registryService)
+	fakeWatch.Modify(registryServiceIPV4)
 	t.Log("Waiting to reach syncRegistryLocationHandler")
 	select {
 	case <-received:
@@ -250,7 +264,7 @@ func TestUpdateOldStyleSecretWithKey(t *testing.T) {
 		Data: map[string][]byte{v1.DockerConfigKey: dockercfgContent},
 	}
 
-	kubeclient, _, controller, informerFactory := controllerSetup([]runtime.Object{registryService, oldStyleDockercfgSecret}, t, stopChannel)
+	kubeclient, _, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4, oldStyleDockercfgSecret}, t, stopChannel)
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
 	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
 	controller.initialSecretsCheckDone = false
@@ -358,7 +372,7 @@ func TestUpdateOldStyleSecretWithoutKey(t *testing.T) {
 		t.Fatalf("failed to become ready")
 	}
 
-	fakeWatch.Modify(registryService)
+	fakeWatch.Modify(registryServiceIPV4)
 
 	t.Log("Waiting to reach syncRegistryLocationHandler")
 	select {
@@ -441,7 +455,7 @@ func TestClearSecretAndRecreate(t *testing.T) {
 		Data: map[string][]byte{v1.DockerConfigKey: dockercfgContent},
 	}
 
-	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{registryService, oldStyleDockercfgSecret}, t, stopChannel)
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4, oldStyleDockercfgSecret}, t, stopChannel)
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
 	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
 	informerFactory.Start(stopChannel)
@@ -454,8 +468,8 @@ func TestClearSecretAndRecreate(t *testing.T) {
 		t.Fatalf("failed waiting for dockerURLsInitialized")
 	}
 
-	t.Logf("deleting %s service", registryService.Name)
-	fakeWatch.Delete(registryService)
+	t.Logf("deleting %s service", registryServiceIPV4.Name)
+	fakeWatch.Delete(registryServiceIPV4)
 
 	t.Log("Waiting for first update")
 	select {
@@ -495,8 +509,8 @@ func TestClearSecretAndRecreate(t *testing.T) {
 
 	kubeclient.ClearActions()
 
-	t.Logf("adding %s service", registryService.Name)
-	fakeWatch.Add(registryService)
+	t.Logf("adding %s service", registryServiceIPV4.Name)
+	fakeWatch.Add(registryServiceIPV4)
 
 	t.Log("Waiting for second update")
 	select {
@@ -522,6 +536,102 @@ func TestClearSecretAndRecreate(t *testing.T) {
 		expectedDockercfgMap[key] = credentialprovider.DockerConfigEntry{
 			Username: "serviceaccount",
 			Password: "the-token",
+			Email:    "serviceaccount@example.org",
+		}
+	}
+
+	foundSecret := false
+	for _, action := range kubeclient.Actions() {
+		switch {
+		case action.Matches("update", "secrets"):
+			updateService := action.(clientgotesting.UpdateAction)
+			secret := updateService.GetObject().(*v1.Secret)
+			actualDockercfg := &credentialprovider.DockerConfig{}
+			if err := json.Unmarshal(secret.Data[v1.DockerConfigKey], actualDockercfg); err != nil {
+				t.Errorf("unexpected err %v", err)
+				continue
+			}
+			if !reflect.DeepEqual(*actualDockercfg, expectedDockercfgMap) {
+				t.Errorf("expected %v, got %v", expectedDockercfgMap, *actualDockercfg)
+				continue
+			}
+			foundSecret = true
+		}
+	}
+
+	if !foundSecret {
+		t.Errorf("secret wasn't updated.  Got %v\n", kubeclient.Actions())
+	}
+}
+
+func TestUpdateNewStyleSecretIPv6(t *testing.T) {
+	stopChannel := make(chan struct{})
+	defer close(stopChannel)
+	received := make(chan bool)
+	updatedSecret := make(chan bool)
+
+	newStyleDockercfgSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "secret-name", Namespace: registryNamespace,
+			Annotations: map[string]string{
+				ServiceAccountTokenValueAnnotation: "the-token",
+				ServiceAccountTokenSecretNameKey:   "sa-token-secret",
+			},
+		},
+		Type: v1.SecretTypeDockercfg,
+		Data: map[string][]byte{v1.DockerConfigKey: []byte("{}")},
+	}
+
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{newStyleDockercfgSecret}, t, stopChannel)
+	controller.clusterDNSSuffix = "something.else"
+	// this bit also tests the additional registryURL options
+	controller.additionalRegistryURLs = []string{"foo.bar.com"}
+	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
+	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
+	controller.initialSecretsCheckDone = false
+	informerFactory.Start(stopChannel)
+	go controller.Run(5, stopChannel)
+
+	t.Log("Waiting for ready")
+	select {
+	case <-controller.dockerURLsInitialized:
+	case <-time.After(time.Duration(45 * time.Second)):
+		t.Fatalf("failed to become ready")
+	}
+	if controller.initialSecretsCheckDone != false {
+		t.Fatalf("initialSecretsCheckDone should be false")
+	}
+
+	fakeWatch.Modify(registryServiceIPV6)
+	t.Log("Waiting to reach syncRegistryLocationHandler")
+	select {
+	case <-received:
+	case <-time.After(time.Duration(45 * time.Second)):
+		t.Fatalf("failed to call into syncRegistryLocationHandler")
+	}
+
+	// after this point the secrets should be added to the queue and initial check should be done.
+	if controller.initialSecretsCheckDone != true {
+		t.Fatalf("initialSecretsCheckDone should be true")
+	}
+
+	t.Log("Waiting to update secret")
+	select {
+	case <-updatedSecret:
+	case <-time.After(time.Duration(45 * time.Second)):
+		t.Fatalf("failed to call into syncSecret")
+	}
+
+	expectedDockercfgMap := credentialprovider.DockerConfig{}
+	expectedLocations := []string{"foo.bar.com",
+		"docker-registry.default.svc:443",
+		"docker-registry.default.svc",
+		"docker-registry.default.svc.something.else:443",
+		"docker-registry.default.svc.something.else"}
+	for _, key := range expectedLocations {
+		expectedDockercfgMap[key] = credentialprovider.DockerConfigEntry{
+			Username: "serviceaccount",
+			Password: newStyleDockercfgSecret.Annotations[ServiceAccountTokenValueAnnotation],
 			Email:    "serviceaccount@example.org",
 		}
 	}
