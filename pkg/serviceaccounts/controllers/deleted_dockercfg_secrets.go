@@ -34,7 +34,7 @@ func NewDockercfgDeletedController(secrets informers.SecretInformer, cl kclients
 	}
 
 	e.secretController = secrets.Informer().GetController()
-	secrets.Informer().AddEventHandlerWithResyncPeriod(
+	secrets.Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {
@@ -49,7 +49,6 @@ func NewDockercfgDeletedController(secrets informers.SecretInformer, cl kclients
 				DeleteFunc: e.secretDeleted,
 			},
 		},
-		options.Resync,
 	)
 
 	return e
