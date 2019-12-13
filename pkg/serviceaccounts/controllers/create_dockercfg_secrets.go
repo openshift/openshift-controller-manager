@@ -74,7 +74,7 @@ func NewDockercfgController(serviceAccounts informers.ServiceAccountInformer, se
 
 	serviceAccountCache := serviceAccounts.Informer().GetStore()
 	e.serviceAccountController = serviceAccounts.Informer().GetController()
-	serviceAccounts.Informer().AddEventHandlerWithResyncPeriod(
+	serviceAccounts.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				serviceAccount := obj.(*v1.ServiceAccount)
@@ -88,13 +88,12 @@ func NewDockercfgController(serviceAccounts informers.ServiceAccountInformer, se
 				e.enqueueServiceAccount(serviceAccount)
 			},
 		},
-		options.Resync,
 	)
 	e.serviceAccountCache = NewEtcdMutationCache(serviceAccountCache)
 
 	e.secretCache = secrets.Informer().GetIndexer()
 	e.secretController = secrets.Informer().GetController()
-	secrets.Informer().AddEventHandlerWithResyncPeriod(
+	secrets.Informer().AddEventHandler(
 		cache.FilteringResourceEventHandler{
 			FilterFunc: func(obj interface{}) bool {
 				switch t := obj.(type) {
@@ -111,7 +110,6 @@ func NewDockercfgController(serviceAccounts informers.ServiceAccountInformer, se
 				DeleteFunc: e.handleTokenSecretDelete,
 			},
 		},
-		options.Resync,
 	)
 	e.syncHandler = e.syncServiceAccount
 
