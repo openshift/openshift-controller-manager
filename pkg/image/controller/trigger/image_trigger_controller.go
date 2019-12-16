@@ -58,15 +58,16 @@ type TriggerSource struct {
 
 // tagRetriever implements triggerutil.TagRetriever over an image stream lister.
 type tagRetriever struct {
-	lister imagev1lister.ImageStreamLister
+	lister                   imagev1lister.ImageStreamLister
+	internalRegistryHostname string
 }
 
 var _ triggerutil.TagRetriever = tagRetriever{}
 
 // NewTagRetriever will return a tag retriever that can look up image stream tag
 // references from an image stream.
-func NewTagRetriever(lister imagev1lister.ImageStreamLister) triggerutil.TagRetriever {
-	return tagRetriever{lister}
+func NewTagRetriever(lister imagev1lister.ImageStreamLister, internalRegistryHostname string) triggerutil.TagRetriever {
+	return tagRetriever{lister: lister, internalRegistryHostname: internalRegistryHostname}
 }
 
 // ImageStreamTag returns a valid image reference for the provided image stream tag name and namespace,
@@ -84,7 +85,15 @@ func (r tagRetriever) ImageStreamTag(namespace, name string) (ref string, rv int
 	if err != nil {
 		return "", 0, false
 	}
-	ref, ok = imageutil.ResolveLatestTaggedImage(is, tag)
+	if len(is.Status.DockerImageRepository) > 0 {
+		ref, ok = imageutil.ResolveLatestTaggedImage(is, tag)
+	} else {
+		streamCopy := is.DeepCopy()
+		// in case the api server has not yet picked up the internal registry hostname from the cluster wide
+		// OCM config, we use our copy here to facilitate leveraging pull through with local tag reference policy
+		streamCopy.Status.DockerImageRepository = r.internalRegistryHostname
+		ref, ok = imageutil.ResolveLatestTaggedImage(streamCopy, tag)
+	}
 	return ref, rv, ok
 }
 
@@ -144,6 +153,8 @@ type TriggerController struct {
 
 	// syncs are the items that must return true before the queue can be processed
 	syncs []cache.InformerSynced
+
+	internalRegistryHostname string
 }
 
 func NewTriggerEventBroadcaster(client kv1core.CoreV1Interface) record.EventBroadcaster {
@@ -155,17 +166,18 @@ func NewTriggerEventBroadcaster(client kv1core.CoreV1Interface) record.EventBroa
 }
 
 // NewTriggerController instantiates a trigger controller from the provided sources.
-func NewTriggerController(eventBroadcaster record.EventBroadcaster, isInformer imagev1informer.ImageStreamInformer, sources ...TriggerSource) *TriggerController {
+func NewTriggerController(internalRegistryHostname string, eventBroadcaster record.EventBroadcaster, isInformer imagev1informer.ImageStreamInformer, sources ...TriggerSource) *TriggerController {
 	lister := isInformer.Lister()
 	c := &TriggerController{
 		eventRecorder:    eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "image-trigger-controller"}),
 		queue:            workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "image-trigger"),
 		imageChangeQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "image-trigger-reactions"),
 		lister:           lister,
-		tagRetriever:     NewTagRetriever(lister),
+		tagRetriever:     NewTagRetriever(lister, internalRegistryHostname),
 		triggerCache:     NewTriggerCache(),
 
-		resourceFailureDelayFn: defaultResourceFailureDelay,
+		resourceFailureDelayFn:   defaultResourceFailureDelay,
+		internalRegistryHostname: internalRegistryHostname,
 	}
 
 	c.syncImageStreamFn = c.syncImageStream
