@@ -88,6 +88,7 @@ func RunImageTriggerController(ctx *ControllerContext) (bool, error) {
 	})
 
 	go imagetriggercontroller.NewTriggerController(
+		ctx.OpenshiftControllerConfig.DockerPullSecret.InternalRegistryHostname,
 		broadcaster,
 		informer,
 		sources...,

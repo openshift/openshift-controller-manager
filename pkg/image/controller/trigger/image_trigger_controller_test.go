@@ -1118,7 +1118,7 @@ func TestTriggerController(t *testing.T) {
 	buildReactor := &fakeImageReactor{nested: buildReactorFn}
 	podReactor := &fakeImageReactor{nested: alterPodFromTriggers(podWatch)}
 	deploymentReactor := &fakeImageReactor{nested: alterDeploymentConfigFromTriggers(dcWatch)}
-	c := NewTriggerController(record.NewBroadcasterForTests(0), &imageStreamInformer{isInformer},
+	c := NewTriggerController("", record.NewBroadcasterForTests(0), &imageStreamInformer{isInformer},
 		TriggerSource{
 			Resource: schema.GroupResource{Resource: "buildconfigs"},
 			Informer: bcInformer,
