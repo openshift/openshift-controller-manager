@@ -1,19 +1,12 @@
-reviewers:
-  - bparees
-  - smarterclayton
-  - mfojtik
-  - soltysh
-  - csrwng
-  - gabemontero
-  - adambkaplan
-  - ironcladlou
-  - Miciah
-  - danehans
-  - frobware
 approvers:
-  - bparees
-  - mfojtik
-  - soltysh
-  - adambkaplan
   - ironcladlou
+  - knobunc
   - Miciah
+  - frobware
+  - danehans
+reviewers:
+  - ironcladlou
+  - knobunc
+  - Miciah
+  - frobware
+  - danehans
