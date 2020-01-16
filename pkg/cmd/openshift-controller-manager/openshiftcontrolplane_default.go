@@ -16,8 +16,6 @@ func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolpla
 
 	configdefaults.DefaultStringSlice(&config.Controllers, []string{"*"})
 
-	configdefaults.DefaultString(&config.Network.ServiceNetworkCIDR, "10.0.0.0/24")
-
 	if config.ImageImport.MaxScheduledImageImportsPerMinute == 0 {
 		config.ImageImport.MaxScheduledImageImportsPerMinute = 60
 	}
