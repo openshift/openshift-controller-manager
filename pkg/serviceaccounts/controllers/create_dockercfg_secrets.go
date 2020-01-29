@@ -324,7 +324,7 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 		return nil
 	}
 	if !needsDockercfgSecret(obj.(*v1.ServiceAccount)) {
-		return nil
+		return e.syncDockercfgOwnerRefs(obj.(*v1.ServiceAccount))
 	}
 
 	serviceAccount := obj.(*v1.ServiceAccount).DeepCopyObject().(*v1.ServiceAccount)
@@ -503,10 +503,79 @@ func (e *DockercfgController) createDockerPullSecret(serviceAccount *v1.ServiceA
 		return nil, false, err
 	}
 	dockercfgSecret.Data[v1.DockerConfigKey] = dockercfgContent
+	blockDeletion := false
+	ownerRef := metav1.NewControllerRef(tokenSecret, v1.SchemeGroupVersion.WithKind("Secret"))
+	ownerRef.BlockOwnerDeletion = &blockDeletion
+	dockercfgSecret.SetOwnerReferences([]metav1.OwnerReference{*ownerRef})
 
 	// Save the secret
 	createdSecret, err := e.client.CoreV1().Secrets(tokenSecret.Namespace).Create(dockercfgSecret)
 	return createdSecret, err == nil, err
+}
+
+func (e *DockercfgController) syncDockercfgOwnerRefs(serviceAccount *v1.ServiceAccount) error {
+	for _, secretRef := range serviceAccount.Secrets {
+		secret, exists, err := e.secretCache.GetByKey(fmt.Sprintf("%s/%s", secretRef.Namespace, secretRef.Name))
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		err = e.syncDockercfgOwner(secret.(*v1.Secret))
+		if err != nil {
+			return err
+		}
+	}
+	for _, secretRef := range serviceAccount.ImagePullSecrets {
+		secret, exists, err := e.secretCache.GetByKey(fmt.Sprintf("%s/%s", serviceAccount.Namespace, secretRef.Name))
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		err = e.syncDockercfgOwner(secret.(*v1.Secret))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *DockercfgController) syncDockercfgOwner(pullSecret *v1.Secret) error {
+	if pullSecret.Type != v1.SecretTypeDockercfg {
+		return nil
+	}
+	tokenName := pullSecret.Annotations[ServiceAccountTokenSecretNameKey]
+	// If there is no token name, this pull secret was likely linked by a user.
+	// No further work is needed.
+	if len(tokenName) == 0 {
+		return nil
+	}
+	// Make sure the token exists
+	tokenSecret, exists, err := e.secretCache.GetByKey(fmt.Sprintf("%s/%s", pullSecret.Namespace, tokenName))
+	if err != nil {
+		return err
+	}
+	if !exists {
+		// If the pull secret exists, and the token does not, delete the pull secret.
+		klog.V(4).Infof("Deleting pull secret %s/%s because its associated token %s/%s is missing", pullSecret.Namespace, pullSecret.Name, pullSecret.Namespace, tokenName)
+		return e.client.CoreV1().Secrets(pullSecret.Namespace).Delete(pullSecret.Name, &metav1.DeleteOptions{})
+	}
+	tokenSecretObj := tokenSecret.(*v1.Secret)
+	// If the pull secret has an owner reference to its associated token, no further work is needed.
+	if metav1.IsControlledBy(pullSecret, tokenSecretObj) {
+		return nil
+	}
+	pullSecret = pullSecret.DeepCopy()
+	blockDeletion := false
+	ownerRef := metav1.NewControllerRef(tokenSecretObj, v1.SchemeGroupVersion.WithKind("Secret"))
+	ownerRef.BlockOwnerDeletion = &blockDeletion
+	pullSecret.SetOwnerReferences([]metav1.OwnerReference{*ownerRef})
+	klog.V(4).Infof("Adding token %s/%s as the owner of pull secret %s/%s", pullSecret.Namespace, tokenName, pullSecret.Namespace, pullSecret.Name)
+	_, err = e.client.CoreV1().Secrets(pullSecret.Namespace).Update(pullSecret)
+	return err
 }
 
 func getGeneratedDockercfgSecretNames(serviceAccount *v1.ServiceAccount) (sets.String, sets.String) {
