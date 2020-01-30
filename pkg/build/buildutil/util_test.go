@@ -8,6 +8,32 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+func TestLabelValue(t *testing.T) {
+	testCases := []struct {
+		name           string
+		input          string
+		expectedOutput string
+	}{
+		{
+			name:           "do-not-end-with-hyphen",
+			input:          "cluster-kube-controller-manager-operator-4.3.0.ipv6-2019-11-27-0001-build",
+			expectedOutput: "cluster-kube-controller-manager-operator-4",
+		},
+		{
+			name:           "typical-name",
+			input:          "ruby-1-build",
+			expectedOutput: "ruby-1-build",
+		},
+	}
+
+	for _, tc := range testCases {
+		result := LabelValue(tc.input)
+		if result != tc.expectedOutput {
+			t.Errorf("tc %s got %s for %s instead of %s", tc.name, result, tc.input, tc.expectedOutput)
+		}
+	}
+}
+
 func TestMergeEnvWithoutDuplicates(t *testing.T) {
 	testCases := []struct {
 		name                string
