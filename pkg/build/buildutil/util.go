@@ -257,8 +257,18 @@ func GetBuildSystemConfigMapName(build *buildv1.Build) string {
 // label in a pod. If the length of the string parameter exceeds
 // the maximum label length, the value will be truncated.
 func LabelValue(name string) string {
-	if len(name) <= validation.DNS1123LabelMaxLength {
-		return name
+	end := len(name)
+	newName := name
+	// first, try to truncate from the end to find a valid
+	// label
+	for end > 0 {
+		errStrs := validation.IsDNS1123Label(newName)
+		if len(errStrs) == 0 {
+			return newName
+		}
+		end--
+		newName = newName[:end]
 	}
-	return name[:validation.DNS1123LabelMaxLength]
+	klog.Warningf("In creating the value of the build label in the build pod, several attempts at manipulating %s to meet k8s label name requirements failed", name)
+	return name
 }
