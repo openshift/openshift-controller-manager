@@ -830,7 +830,10 @@ func (dn *Daemon) checkStateOnFirstRun() error {
 	// take a stab at that and re-run the drain+reboot routine
 	if state.pendingConfig != nil && bootID == dn.bootID {
 		dn.logSystem("drain interrupted, retrying")
-		return dn.drainAndReboot(state.pendingConfig)
+		if err := dn.drain(); err != nil {
+			return err
+		}
+		return dn.finalizeAndReboot(state.pendingConfig)
 	}
 
 	if err := dn.detectEarlySSHAccessesFromBoot(); err != nil {
@@ -898,6 +901,9 @@ func (dn *Daemon) checkStateOnFirstRun() error {
 		}
 	} else {
 		glog.Infof("Skipping on-disk validation; %s present", constants.MachineConfigDaemonForceFile)
+		if err := os.Remove(constants.MachineConfigDaemonForceFile); err != nil {
+			return errors.Wrap(err, "failed to remove force validation file")
+		}
 	}
 	glog.Info("Validated on-disk state")
 

@@ -20,7 +20,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/coreos/go-systemd/activation"
+	"github.com/coreos/go-systemd/v22/activation"
 )
 
 func HelloServer(w http.ResponseWriter, req *http.Request) {
@@ -28,7 +28,7 @@ func HelloServer(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	listeners, err := activation.Listeners(true)
+	listeners, err := activation.Listeners()
 	if err != nil {
 		panic(err)
 	}

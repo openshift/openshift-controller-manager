@@ -1,8 +1,8 @@
-hash: 6d6cf387f5c136f77d7c997680dcd6079500ac5f3f8c6e16c684e5a227fa29a6
-updated: 2019-09-05T11:26:29.682517051-04:00
+hash: 0e1f67542f85fa183b67d3cec0915d8f374014ea39bc57164c5c6992dfe5eae5
+updated: 2020-02-24T09:39:13.346874-05:00
 imports:
 - name: bitbucket.org/ww/goautoneg
-  version: 2ae31c8b6b30d2f4c8100c20d527b571e9c433bb
+  version: a547fc61f48d567d5b4ec6f8aee5573d8efce11d
   repo: https://github.com/munnerz/goautoneg.git
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -19,7 +19,7 @@ imports:
 - name: github.com/certifi/gocertifi
   version: ee1a9a0726d2ae45f54118cac878c990d4016ded
 - name: github.com/containerd/continuity
-  version: 75bee3e2ccb6402e3a986ab8bd3b17003fc0fdec
+  version: 26c1120b8d4107d2471b93ad78ef7ce1fc84c4c4
   subpackages:
   - pathdriver
 - name: github.com/containers/image
@@ -58,10 +58,9 @@ imports:
   - pkg/transport
   - pkg/types
 - name: github.com/coreos/go-systemd
-  version: 39ca1b05acc7ad1220e09f133283b8859a8b71ab
+  version: d657f9650837651364841f00795b417b1ca43c1f
   subpackages:
   - daemon
-  - journal
 - name: github.com/davecgh/go-spew
   version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
@@ -101,7 +100,7 @@ imports:
   - sockets
   - tlsconfig
 - name: github.com/docker/go-metrics
-  version: b84716841b82eab644a0c64fc8b42d480e49add5
+  version: b619b3592b65de4f087d9f16863a7e6ff905973c
 - name: github.com/docker/go-units
   version: 9e638d38cf6977a37a8ea0078f3ee75a7cdb2dd1
 - name: github.com/docker/libtrust
@@ -213,7 +212,7 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/mtrmac/gpgme
-  version: b2432428689ca58c2b8e8dea9449d3295cf96fc9
+  version: c3d28ade92cee62b3b6819332e3a7e38f564ff2c
 - name: github.com/munnerz/goautoneg
   version: a547fc61f48d567d5b4ec6f8aee5573d8efce11d
 - name: github.com/NYTimes/gziphandler
@@ -248,7 +247,7 @@ imports:
   - libcontainer/user
   - libcontainer/utils
 - name: github.com/openshift/api
-  version: a25bb2adc83e68c68e3696332ff1d21694a34bb0
+  version: 8ce0047d664fc92a53ded23caef9ede2dc4468c6
   subpackages:
   - annotations
   - apps
@@ -388,7 +387,7 @@ imports:
   - template/informers/externalversions/template/v1
   - template/listers/template/v1
 - name: github.com/openshift/library-go
-  version: 7d4acc018c610623ee1413b1e7aebe2ac675d35f
+  version: 2cf86bbd930b78997e198b204a59b1711bad3c02
   subpackages:
   - pkg/apps/appsserialization
   - pkg/apps/appsutil
@@ -414,7 +413,7 @@ imports:
   - pkg/template/templateprocessingclient
   - pkg/unidling/unidlingclient
 - name: github.com/openshift/machine-config-operator
-  version: 49d703c2c17a1719c611e3a899a7a5c28e17fa09
+  version: d8511df92d0850463901b06b2d4a82a13aee6359
   subpackages:
   - pkg/controller/container-runtime-config/registries
 - name: github.com/pborman/uuid
@@ -424,7 +423,7 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/pkg/profile
-  version: f6fe06335df110bcf1ed6d4e852b760bfc15beee
+  version: acd64d450fd45fb2afa41f833f3788c8a7797219
 - name: github.com/prometheus/client_golang
   version: 505eaef017263e299324067d40ca2c48f6a2cf50
   subpackages:
@@ -456,7 +455,7 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/cobra
-  version: f2b07da1e2c38d5f12845a4f607e2e1018cbb1f5
+  version: c439c4fa093711d42e1b01acb1235b52004753c1
 - name: github.com/spf13/pflag
   version: 583c0c0531f06d5278b7d917446061adc344b5cd
 - name: go4.org
@@ -1175,5 +1174,5 @@ imports:
   - typed
   - value
 - name: sigs.k8s.io/yaml
-  version: fd68e9863619f6ec2fdd8625fe1f02e7c877e480
+  version: 9fc95527decd95bb9d28cc2eab08179b2d0f6971
 testImports: []

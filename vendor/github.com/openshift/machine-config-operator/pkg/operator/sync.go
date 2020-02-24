@@ -112,6 +112,11 @@ func (optr *Operator) syncRenderConfig(_ *renderConfig) error {
 		return err
 	}
 
+	optrVersion, _ := optr.vStore.Get("operator")
+	if imgs.ReleaseVersion != optrVersion {
+		return fmt.Errorf("refusing to read images.json version %q, operator version %q", imgs.ReleaseVersion, optrVersion)
+	}
+
 	// sync up CAs
 	etcdCA, err := optr.getCAsFromConfigMap("openshift-config", "etcd-serving-ca", "ca-bundle.crt")
 	if err != nil {
@@ -663,6 +668,11 @@ func (optr *Operator) getOsImageURL(namespace string) (string, error) {
 	cm, err := optr.mcoCmLister.ConfigMaps(namespace).Get(osImageConfigMapName)
 	if err != nil {
 		return "", err
+	}
+	releaseVersion := cm.Data["releaseVersion"]
+	optrVersion, _ := optr.vStore.Get("operator")
+	if releaseVersion != optrVersion {
+		return "", fmt.Errorf("refusing to read osImageURL version %q, operator version %q", releaseVersion, optrVersion)
 	}
 	return cm.Data["osImageURL"], nil
 }
