@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/klog"
 
 	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +23,8 @@ import (
 	authorizationclient "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/component-base/metrics/legacyregistry"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	"k8s.io/utils/clock"
 
@@ -76,6 +76,11 @@ type TemplateInstanceController struct {
 	readinessLimiter workqueue.RateLimiter
 
 	clock clock.Clock
+
+	// Prometheus metrics
+	metricsCreated    bool
+	metricsCreateOnce sync.Once
+	metricsCreateLock sync.RWMutex
 }
 
 // NewTemplateInstanceController returns a new TemplateInstanceController.
@@ -105,7 +110,10 @@ func NewTemplateInstanceController(dynamicRestMapper meta.RESTMapper, dynamicCli
 		},
 	})
 
-	prometheus.MustRegister(c)
+	if !c.MetricsCreated() {
+		legacyregistry.MustRegister(c)
+		klog.V(4).Info("template instance metrics registered with prometheus")
+	}
 
 	return c
 }

@@ -3,15 +3,10 @@ package controller
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
-	templateapi "github.com/openshift/api/template/v1"
-	templateclient "github.com/openshift/client-go/template/clientset/versioned"
-	"github.com/openshift/client-go/template/clientset/versioned/fake"
-	templatelister "github.com/openshift/client-go/template/listers/template/v1"
-
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +14,12 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/component-base/metrics/legacyregistry"
+
+	templateapi "github.com/openshift/api/template/v1"
+	templateclient "github.com/openshift/client-go/template/clientset/versioned"
+	"github.com/openshift/client-go/template/clientset/versioned/fake"
+	templatelister "github.com/openshift/client-go/template/listers/template/v1"
 )
 
 type fakeLister struct {
@@ -60,27 +61,26 @@ func (f *fakeResponseWriter) WriteHeader(statusCode int) {
 }
 
 func TestMetrics(t *testing.T) {
-	expectedResponse := `# HELP openshift_template_instance_active_age_seconds Shows the instantaneous age distribution of active TemplateInstance objects
-# TYPE openshift_template_instance_active_age_seconds histogram
-openshift_template_instance_active_age_seconds_bucket{le="600"} 0
-openshift_template_instance_active_age_seconds_bucket{le="1200"} 1
-openshift_template_instance_active_age_seconds_bucket{le="1800"} 1
-openshift_template_instance_active_age_seconds_bucket{le="2400"} 1
-openshift_template_instance_active_age_seconds_bucket{le="3000"} 1
-openshift_template_instance_active_age_seconds_bucket{le="3600"} 1
-openshift_template_instance_active_age_seconds_bucket{le="4200"} 1
-openshift_template_instance_active_age_seconds_bucket{le="+Inf"} 1
-openshift_template_instance_active_age_seconds_sum 900
-openshift_template_instance_active_age_seconds_count 1
-# HELP openshift_template_instance_completed_total Counts completed TemplateInstance objects by condition
-# TYPE openshift_template_instance_completed_total counter
-openshift_template_instance_completed_total{condition="InstantiateFailure"} 2
-openshift_template_instance_completed_total{condition="Ready"} 1
-`
+	expectedResponse := []string{
+		"# HELP openshift_template_instance_active_age_seconds Shows the instantaneous age distribution of active TemplateInstance objects",
+		"# TYPE openshift_template_instance_active_age_seconds histogram",
+		"openshift_template_instance_active_age_seconds_bucket{le=\"600\"} 0",
+		"openshift_template_instance_active_age_seconds_bucket{le=\"1200\"} 1",
+		"openshift_template_instance_active_age_seconds_bucket{le=\"1800\"} 1",
+		"openshift_template_instance_active_age_seconds_bucket{le=\"2400\"} 1",
+		"openshift_template_instance_active_age_seconds_bucket{le=\"3000\"} 1",
+		"openshift_template_instance_active_age_seconds_bucket{le=\"3600\"} 1",
+		"openshift_template_instance_active_age_seconds_bucket{le=\"4200\"} 1",
+		"openshift_template_instance_active_age_seconds_bucket{le=\"+Inf\"} 1",
+		"openshift_template_instance_active_age_seconds_sum 900",
+		"openshift_template_instance_active_age_seconds_count 1",
+		"# HELP openshift_template_instance_completed_total Counts completed TemplateInstance objects by condition",
+		"# TYPE openshift_template_instance_completed_total counter",
+		"openshift_template_instance_completed_total{condition=\"InstantiateFailure\"} 2",
+		"openshift_template_instance_completed_total{condition=\"Ready\"} 1",
+	}
 
 	clock := &fakeClock{now: time.Unix(0, 0)}
-
-	registry := prometheus.NewRegistry()
 
 	fakeTemplateClient := fake.NewSimpleClientset(
 		// when sync is called on this TemplateInstance it should fail and
@@ -168,8 +168,8 @@ openshift_template_instance_completed_total{condition="Ready"} 1
 		readinessLimiter: &workqueue.BucketRateLimiter{},
 	}
 
-	registry.MustRegister(c)
-	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{ErrorHandling: promhttp.PanicOnError})
+	legacyregistry.MustRegister(c)
+	h := promhttp.HandlerFor(legacyregistry.DefaultGatherer, promhttp.HandlerOpts{ErrorHandling: promhttp.PanicOnError})
 
 	// We loop twice: we expect the metrics response to match after the first
 	// set of sync calls, and not change after the second set.
@@ -183,9 +183,11 @@ openshift_template_instance_completed_total{condition="Ready"} 1
 
 		rw := &fakeResponseWriter{header: http.Header{}}
 		h.ServeHTTP(rw, &http.Request{})
-
-		if rw.String() != expectedResponse {
-			t.Errorf("run %d: %s\n", i, rw.String())
+		response := rw.String()
+		for _, expected := range expectedResponse {
+			if !strings.Contains(response, expected) {
+				t.Errorf("run %d: %s not found in %s", i, expected, response)
+			}
 		}
 	}
 }
