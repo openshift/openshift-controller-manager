@@ -3,9 +3,11 @@ package prometheus
 import (
 	"sync"
 
-	"k8s.io/klog"
-
+	"github.com/blang/semver"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"k8s.io/component-base/metrics/legacyregistry"
+	"k8s.io/klog"
 )
 
 const (
@@ -52,14 +54,16 @@ var (
 		nil,
 	)
 
-	isc                 = importStatusCollector{}
-	registerLock        = sync.Mutex{}
-	collectorRegistered = false
+	isc          = importStatusCollector{}
+	registerLock = sync.Mutex{}
 )
 
 type importStatusCollector struct {
 	cbCollectISCounts        QueuedImageStreamFetcher
 	cbCollectScheduledCounts QueuedImageStreamFetcher
+	isCreated                bool
+	createOnce               sync.Once
+	createLock               sync.RWMutex
 }
 
 // InitializeImportCollector is supposed to be called by image import controllers when they are prepared to
@@ -78,15 +82,26 @@ func InitializeImportCollector(
 		isc.cbCollectISCounts = cbCollectISCounts
 	}
 
-	if collectorRegistered {
-		return
-	}
-
-	if isc.cbCollectISCounts != nil && isc.cbCollectScheduledCounts != nil {
-		prometheus.MustRegister(&isc)
-		collectorRegistered = true
+	if !isc.IsCreated() && isc.cbCollectISCounts != nil && isc.cbCollectScheduledCounts != nil {
+		legacyregistry.MustRegister(&isc)
 		klog.V(4).Info("Image import controller metrics registered with prometherus")
 	}
+}
+
+// Create satisfies the k8s metrics.Registerable interface. It is called when the metric is
+// registered with Prometheus via k8s metrics.
+func (isc *importStatusCollector) Create(v *semver.Version) bool {
+	isc.createOnce.Do(func() {
+		isc.createLock.Lock()
+		defer isc.createLock.Unlock()
+		isc.isCreated = true
+	})
+	return isc.IsCreated()
+}
+
+// IsCreated indicates if the metrics were created and registered with Prometheus.
+func (isc *importStatusCollector) IsCreated() bool {
+	return isc.isCreated
 }
 
 func (isc *importStatusCollector) Describe(ch chan<- *prometheus.Desc) {
