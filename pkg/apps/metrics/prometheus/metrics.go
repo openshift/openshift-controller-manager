@@ -3,13 +3,16 @@ package prometheus
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/labels"
 	kcorelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/component-base/metrics/legacyregistry"
+	"k8s.io/klog"
 
 	util "github.com/openshift/library-go/pkg/apps/appsutil"
 )
@@ -47,23 +50,40 @@ var (
 		[]string{"namespace", "name", "phase", "latest_version"}, nil,
 	)
 
-	apps       = appsCollector{}
-	registered = false
+	apps = appsCollector{}
 )
 
 type appsCollector struct {
-	lister kcorelisters.ReplicationControllerLister
-	nowFn  func() time.Time
+	lister     kcorelisters.ReplicationControllerLister
+	nowFn      func() time.Time
+	isCreated  bool
+	createOnce sync.Once
+	createLock sync.RWMutex
 }
 
 func InitializeMetricsCollector(rcLister kcorelisters.ReplicationControllerLister) {
 	apps.lister = rcLister
 	apps.nowFn = time.Now
-	if !registered {
-		prometheus.MustRegister(&apps)
-		registered = true
+	if !apps.IsCreated() {
+		legacyregistry.MustRegister(&apps)
 	}
 	klog.V(4).Info("apps metrics registered with prometheus")
+}
+
+// Create satisfies the k8s metrics.Registerable interface. It is called when the metric is
+// registered with Prometheus via k8s metrics.
+func (c *appsCollector) Create(v *semver.Version) bool {
+	c.createOnce.Do(func() {
+		c.createLock.Lock()
+		defer c.createLock.Unlock()
+		c.isCreated = true
+	})
+	return c.IsCreated()
+}
+
+// IsCreated indicates if the metrics were created and registered with Prometheus.
+func (c *appsCollector) IsCreated() bool {
+	return c.isCreated
 }
 
 func (c *appsCollector) Describe(ch chan<- *prometheus.Desc) {

@@ -3,7 +3,9 @@ package controller
 import (
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/prometheus/client_golang/prometheus"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -41,6 +43,19 @@ func newTemplateInstanceActiveAge() prometheus.Histogram {
 			Buckets: prometheus.LinearBuckets(600, 600, 7),
 		},
 	)
+}
+
+func (c *TemplateInstanceController) Create(v *semver.Version) bool {
+	c.metricsCreateOnce.Do(func() {
+		c.metricsCreateLock.Lock()
+		defer c.metricsCreateLock.Unlock()
+		c.metricsCreated = true
+	})
+	return c.MetricsCreated()
+}
+
+func (c *TemplateInstanceController) MetricsCreated() bool {
+	return c.metricsCreated
 }
 
 func (c *TemplateInstanceController) Describe(ch chan<- *prometheus.Desc) {

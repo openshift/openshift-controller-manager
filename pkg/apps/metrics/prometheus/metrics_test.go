@@ -1,19 +1,24 @@
 package prometheus
 
 import (
+	"bytes"
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
 
 	appsv1 "github.com/openshift/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	kcorelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/component-base/metrics/legacyregistry"
 )
 
 var (
@@ -29,6 +34,34 @@ func mockRC(name string, version int, annotations map[string]string, generation 
 	r.SetCreationTimestamp(creationTime)
 	r.SetAnnotations(annotations)
 	return r
+}
+
+type fakeLister []*corev1.ReplicationController
+
+func (f fakeLister) List(labels.Selector) ([]*corev1.ReplicationController, error) {
+	return f, nil
+}
+
+func (fakeLister) ReplicationControllers(string) kcorelisters.ReplicationControllerNamespaceLister {
+	return nil
+}
+
+func (fakeLister) GetPodControllers(*corev1.Pod) ([]*corev1.ReplicationController, error) {
+	return nil, nil
+}
+
+type fakeResponseWriter struct {
+	bytes.Buffer
+	statusCode int
+	header     http.Header
+}
+
+func (f *fakeResponseWriter) Header() http.Header {
+	return f.header
+}
+
+func (f *fakeResponseWriter) WriteHeader(statusCode int) {
+	f.statusCode = statusCode
 }
 
 func TestCollect(t *testing.T) {
@@ -282,6 +315,68 @@ func TestCollect(t *testing.T) {
 			}
 
 			t.Errorf("[%s] unexpected metric recorded: %s", c.name, m.Desc().String())
+		}
+	}
+}
+
+func TestLegacyRegistry(t *testing.T) {
+	expectedResponse := []string{
+		"# HELP openshift_apps_deploymentconfigs_active_rollouts_duration_seconds Tracks the active rollout duration in seconds",
+		"# TYPE openshift_apps_deploymentconfigs_active_rollouts_duration_seconds counter",
+		"openshift_apps_deploymentconfigs_active_rollouts_duration_seconds{latest_version=\"1\",name=\"active\",namespace=\"test\",phase=\"running\"} 0",
+		"# HELP openshift_apps_deploymentconfigs_complete_rollouts_total Counts total complete rollouts",
+		"# TYPE openshift_apps_deploymentconfigs_complete_rollouts_total gauge",
+		"openshift_apps_deploymentconfigs_complete_rollouts_total{phase=\"available\"} 2",
+		"openshift_apps_deploymentconfigs_complete_rollouts_total{phase=\"cancelled\"} 1",
+		"openshift_apps_deploymentconfigs_complete_rollouts_total{phase=\"failed\"} 2",
+		"# HELP openshift_apps_deploymentconfigs_last_failed_rollout_time Tracks the time of last failure rollout per deployment config",
+		"# TYPE openshift_apps_deploymentconfigs_last_failed_rollout_time gauge",
+		"openshift_apps_deploymentconfigs_last_failed_rollout_time{latest_version=\"1\",name=\"failed\",namespace=\"test\"}",
+	}
+	lister := &fakeLister{
+		mockRC("foo", 1, map[string]string{
+			appsv1.DeploymentStatusAnnotation:  string(appsv1.DeploymentStatusComplete),
+			appsv1.DeploymentVersionAnnotation: "1",
+		}, 0, timeNow),
+		mockRC("foo", 2, map[string]string{
+			appsv1.DeploymentStatusAnnotation:  string(appsv1.DeploymentStatusFailed),
+			appsv1.DeploymentVersionAnnotation: "2",
+		}, 0, timeNow),
+		mockRC("foo", 3, map[string]string{
+			appsv1.DeploymentStatusAnnotation:  string(appsv1.DeploymentStatusComplete),
+			appsv1.DeploymentVersionAnnotation: "3",
+		}, 0, timeNow),
+		mockRC("active", 1, map[string]string{
+			appsv1.DeploymentStatusAnnotation:  string(appsv1.DeploymentStatusRunning),
+			appsv1.DeploymentVersionAnnotation: "1",
+		}, 0, timeNow),
+		mockRC("failed", 1, map[string]string{
+			appsv1.DeploymentStatusAnnotation:  string(appsv1.DeploymentStatusFailed),
+			appsv1.DeploymentVersionAnnotation: "1",
+		}, 0, timeNow),
+		mockRC("cancel", 1, map[string]string{
+			appsv1.DeploymentCancelledAnnotation: "true",
+			appsv1.DeploymentStatusAnnotation:    string(appsv1.DeploymentStatusFailed),
+			appsv1.DeploymentVersionAnnotation:   "1",
+		}, 0, timeNow),
+	}
+
+	ac := appsCollector{
+		lister: lister,
+		nowFn:  defaultTimeNowFn,
+	}
+
+	legacyregistry.MustRegister(&ac)
+
+	h := promhttp.HandlerFor(legacyregistry.DefaultGatherer, promhttp.HandlerOpts{ErrorHandling: promhttp.PanicOnError})
+	rw := &fakeResponseWriter{header: http.Header{}}
+	h.ServeHTTP(rw, &http.Request{})
+
+	respStr := rw.String()
+
+	for _, s := range expectedResponse {
+		if !strings.Contains(respStr, s) {
+			t.Errorf("expected string %s did not appear in %s", s, respStr)
 		}
 	}
 }
