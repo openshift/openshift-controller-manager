@@ -91,7 +91,7 @@ func (r tagRetriever) ImageStreamTag(namespace, name string) (ref string, rv int
 		streamCopy := is.DeepCopy()
 		// in case the api server has not yet picked up the internal registry hostname from the cluster wide
 		// OCM config, we use our copy here to facilitate leveraging pull through with local tag reference policy
-		streamCopy.Status.DockerImageRepository = r.internalRegistryHostname
+		streamCopy.Status.DockerImageRepository = fmt.Sprintf("%s/%s/%s", r.internalRegistryHostname, namespace, name)
 		ref, ok = imageutil.ResolveLatestTaggedImage(streamCopy, tag)
 	}
 	return ref, rv, ok
