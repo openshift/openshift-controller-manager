@@ -2333,6 +2333,51 @@ func isValidTransition(from, to buildv1.BuildPhase) bool {
 	return true
 }
 
+// isBadBuildPhase returns true if either the build struct or buildUpdate struct
+// have a phase of buildv1.BuildPhaseFailed or buildv1.BuildPhaseError
+func isBadBuildPhase(build *buildv1.Build, update *buildUpdate) bool {
+	switch build.Status.Phase {
+	case buildv1.BuildPhaseFailed:
+		return true
+	case buildv1.BuildPhaseError:
+		// containers completing but exiting with non-0 RCs fall under here
+		return true
+	}
+	if update != nil && update.phase != nil {
+		switch *update.phase {
+		case buildv1.BuildPhaseFailed:
+			return true
+		case buildv1.BuildPhaseError:
+			return true
+		}
+	}
+	return false
+}
+
+// isBasdPodStatus returns 3 values based on the state of the Pod struct:
+// 1) a boolean for whether the main build container is in terminated state (only 1 container for builds)
+// 2) a boolean for whether any of the build init containers are in terminated state (up to 3 init containers for builds)
+// 3) the index into the init container array for the first init container found in terminated state
+// terminated containers take precedence over terminated init containers
+func isBadPodStatus(pod *corev1.Pod) (bool, bool, int) {
+	if pod == nil {
+		return false, false, -1
+	}
+	if len(pod.Status.ContainerStatuses) != 0 && pod.Status.ContainerStatuses[0].State.Terminated != nil {
+		return true, false, -1
+	}
+	// we have 1 container, but up to 3 init containers, so for readability factoring out the init container
+	// terminated determination here
+	if len(pod.Status.InitContainerStatuses) > 0 {
+		for i, ics := range pod.Status.InitContainerStatuses {
+			if ics.State.Terminated != nil {
+				return false, true, i
+			}
+		}
+	}
+	return false, false, -1
+}
+
 // setBuildCompletionData sets the build completion time and duration as well as the start time
 // if not already set on the given buildUpdate object.  It also sets the log tail data
 // if applicable.
@@ -2355,9 +2400,17 @@ func setBuildCompletionData(build *buildv1.Build, pod *corev1.Pod, update *build
 		update.setDuration(now.Rfc3339Copy().Time.Sub(startTime.Rfc3339Copy().Time))
 	}
 
-	if (build.Status.Phase == buildv1.BuildPhaseFailed || (update.phase != nil && *update.phase == buildv1.BuildPhaseFailed)) && len(build.Status.LogSnippet) == 0 &&
-		pod != nil && len(pod.Status.ContainerStatuses) != 0 && pod.Status.ContainerStatuses[0].State.Terminated != nil {
-		msg := pod.Status.ContainerStatuses[0].State.Terminated.Message
+	badContState, badInitContState, initContainerTerminated := isBadPodStatus(pod)
+	if isBadBuildPhase(build, update) &&
+		len(build.Status.LogSnippet) == 0 &&
+		(badContState || badInitContState) {
+		msg := ""
+		if badContState {
+			msg = pod.Status.ContainerStatuses[0].State.Terminated.Message
+		}
+		if len(msg) == 0 && badInitContState {
+			msg = pod.Status.InitContainerStatuses[initContainerTerminated].State.Terminated.Message
+		}
 		if len(msg) != 0 {
 			parts := strings.Split(strings.TrimRight(msg, "\n"), "\n")
 
