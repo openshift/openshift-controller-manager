@@ -23,7 +23,7 @@ require (
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/mtrmac/gpgme v0.0.0-20170102180018-b2432428689c // indirect
+	github.com/mtrmac/gpgme v0.1.2 // indirect
 	github.com/onsi/ginkgo v1.10.2 // indirect
 	github.com/onsi/gomega v1.7.0 // indirect
 	github.com/openshift/api v3.9.1-0.20191028134408-abf28f93703b+incompatible
