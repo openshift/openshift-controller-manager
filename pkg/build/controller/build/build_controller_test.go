@@ -1065,7 +1065,7 @@ func TestIsTerminal(t *testing.T) {
 	}
 }
 
-func TestSetBuildCompletionTimestampAndDuration(t *testing.T) {
+func TestSetBuildCompletionTimestampAndDurationAndErrorLog(t *testing.T) {
 	// set start time to 2 seconds ago to have some significant duration
 	startTime := metav1.NewTime(time.Now().Add(time.Second * -2))
 	earlierTime := metav1.NewTime(startTime.Add(time.Hour * -1))
@@ -1081,11 +1081,19 @@ func TestSetBuildCompletionTimestampAndDuration(t *testing.T) {
 	buildWithStartTime := &buildv1.Build{}
 	buildWithStartTime.Status.StartTimestamp = &startTime
 	buildWithNoStartTime := &buildv1.Build{}
+	failedBuild := &buildv1.Build{
+		Status: buildv1.BuildStatus{
+			Phase: buildv1.BuildPhaseFailed,
+		},
+	}
 	tests := []struct {
-		name         string
-		build        *buildv1.Build
-		podStartTime *metav1.Time
-		expected     *buildUpdate
+		name                  string
+		build                 *buildv1.Build
+		podStartTime          *metav1.Time
+		expected              *buildUpdate
+		containerErrorMsg     string
+		initContainerErrorMsg string
+		numInitContainers     int
 	}{
 		{
 			name:         "build with start time",
@@ -1116,13 +1124,55 @@ func TestSetBuildCompletionTimestampAndDuration(t *testing.T) {
 				duration:       &zeroDuration,
 			},
 		},
+		{
+			name:              "build with main container died",
+			build:             failedBuild,
+			containerErrorMsg: "main container died",
+		},
+		{
+			name:                  "build with last init container died",
+			build:                 failedBuild,
+			initContainerErrorMsg: "last init container died",
+			numInitContainers:     3,
+		},
 	}
 
 	for _, test := range tests {
 		update := &buildUpdate{}
 		pod := &corev1.Pod{}
 		pod.Status.StartTime = test.podStartTime
+		if len(test.containerErrorMsg) > 0 {
+			pod.Status.ContainerStatuses = []corev1.ContainerStatus{
+				{
+					State: corev1.ContainerState{
+						Terminated: &corev1.ContainerStateTerminated{
+							Message: test.containerErrorMsg,
+						},
+					},
+				},
+			}
+		}
+		if len(test.initContainerErrorMsg) > 0 {
+			pod.Status.InitContainerStatuses = make([]corev1.ContainerStatus, test.numInitContainers)
+			pod.Status.InitContainerStatuses[test.numInitContainers-1].State = corev1.ContainerState{
+				Terminated: &corev1.ContainerStateTerminated{
+					Message: test.initContainerErrorMsg,
+				},
+			}
+		}
 		setBuildCompletionData(test.build, pod, update)
+		if len(test.containerErrorMsg) > 0 {
+			if test.containerErrorMsg != *update.logSnippet {
+				t.Errorf("%s: logSnippet should be set to %s", test.name, test.containerErrorMsg)
+			}
+			continue
+		}
+		if len(test.initContainerErrorMsg) > 0 {
+			if test.initContainerErrorMsg != *update.logSnippet {
+				t.Errorf("%s: logSnippet should be set to %s", test.name, test.initContainerErrorMsg)
+			}
+			continue
+		}
 		// Ensure that only the fields in the expected update are set
 		if test.expected.podNameAnnotation == nil && (test.expected.podNameAnnotation != update.podNameAnnotation) {
 			t.Errorf("%s: podNameAnnotation should not be set", test.name)
