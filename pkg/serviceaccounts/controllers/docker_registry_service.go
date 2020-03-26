@@ -58,8 +58,8 @@ func NewDockerRegistryServiceController(secrets informers.SecretInformer, servic
 		additionalRegistryURLs: options.AdditionalRegistryURLs,
 		clusterDNSSuffix:       options.ClusterDNSSuffix,
 		dockercfgController:    options.DockercfgController,
-		registryLocationQueue:  workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
-		secretsToUpdate:        workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		registryLocationQueue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "serviceaccount-registry-location"),
+		secretsToUpdate:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "serviceaccount-registry-location-reactions"),
 		dockerURLsInitialized:  options.DockerURLsInitialized,
 	}
 

@@ -68,7 +68,7 @@ type DockercfgControllerOptions struct {
 func NewDockercfgController(serviceAccounts informers.ServiceAccountInformer, secrets informers.SecretInformer, cl kclientset.Interface, options DockercfgControllerOptions) *DockercfgController {
 	e := &DockercfgController{
 		client:                cl,
-		queue:                 workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		queue:                 workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "serviceaccount-create-dockercfg"),
 		dockerURLsInitialized: options.DockerURLsInitialized,
 	}
 
