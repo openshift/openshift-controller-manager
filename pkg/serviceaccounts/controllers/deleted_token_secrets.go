@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"time"
 
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 
+	"k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	informers "k8s.io/client-go/informers/core/v1"
 	kclientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
 // DockercfgTokenDeletedControllerOptions contains options for the DockercfgTokenDeletedController
@@ -78,7 +80,8 @@ func (e *DockercfgTokenDeletedController) secretDeleted(obj interface{}) {
 	if !ok {
 		return
 	}
-	dockercfgSecrets, err := findDockercfgSecrets(e.client, tokenSecret)
+
+	dockercfgSecrets, err := e.findDockercfgSecrets(tokenSecret)
 	if err != nil {
 		klog.Error(err)
 		return
@@ -86,16 +89,30 @@ func (e *DockercfgTokenDeletedController) secretDeleted(obj interface{}) {
 	if len(dockercfgSecrets) == 0 {
 		return
 	}
+
 	// remove the reference token secrets
 	for _, dockercfgSecret := range dockercfgSecrets {
-		if metav1.IsControlledBy(dockercfgSecret, tokenSecret) {
-			// If the docker pull secret is owned by its associated token, let garbage collection take care of it.
-			klog.V(5).Infof("Ignoring deletion of pull secret %s/%s because it should be removed via garbage collection", dockercfgSecret.Namespace, dockercfgSecret.Name)
-			continue
-		}
-		klog.V(4).Infof("Deleting pull secret %s/%s because its associated token %s/%s has been deleted", dockercfgSecret.Namespace, dockercfgSecret.Name, tokenSecret.Namespace, tokenSecret.Name)
 		if err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(dockercfgSecret.Name, nil); (err != nil) && !apierrors.IsNotFound(err) {
 			utilruntime.HandleError(err)
 		}
 	}
+}
+
+// findDockercfgSecret checks all the secrets in the namespace to see if the token secret has any existing dockercfg secrets that reference it
+func (e *DockercfgTokenDeletedController) findDockercfgSecrets(tokenSecret *v1.Secret) ([]*v1.Secret, error) {
+	dockercfgSecrets := []*v1.Secret{}
+
+	options := metav1.ListOptions{FieldSelector: fields.OneTermEqualSelector(api.SecretTypeField, string(v1.SecretTypeDockercfg)).String()}
+	potentialSecrets, err := e.client.CoreV1().Secrets(tokenSecret.Namespace).List(options)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, currSecret := range potentialSecrets.Items {
+		if currSecret.Annotations[ServiceAccountTokenSecretNameKey] == tokenSecret.Name {
+			dockercfgSecrets = append(dockercfgSecrets, &potentialSecrets.Items[i])
+		}
+	}
+
+	return dockercfgSecrets, nil
 }

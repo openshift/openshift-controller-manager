@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,12 +39,7 @@ func regularSecretReferences() []v1.ObjectReference {
 
 // tokenSecretReferences is used by a service account that references a ServiceAccountToken secret
 func tokenSecretReferences() []v1.ObjectReference {
-	return []v1.ObjectReference{
-		{
-			Name: "token-secret-1",
-			UID:  "23456",
-		},
-	}
+	return []v1.ObjectReference{{Name: "token-secret-1"}}
 }
 
 // addTokenSecretReference adds a reference to the ServiceAccountToken that will be created
@@ -81,37 +76,6 @@ func createdDockercfgSecret() *v1.Secret {
 				v1.ServiceAccountNameKey:         "default",
 				v1.ServiceAccountUIDKey:          "12345",
 				ServiceAccountTokenSecretNameKey: "token-secret-1",
-			},
-		},
-		Type: v1.SecretTypeDockercfg,
-		Data: map[string][]byte{
-			v1.DockerConfigKey: []byte(`{"docker-registry.default.svc.cluster.local":{"Username":"serviceaccount","Password":"ABC","Email":"serviceaccount@example.org"}}`),
-		},
-	}
-}
-
-// createdDockercfgSecretWithOwnerRef returns the ServiceAccountToken secret posted when creating a new token secret, including an owner reference.
-// Named "default-token-fplln", since that is the first generated name after rand.Seed(1)
-func createdDockercfgSecretWithOwnerRef() *v1.Secret {
-	isController := true
-	gv := v1.SchemeGroupVersion
-	return &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "default-dockercfg-fplln",
-			Namespace: "default",
-			Annotations: map[string]string{
-				v1.ServiceAccountNameKey:         "default",
-				v1.ServiceAccountUIDKey:          "12345",
-				ServiceAccountTokenSecretNameKey: "token-secret-1",
-			},
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: gv.String(),
-					Kind:       "Secret",
-					Name:       "token-secret-1",
-					UID:        "23456",
-					Controller: &isController,
-				},
 			},
 		},
 		Type: v1.SecretTypeDockercfg,
@@ -199,7 +163,7 @@ func TestTokenDeletion(t *testing.T) {
 			},
 		},
 		"deleted token secret with serviceaccount without reference": {
-			ClientObjects: []runtime.Object{serviceAccount(addTokenSecretReference(tokenSecretReferences()), imagePullSecretReferences()), createdDockercfgSecret(), serviceAccountTokenSecret()},
+			ClientObjects: []runtime.Object{serviceAccount(addTokenSecretReference(tokenSecretReferences()), imagePullSecretReferences()), createdDockercfgSecret()},
 
 			DeletedSecret: serviceAccountTokenSecret(),
 			ExpectedActions: []clientgotesting.Action{
@@ -208,16 +172,6 @@ func TestTokenDeletion(t *testing.T) {
 					schema.GroupVersionKind{Kind: "Secret", Version: "v1"},
 					"default", metav1.ListOptions{FieldSelector: dockercfgSecretFieldSelector.String()}),
 				clientgotesting.NewDeleteAction(schema.GroupVersionResource{Resource: "secrets", Version: "v1"}, "default", "default-dockercfg-fplln"),
-			},
-		},
-		"deleted token secret with pull secret owner reference": {
-			ClientObjects: []runtime.Object{serviceAccount(addTokenSecretReference(tokenSecretReferences()), imagePullSecretReferences()), createdDockercfgSecretWithOwnerRef(), serviceAccountTokenSecret()},
-			DeletedSecret: serviceAccountTokenSecret(),
-			ExpectedActions: []clientgotesting.Action{
-				clientgotesting.NewListAction(
-					schema.GroupVersionResource{Resource: "secrets", Version: "v1"},
-					schema.GroupVersionKind{Kind: "Secret", Version: "v1"},
-					"default", metav1.ListOptions{FieldSelector: dockercfgSecretFieldSelector.String()}),
 			},
 		},
 	}
