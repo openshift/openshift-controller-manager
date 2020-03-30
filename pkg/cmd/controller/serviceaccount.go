@@ -43,7 +43,10 @@ func RunServiceAccountController(ctx *ControllerContext) (bool, error) {
 }
 
 func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error) {
-	kc := ctx.ClientBuilder.ClientOrDie(iInfraServiceAccountPullSecretsControllerServiceAccountName)
+	// Bug 1785023: Increase the rate limit for the SA Pull Secrets controller.
+	// The pull secrets controller needs to create new dockercfg secrets at the same rate as the
+	// upstream token secret controller.
+	kc := ctx.HighRateLimitClientBuilder.ClientOrDie(iInfraServiceAccountPullSecretsControllerServiceAccountName)
 
 	go serviceaccountcontrollers.NewDockercfgDeletedController(
 		ctx.KubernetesInformers.Core().V1().Secrets(),
