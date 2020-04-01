@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -62,7 +63,7 @@ func checkBuildConfigReadiness(oc buildv1client.Interface, obj runtime.Object) (
 		return false, false, fmt.Errorf("object %T is not v1.BuildConfig", obj)
 	}
 
-	builds, err := oc.BuildV1().Builds(bc.Namespace).List(metav1.ListOptions{LabelSelector: buildutil.BuildConfigSelector(bc.Name).String()})
+	builds, err := oc.BuildV1().Builds(bc.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: buildutil.BuildConfigSelector(bc.Name).String()})
 	if err != nil {
 		return false, false, err
 	}

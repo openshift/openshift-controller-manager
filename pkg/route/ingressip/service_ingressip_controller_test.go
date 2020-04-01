@@ -1,6 +1,7 @@
 package ingressip
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -601,7 +602,7 @@ func TestBasicControllerFlow(t *testing.T) {
 		t.Fatalf("failed waiting for update: %v", err)
 	}
 
-	client.CoreV1().Services(namespace).Delete("lb-unallocated", &metav1.DeleteOptions{})
+	client.CoreV1().Services(namespace).Delete(context.TODO(), "lb-unallocated", metav1.DeleteOptions{})
 
 	// Wait for a delete to be persisted.
 	err = wait.Poll(25*time.Millisecond, 2*time.Second, func() (done bool, err error) {

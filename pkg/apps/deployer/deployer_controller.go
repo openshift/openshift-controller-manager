@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -160,7 +161,7 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 				return fatalError(fmt.Sprintf("couldn't make deployer pod for %q: %v", appsutil.LabelForDeployment(deployment), err))
 			}
 			// Create the deployer pod.
-			deploymentPod, err := c.pn.Pods(deployment.Namespace).Create(deployerPod)
+			deploymentPod, err := c.pn.Pods(deployment.Namespace).Create(context.TODO(), deployerPod, metav1.CreateOptions{})
 			// Retry on error.
 			if err != nil {
 				// if we cannot create a deployment pod (i.e lack of quota), match normal replica set experience and
@@ -285,7 +286,7 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 			}
 		}
 
-		if _, err := c.rn.ReplicationControllers(deploymentCopy.Namespace).Update(deploymentCopy); err != nil {
+		if _, err := c.rn.ReplicationControllers(deploymentCopy.Namespace).Update(context.TODO(), deploymentCopy, metav1.UpdateOptions{}); err != nil {
 			return fmt.Errorf("couldn't update rollout status for %q to %s: %v", appsutil.LabelForDeployment(deploymentCopy), nextStatus, err)
 		}
 		klog.V(4).Infof("Updated rollout status for %q from %s to %s (scale: %d)", appsutil.LabelForDeployment(deploymentCopy), currentStatus, nextStatus, *deploymentCopy.Spec.Replicas)
@@ -536,7 +537,7 @@ func (c *DeploymentController) setDeployerPodsOwnerRef(deployment *corev1.Replic
 			errors = append(errors, err)
 			continue
 		}
-		if _, err := c.pn.Pods(pod.Namespace).Patch(pod.Name, types.StrategicMergePatchType, patchBytes); err != nil {
+		if _, err := c.pn.Pods(pod.Namespace).Patch(context.TODO(), pod.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{}); err != nil {
 			errors = append(errors, err)
 		}
 	}
@@ -551,7 +552,7 @@ func (c *DeploymentController) cleanupDeployerPods(deployment *corev1.Replicatio
 
 	cleanedAll := true
 	for _, deployerPod := range deployerList {
-		if err := c.pn.Pods(deployerPod.Namespace).Delete(deployerPod.Name, &metav1.DeleteOptions{}); err != nil && !kerrors.IsNotFound(err) {
+		if err := c.pn.Pods(deployerPod.Namespace).Delete(context.TODO(), deployerPod.Name, metav1.DeleteOptions{}); err != nil && !kerrors.IsNotFound(err) {
 			// if the pod deletion failed, then log the error and continue
 			// we will try to delete any remaining deployer pods and return an error later
 			utilruntime.HandleError(fmt.Errorf("couldn't delete completed deployer pod %q for %q: %v", deployerPod.Name, appsutil.LabelForDeployment(deployment), err))

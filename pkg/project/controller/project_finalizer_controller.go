@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 
 	"k8s.io/klog"
 
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -149,6 +151,6 @@ func (c *ProjectFinalizerController) finalize(namespace *v1.Namespace) error {
 	}
 
 	// we have removed content, so mark it finalized by us
-	_, err := c.client.CoreV1().Namespaces().Finalize(namespace)
+	_, err := c.client.CoreV1().Namespaces().Finalize(context.TODO(), namespace, metav1.UpdateOptions{})
 	return err
 }

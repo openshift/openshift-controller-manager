@@ -1,6 +1,7 @@
 package ingressip
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sort"
@@ -11,6 +12,7 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -660,9 +662,9 @@ func persistService(client kcoreclient.ServicesGetter, service *v1.Service, targ
 	return wait.ExponentialBackoff(backoff, func() (bool, error) {
 		var err error
 		if targetStatus {
-			_, err = client.Services(service.Namespace).UpdateStatus(service)
+			_, err = client.Services(service.Namespace).UpdateStatus(context.TODO(), service, metav1.UpdateOptions{})
 		} else {
-			_, err = client.Services(service.Namespace).Update(service)
+			_, err = client.Services(service.Namespace).Update(context.TODO(), service, metav1.UpdateOptions{})
 		}
 		switch {
 		case err == nil:

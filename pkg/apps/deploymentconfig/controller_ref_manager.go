@@ -1,6 +1,7 @@
 package deploymentconfig
 
 import (
+	"context"
 	"fmt"
 
 	"k8s.io/api/core/v1"
@@ -34,7 +35,7 @@ var _ RCControlInterface = &RealRCControl{}
 
 // PatchReplicationController executes a strategic merge patch contained in 'data' on RC specified by 'namespace' and 'name'
 func (r RealRCControl) PatchReplicationController(namespace, name string, data []byte) error {
-	_, err := r.KubeClient.CoreV1().ReplicationControllers(namespace).Patch(name, types.StrategicMergePatchType, data)
+	_, err := r.KubeClient.CoreV1().ReplicationControllers(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, data, kmetav1.PatchOptions{})
 	return err
 }
 

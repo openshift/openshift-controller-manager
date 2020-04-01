@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ type fakeBuildLister struct {
 
 func (f *fakeBuildLister) List(label labels.Selector) ([]*buildv1.Build, error) {
 	var items []*buildv1.Build
-	builds, err := f.f.Builds("test").List(metav1.ListOptions{LabelSelector: label.String()})
+	builds, err := f.f.Builds("test").List(context.TODO(), metav1.ListOptions{LabelSelector: label.String()})
 	if err != nil {
 		return nil, err
 	}

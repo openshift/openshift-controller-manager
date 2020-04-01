@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
@@ -81,7 +82,7 @@ func HandleBuildPruning(buildConfigName string, namespace string, buildLister bu
 
 	for i, b := range buildsToDelete {
 		klog.V(4).Infof("Pruning build: %s/%s", b.Namespace, b.Name)
-		if err := buildDeleter.Builds(b.Namespace).Delete(buildsToDelete[i].Name, &metav1.DeleteOptions{}); err != nil {
+		if err := buildDeleter.Builds(b.Namespace).Delete(context.TODO(), buildsToDelete[i].Name, metav1.DeleteOptions{}); err != nil {
 			errList = append(errList, err)
 		}
 	}

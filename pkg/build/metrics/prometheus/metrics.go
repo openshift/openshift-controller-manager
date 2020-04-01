@@ -114,6 +114,16 @@ func (bc *buildCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
+func (bc *buildCollector) ClearState() {
+	bc.createLock.Lock()
+	defer bc.createLock.Unlock()
+	bc.isCreated = false
+}
+
+func (bc *buildCollector) FQName() string {
+	return buildSubsystem
+}
+
 func addCountGauge(ch chan<- prometheus.Metric, desc *prometheus.Desc, phase, reason, strategy string, v float64) {
 	lv := []string{phase, reason, strategy}
 	ch <- prometheus.MustNewConstMetric(desc, prometheus.GaugeValue, v, lv...)

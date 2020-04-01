@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"context"
+
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +16,7 @@ func findDockercfgSecrets(client kubernetes.Interface, tokenSecret *corev1.Secre
 	dockercfgSecrets := []*corev1.Secret{}
 
 	options := metav1.ListOptions{FieldSelector: fields.OneTermEqualSelector(api.SecretTypeField, string(v1.SecretTypeDockercfg)).String()}
-	potentialSecrets, err := client.CoreV1().Secrets(tokenSecret.Namespace).List(options)
+	potentialSecrets, err := client.CoreV1().Secrets(tokenSecret.Namespace).List(context.TODO(), options)
 	if err != nil {
 		return nil, err
 	}

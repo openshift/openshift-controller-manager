@@ -1,6 +1,7 @@
 package deploymentconfig
 
 import (
+	"context"
 	"reflect"
 	"sort"
 	"strconv"
@@ -371,10 +372,10 @@ func TestHandleScenarios(t *testing.T) {
 			informer: cache.NewSharedIndexInformer(
 				&cache.ListWatch{
 					ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-						return oc.AppsV1().DeploymentConfigs(metav1.NamespaceAll).List(options)
+						return oc.AppsV1().DeploymentConfigs(metav1.NamespaceAll).List(context.TODO(), options)
 					},
 					WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-						return oc.AppsV1().DeploymentConfigs(metav1.NamespaceAll).Watch(options)
+						return oc.AppsV1().DeploymentConfigs(metav1.NamespaceAll).Watch(context.TODO(), options)
 					},
 				},
 				&appsv1.DeploymentConfig{},

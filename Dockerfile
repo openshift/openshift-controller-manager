@@ -1,6 +1,5 @@
 FROM registry.svc.ci.openshift.org/ocp/builder:golang-1.13 AS builder
 WORKDIR /go/src/github.com/openshift/openshift-controller-manager
-RUN yum install -y gpgme-devel libassuan-devel
 COPY . .
 RUN make build --warn-undefined-variables
 

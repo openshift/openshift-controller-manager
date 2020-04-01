@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ type fakeLister struct {
 }
 
 func (f *fakeLister) List(labels.Selector) ([]*templateapi.TemplateInstance, error) {
-	list, err := f.templateClient.TemplateV1().TemplateInstances("").List(metav1.ListOptions{})
+	list, err := f.templateClient.TemplateV1().TemplateInstances("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +40,7 @@ func (f *fakeLister) List(labels.Selector) ([]*templateapi.TemplateInstance, err
 }
 
 func (f *fakeLister) Get(name string) (*templateapi.TemplateInstance, error) {
-	return f.templateClient.TemplateV1().TemplateInstances("").Get(name, metav1.GetOptions{})
+	return f.templateClient.TemplateV1().TemplateInstances("").Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 func (f *fakeLister) TemplateInstances(string) templatelister.TemplateInstanceNamespaceLister {

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -127,7 +128,7 @@ func (c *BuildConfigController) handleBuildConfig(bc *buildv1.BuildConfig) error
 		},
 		LastVersion: &lastVersion,
 	}
-	if _, err := c.buildConfigGetter.BuildConfigs(bc.Namespace).Instantiate(bc.Namespace, request); err != nil {
+	if _, err := c.buildConfigGetter.BuildConfigs(bc.Namespace).Instantiate(context.TODO(), bc.Namespace, request, metav1.CreateOptions{}); err != nil {
 		var instantiateErr error
 		if kerrors.IsConflict(err) {
 			instantiateErr = fmt.Errorf("unable to instantiate Build for BuildConfig %s due to a conflicting update: %v", bcDesc(bc), err)

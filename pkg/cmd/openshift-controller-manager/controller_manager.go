@@ -115,7 +115,7 @@ func WaitForHealthyAPIServer(client rest.Interface) error {
 	// important when we start apiserver and controller manager at the same time.
 	err := wait.PollImmediate(time.Second, 5*time.Minute, func() (bool, error) {
 		healthStatus := 0
-		resp := client.Get().AbsPath("/healthz").Do().StatusCode(&healthStatus)
+		resp := client.Get().AbsPath("/healthz").Do(context.TODO()).StatusCode(&healthStatus)
 		if healthStatus != http.StatusOK {
 			klog.Errorf("Server isn't healthy yet. Waiting a little while.")
 			return false, nil

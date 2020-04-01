@@ -1,6 +1,7 @@
 package buildconfigs
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 
@@ -220,7 +221,7 @@ func (r *buildConfigReactor) ImageChanged(obj runtime.Object, tagRetriever trigg
 
 	// instantiate new build
 	klog.V(4).Infof("Requesting build for BuildConfig based on image triggers %s/%s: %#v", bc.Namespace, bc.Name, request)
-	_, err := r.instantiator.BuildConfigs(bc.Namespace).Instantiate(bc.Namespace, request)
+	_, err := r.instantiator.BuildConfigs(bc.Namespace).Instantiate(context.TODO(), bc.Namespace, request, metav1.CreateOptions{})
 	if err != nil {
 		instantiateErr := fmt.Errorf("error triggering Build for BuildConfig %s/%s: %v", bc.Namespace, bc.Name, err)
 		utilruntime.HandleError(instantiateErr)

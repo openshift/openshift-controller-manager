@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"k8s.io/klog"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -423,7 +425,7 @@ func (e *DockerRegistryServiceController) syncSecretUpdate(key string) error {
 	}
 	dockercfgSecret.Data[v1.DockerConfigKey] = dockercfgContent
 
-	if _, err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Update(dockercfgSecret); err != nil {
+	if _, err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Update(context.TODO(), dockercfgSecret, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 

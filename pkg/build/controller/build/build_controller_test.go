@@ -1,6 +1,7 @@
 package build
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -542,13 +543,13 @@ func TestCreateBuildPod(t *testing.T) {
 	expected.setMessage("")
 	validateUpdate(t, "create build pod", expected, update)
 	// Make sure that a pod was created
-	pod, err := kubeClient.CoreV1().Pods("namespace").Get(podName, metav1.GetOptions{})
+	pod, err := kubeClient.CoreV1().Pods("namespace").Get(context.TODO(), podName, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	// Make sure that a configMap was created, with an ownerRef
 	configMapName := buildutil.GetBuildCAConfigMapName(build)
-	configMap, err := kubeClient.CoreV1().ConfigMaps("namespace").Get(configMapName, metav1.GetOptions{})
+	configMap, err := kubeClient.CoreV1().ConfigMaps("namespace").Get(context.TODO(), configMapName, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -937,7 +938,7 @@ func TestCancelBuild(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if _, err := client.Pods("testns").Get("canceltest-build", metav1.GetOptions{}); err == nil {
+	if _, err := client.Pods("testns").Get(context.TODO(), "canceltest-build", metav1.GetOptions{}); err == nil {
 		t.Errorf("expect pod canceltest-build to have been deleted")
 	}
 	if update.phase == nil || *update.phase != buildv1.BuildPhaseCancelled {

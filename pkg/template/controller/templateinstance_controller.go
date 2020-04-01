@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -202,7 +203,7 @@ func (c *TemplateInstanceController) sync(key string) error {
 		}
 	}
 
-	_, err = c.templateClient.TemplateInstances(templateInstanceCopy.Namespace).UpdateStatus(templateInstanceCopy)
+	_, err = c.templateClient.TemplateInstances(templateInstanceCopy.Namespace).UpdateStatus(context.TODO(), templateInstanceCopy, metav1.UpdateOptions{})
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("TemplateInstance status update failed: %v", err))
 		return err
@@ -255,7 +256,7 @@ func (c *TemplateInstanceController) checkReadiness(templateInstance *templatev1
 			return false, err
 		}
 
-		obj, err := c.dynamicClient.Resource(mapping.Resource).Namespace(object.Ref.Namespace).Get(object.Ref.Name, metav1.GetOptions{})
+		obj, err := c.dynamicClient.Resource(mapping.Resource).Namespace(object.Ref.Namespace).Get(context.TODO(), object.Ref.Name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
@@ -401,7 +402,7 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 			return err
 		}
 
-		s, err := c.kc.CoreV1().Secrets(templateInstance.Namespace).Get(templateInstance.Spec.Secret.Name, metav1.GetOptions{})
+		s, err := c.kc.CoreV1().Secrets(templateInstance.Namespace).Get(context.TODO(), templateInstance.Spec.Secret.Name, metav1.GetOptions{})
 		secret = s
 		if err != nil {
 			return err
@@ -500,9 +501,9 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 			continue
 		}
 
-		createObj, createErr := c.dynamicClient.Resource(restMapping.Resource).Namespace(namespace).Create(&currObj, metav1.CreateOptions{})
+		createObj, createErr := c.dynamicClient.Resource(restMapping.Resource).Namespace(namespace).Create(context.TODO(), &currObj, metav1.CreateOptions{})
 		if kerrors.IsAlreadyExists(createErr) {
-			freshGottenObj, getErr := c.dynamicClient.Resource(restMapping.Resource).Namespace(namespace).Get(currObj.GetName(), metav1.GetOptions{})
+			freshGottenObj, getErr := c.dynamicClient.Resource(restMapping.Resource).Namespace(namespace).Get(context.TODO(), currObj.GetName(), metav1.GetOptions{})
 			if getErr != nil {
 				allErrors = append(allErrors, getErr)
 				continue

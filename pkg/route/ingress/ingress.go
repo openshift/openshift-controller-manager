@@ -1,6 +1,7 @@
 package ingress
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -434,7 +435,7 @@ func (c *Controller) sync(key queueKey) error {
 			return err
 		}
 		data = []byte(fmt.Sprintf(`[{"op":"replace","path":"/spec","value":%s}]`, data))
-		_, err = c.client.Routes(route.Namespace).Patch(route.Name, types.JSONPatchType, data)
+		_, err = c.client.Routes(route.Namespace).Patch(context.TODO(), route.Name, types.JSONPatchType, data, metav1.PatchOptions{})
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -442,7 +443,7 @@ func (c *Controller) sync(key queueKey) error {
 
 	// purge any previously managed routes
 	for _, route := range old {
-		if err := c.client.Routes(route.Namespace).Delete(route.Name, nil); err != nil && !kerrors.IsNotFound(err) {
+		if err := c.client.Routes(route.Namespace).Delete(context.TODO(), route.Name, metav1.DeleteOptions{}); err != nil && !kerrors.IsNotFound(err) {
 			errs = append(errs, err)
 		}
 	}
@@ -684,7 +685,7 @@ func createRouteWithName(client routeclient.RoutesGetter, ingress *extensionsv1b
 		// prevent racing with the route cache.
 		expect.Expect(ingress.Namespace, ingress.Name, route.Name)
 
-		_, err := client.Routes(route.Namespace).Create(route)
+		_, err := client.Routes(route.Namespace).Create(context.TODO(), route, metav1.CreateOptions{})
 		if err == nil {
 			return nil
 		}

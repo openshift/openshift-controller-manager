@@ -7,6 +7,7 @@ import (
 
 	"k8s.io/klog"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
@@ -182,6 +183,6 @@ func (s *SignatureImportController) syncImageSignatures(key string) error {
 	}
 	klog.V(4).Infof("Image %s now has %d signatures", newImage.Name, len(newImage.Signatures))
 
-	_, err = s.imageClient.ImageV1().Images().Update(newImage)
+	_, err = s.imageClient.ImageV1().Images().Update(context.TODO(), newImage, metav1.UpdateOptions{})
 	return err
 }

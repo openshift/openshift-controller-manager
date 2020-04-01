@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -97,7 +98,7 @@ type fakeBuildLister struct {
 }
 
 func (l *fakeBuildLister) List(selector labels.Selector) (ret []*buildv1.Build, err error) {
-	builds, err := l.client.Builds(l.namespace).List(metav1.ListOptions{LabelSelector: selector.String()})
+	builds, err := l.client.Builds(l.namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +110,7 @@ func (l *fakeBuildLister) List(selector labels.Selector) (ret []*buildv1.Build, 
 }
 
 func (l *fakeBuildLister) Get(name string) (*buildv1.Build, error) {
-	return l.client.Builds(l.namespace).Get(name, metav1.GetOptions{})
+	return l.client.Builds(l.namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 func (l *fakeBuildLister) Builds(namespace string) buildlisterv1.BuildNamespaceLister {
@@ -122,7 +123,7 @@ type fakeBuildConfigLister struct {
 }
 
 func (l *fakeBuildConfigLister) List(selector labels.Selector) (ret []*buildv1.BuildConfig, err error) {
-	buildConfigs, err := l.client.BuildConfigs(l.namespace).List(metav1.ListOptions{LabelSelector: selector.String()})
+	buildConfigs, err := l.client.BuildConfigs(l.namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +135,7 @@ func (l *fakeBuildConfigLister) List(selector labels.Selector) (ret []*buildv1.B
 }
 
 func (l *fakeBuildConfigLister) Get(name string) (*buildv1.BuildConfig, error) {
-	return l.client.BuildConfigs(l.namespace).Get(name, metav1.GetOptions{})
+	return l.client.BuildConfigs(l.namespace).Get(context.TODO(), name, metav1.GetOptions{})
 }
 
 func (l *fakeBuildConfigLister) BuildConfigs(namespace string) buildlisterv1.BuildConfigNamespaceLister {
@@ -152,7 +153,7 @@ func TestHandleBuildPruning(t *testing.T) {
 
 	buildClient := buildfake.NewSimpleClientset(objects...)
 
-	build, err := buildClient.BuildV1().Builds("namespace").Get("myapp-0", metav1.GetOptions{})
+	build, err := buildClient.BuildV1().Builds("namespace").Get(context.TODO(), "myapp-0", metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("%v", err)
 	}
