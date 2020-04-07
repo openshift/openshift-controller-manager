@@ -1,6 +1,8 @@
 package controller
 
 var ControllerInitializers = map[string]InitFunc{
+	"openshift.io/resource-metrics": RunResourceMetrics,
+
 	"openshift.io/serviceaccount": RunServiceAccountController,
 
 	"openshift.io/default-rolebindings": RunDefaultRoleBindingController,
