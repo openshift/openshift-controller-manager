@@ -94,12 +94,30 @@ func NewControllerContext(
 		return nil, err
 	}
 
+	// Create a new clientConfig for high rate limit workloads.
+	// Increase kube QPS to at least 100 QPS, burst to at least 200 QPS.
+	highRateLimitClientConfig := rest.CopyConfig(inClientConfig)
+	if highRateLimitClientConfig.QPS < 100 {
+		highRateLimitClientConfig.QPS = 100
+	}
+	if highRateLimitClientConfig.Burst < 200 {
+		highRateLimitClientConfig.Burst = 200
+	}
+
 	openshiftControllerContext := &ControllerContext{
 		OpenshiftControllerConfig: config,
 
 		ClientBuilder: OpenshiftControllerClientBuilder{
 			ControllerClientBuilder: controller.SAControllerClientBuilder{
 				ClientConfig:         rest.AnonymousClientConfig(clientConfig),
+				CoreClient:           kubeClient.CoreV1(),
+				AuthenticationClient: kubeClient.AuthenticationV1(),
+				Namespace:            defaultOpenShiftInfraNamespace,
+			},
+		},
+		HighRateLimitClientBuilder: OpenshiftControllerClientBuilder{
+			ControllerClientBuilder: controller.SAControllerClientBuilder{
+				ClientConfig:         rest.AnonymousClientConfig(highRateLimitClientConfig),
 				CoreClient:           kubeClient.CoreV1(),
 				AuthenticationClient: kubeClient.AuthenticationV1(),
 				Namespace:            defaultOpenShiftInfraNamespace,
@@ -154,6 +172,9 @@ type ControllerContext struct {
 
 	// ClientBuilder will provide a client for this controller to use
 	ClientBuilder ControllerClientBuilder
+	// HighRateLimitClientBuilder will provide a client for this controller utilizing a higher rate limit.
+	// This will have a rate limit of at least 100 QPS, with a burst up to 200 QPS.
+	HighRateLimitClientBuilder ControllerClientBuilder
 
 	KubernetesInformers                informers.SharedInformerFactory
 	OpenshiftConfigKubernetesInformers informers.SharedInformerFactory
