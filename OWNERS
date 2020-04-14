@@ -11,3 +11,4 @@ approvers:
   - mfojtik
   - soltysh
   - adambkaplan
+component: "openshift-controller-manager"
