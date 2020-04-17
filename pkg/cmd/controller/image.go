@@ -12,6 +12,7 @@ import (
 	kbatchv1beta1 "k8s.io/api/batch/v1beta1"
 	kbatchv2alpha1 "k8s.io/api/batch/v2alpha1"
 	kapiv1 "k8s.io/api/core/v1"
+	kmetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	kclientsetexternal "k8s.io/client-go/kubernetes"
@@ -104,34 +105,34 @@ type podSpecUpdater struct {
 func (u podSpecUpdater) Update(obj runtime.Object) error {
 	switch t := obj.(type) {
 	case *kappsv1.DaemonSet:
-		_, err := u.kclient.AppsV1().DaemonSets(t.Namespace).Update(t)
+		_, err := u.kclient.AppsV1().DaemonSets(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kappsv1.Deployment:
-		_, err := u.kclient.AppsV1().Deployments(t.Namespace).Update(t)
+		_, err := u.kclient.AppsV1().Deployments(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kappsv1beta1.Deployment:
-		_, err := u.kclient.AppsV1beta1().Deployments(t.Namespace).Update(t)
+		_, err := u.kclient.AppsV1beta1().Deployments(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kappsv1beta2.Deployment:
-		_, err := u.kclient.AppsV1beta2().Deployments(t.Namespace).Update(t)
+		_, err := u.kclient.AppsV1beta2().Deployments(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kappsv1beta1.StatefulSet:
-		_, err := u.kclient.AppsV1beta1().StatefulSets(t.Namespace).Update(t)
+		_, err := u.kclient.AppsV1beta1().StatefulSets(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kappsv1beta2.StatefulSet:
-		_, err := u.kclient.AppsV1beta2().StatefulSets(t.Namespace).Update(t)
+		_, err := u.kclient.AppsV1beta2().StatefulSets(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kbatchv1.Job:
-		_, err := u.kclient.BatchV1().Jobs(t.Namespace).Update(t)
+		_, err := u.kclient.BatchV1().Jobs(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kbatchv1beta1.CronJob:
-		_, err := u.kclient.BatchV1beta1().CronJobs(t.Namespace).Update(t)
+		_, err := u.kclient.BatchV1beta1().CronJobs(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kbatchv2alpha1.CronJob:
-		_, err := u.kclient.BatchV2alpha1().CronJobs(t.Namespace).Update(t)
+		_, err := u.kclient.BatchV2alpha1().CronJobs(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kapiv1.Pod:
-		_, err := u.kclient.CoreV1().Pods(t.Namespace).Update(t)
+		_, err := u.kclient.CoreV1().Pods(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	default:
 		return fmt.Errorf("unrecognized object - no trigger update possible for %T", obj)

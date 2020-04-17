@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -151,43 +152,43 @@ type fakeBuildConfigInterface struct {
 	namespace string
 }
 
-func (fakeBuildConfigInterface) Create(*buildv1.BuildConfig) (*buildv1.BuildConfig, error) {
+func (fakeBuildConfigInterface) Create(ctx context.Context, bc *buildv1.BuildConfig, opts metav1.CreateOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Update(*buildv1.BuildConfig) (*buildv1.BuildConfig, error) {
+func (fakeBuildConfigInterface) Update(ctx context.Context, bc *buildv1.BuildConfig, opts metav1.UpdateOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) UpdateStatus(*buildv1.BuildConfig) (*buildv1.BuildConfig, error) {
+func (fakeBuildConfigInterface) UpdateStatus(ctx context.Context, bc *buildv1.BuildConfig, opts metav1.UpdateOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Delete(name string, options *metav1.DeleteOptions) error {
+func (fakeBuildConfigInterface) Delete(ctx context.Context, name string, options metav1.DeleteOptions) error {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+func (fakeBuildConfigInterface) DeleteCollection(ctx context.Context, options metav1.DeleteOptions, listOptions metav1.ListOptions) error {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Get(name string, options metav1.GetOptions) (*buildv1.BuildConfig, error) {
+func (fakeBuildConfigInterface) Get(ctx context.Context, name string, options metav1.GetOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) List(opts metav1.ListOptions) (*buildv1.BuildConfigList, error) {
+func (fakeBuildConfigInterface) List(ctx context.Context, opts metav1.ListOptions) (*buildv1.BuildConfigList, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (fakeBuildConfigInterface) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *buildv1.BuildConfig, err error) {
+func (fakeBuildConfigInterface) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *buildv1.BuildConfig, err error) {
 	panic("implement me")
 }
 
-func (f *fakeBuildConfigInterface) Instantiate(buildConfigName string, buildRequest *buildv1.BuildRequest) (*buildv1.Build, error) {
+func (f *fakeBuildConfigInterface) Instantiate(ctx context.Context, buildConfigName string, buildRequest *buildv1.BuildRequest, options metav1.CreateOptions) (*buildv1.Build, error) {
 	return f.inst.Instantiate(f.namespace, buildRequest)
 }
 

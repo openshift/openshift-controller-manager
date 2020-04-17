@@ -30,7 +30,7 @@ type Template struct {
 	// is, or contains, a ${PARAMETER_REFERENCE}, the resolved
 	// value after parameter substitution will be respected and the object
 	// will be created in that namespace.
-	// +kubebuilder:validation:PreserveUnknownFields
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Objects []runtime.RawExtension `json:"objects" protobuf:"bytes,3,rep,name=objects"`
 
 	// parameters is an optional array of Parameters used during the
@@ -111,6 +111,7 @@ type TemplateInstance struct {
 	Spec TemplateInstanceSpec `json:"spec" protobuf:"bytes,2,opt,name=spec"`
 
 	// status describes the current state of this TemplateInstance.
+	// +optional
 	Status TemplateInstanceStatus `json:"status" protobuf:"bytes,3,opt,name=status"`
 }
 
@@ -125,6 +126,7 @@ type TemplateInstanceSpec struct {
 
 	// requester holds the identity of the agent requesting the template
 	// instantiation.
+	// +optional
 	Requester *TemplateInstanceRequester `json:"requester" protobuf:"bytes,3,opt,name=requester"`
 }
 

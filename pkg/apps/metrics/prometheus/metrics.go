@@ -96,6 +96,16 @@ type failedRollout struct {
 	latestVersion int64
 }
 
+func (c *appsCollector) ClearState() {
+	c.createLock.Lock()
+	defer c.createLock.Unlock()
+	c.isCreated = false
+}
+
+func (c *appsCollector) FQName() string {
+	return "openshift_apps_deploymentconfigs"
+}
+
 // Collect implements the prometheus.Collector interface.
 func (c *appsCollector) Collect(ch chan<- prometheus.Metric) {
 	result, err := c.lister.List(labels.Everything())

@@ -1,6 +1,7 @@
 package deploymentconfigs
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/cache"
 
@@ -245,7 +247,7 @@ func (r *DeploymentConfigReactor) ImageChanged(obj runtime.Object, tagRetriever 
 		return nil
 	}
 	klog.V(4).Infof("Deployment config %s has changed", dc.Name)
-	_, err = r.Client.DeploymentConfigs(dc.Namespace).Update(updated)
+	_, err = r.Client.DeploymentConfigs(dc.Namespace).Update(context.TODO(), updated, metav1.UpdateOptions{})
 	return err
 }
 

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -343,7 +344,7 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 		// Clear the pending token annotation when updating
 		delete(serviceAccount.Annotations, PendingTokenAnnotation)
 
-		updatedSA, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(serviceAccount)
+		updatedSA, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(context.TODO(), serviceAccount, metav1.UpdateOptions{})
 		if err == nil {
 			e.serviceAccountCache.Mutation(updatedSA)
 		}
@@ -369,7 +370,7 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 			if !exists || !needsDockercfgSecret(obj.(*v1.ServiceAccount)) || serviceAccount.UID != obj.(*v1.ServiceAccount).UID {
 				// somehow a dockercfg secret appeared or the SA disappeared.  cleanup the secret we made and return
 				klog.V(2).Infof("Deleting secret because the work is already done %s/%s", dockercfgSecret.Namespace, dockercfgSecret.Name)
-				e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(dockercfgSecret.Name, nil)
+				e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(context.TODO(), dockercfgSecret.Name, metav1.DeleteOptions{})
 				return nil
 			}
 
@@ -382,7 +383,7 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 		// Clear the pending token annotation when updating
 		delete(serviceAccount.Annotations, PendingTokenAnnotation)
 
-		updatedSA, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(serviceAccount)
+		updatedSA, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(context.TODO(), serviceAccount, metav1.UpdateOptions{})
 		if err == nil {
 			e.serviceAccountCache.Mutation(updatedSA)
 		}
@@ -393,7 +394,7 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 		// nothing to do.  Our choice was stale or we got a conflict.  Either way that means that the service account was updated.  We simply need to return because we'll get an update notification later
 		// we do need to clean up our dockercfgSecret.  token secrets are cleaned up by the controller handling service account dockercfg secret deletes
 		klog.V(2).Infof("Deleting secret %s/%s (err=%v)", dockercfgSecret.Namespace, dockercfgSecret.Name, err)
-		e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(dockercfgSecret.Name, nil)
+		e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(context.TODO(), dockercfgSecret.Name, metav1.DeleteOptions{})
 	}
 	return err
 }
@@ -409,7 +410,7 @@ func (e *DockercfgController) createTokenSecret(serviceAccount *v1.ServiceAccoun
 			serviceAccount.Annotations = map[string]string{}
 		}
 		serviceAccount.Annotations[PendingTokenAnnotation] = pendingTokenName
-		updatedServiceAccount, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(serviceAccount)
+		updatedServiceAccount, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(context.TODO(), serviceAccount, metav1.UpdateOptions{})
 		// Conflicts mean we'll get called to sync this service account again
 		if kapierrors.IsConflict(err) {
 			return nil, false, nil
@@ -446,7 +447,7 @@ func (e *DockercfgController) createTokenSecret(serviceAccount *v1.ServiceAccoun
 	}
 
 	klog.V(4).Infof("Creating token secret %q for service account %s/%s", tokenSecret.Name, serviceAccount.Namespace, serviceAccount.Name)
-	token, err := e.client.CoreV1().Secrets(tokenSecret.Namespace).Create(tokenSecret)
+	token, err := e.client.CoreV1().Secrets(tokenSecret.Namespace).Create(context.TODO(), tokenSecret, metav1.CreateOptions{})
 	// Already exists but not in cache means we'll get an add watch event and resync
 	if kapierrors.IsAlreadyExists(err) {
 		return nil, false, nil
@@ -507,7 +508,7 @@ func (e *DockercfgController) createDockerPullSecret(serviceAccount *v1.ServiceA
 	dockercfgSecret.SetOwnerReferences([]metav1.OwnerReference{*ownerRef})
 
 	// Save the secret
-	createdSecret, err := e.client.CoreV1().Secrets(tokenSecret.Namespace).Create(dockercfgSecret)
+	createdSecret, err := e.client.CoreV1().Secrets(tokenSecret.Namespace).Create(context.TODO(), dockercfgSecret, metav1.CreateOptions{})
 	return createdSecret, err == nil, err
 }
 
@@ -559,7 +560,7 @@ func (e *DockercfgController) syncDockercfgOwner(pullSecret *v1.Secret) error {
 	if !exists {
 		// If the pull secret exists, and the token does not, delete the pull secret.
 		klog.V(4).Infof("Deleting pull secret %s/%s because its associated token %s/%s is missing", pullSecret.Namespace, pullSecret.Name, pullSecret.Namespace, tokenName)
-		return e.client.CoreV1().Secrets(pullSecret.Namespace).Delete(pullSecret.Name, &metav1.DeleteOptions{})
+		return e.client.CoreV1().Secrets(pullSecret.Namespace).Delete(context.TODO(), pullSecret.Name, metav1.DeleteOptions{})
 	}
 	tokenSecretObj := tokenSecret.(*v1.Secret)
 	// If the pull secret has an owner reference to its associated token, no further work is needed.
@@ -572,7 +573,7 @@ func (e *DockercfgController) syncDockercfgOwner(pullSecret *v1.Secret) error {
 	ownerRef.BlockOwnerDeletion = &blockDeletion
 	pullSecret.SetOwnerReferences([]metav1.OwnerReference{*ownerRef})
 	klog.V(4).Infof("Adding token %s/%s as the owner of pull secret %s/%s", pullSecret.Namespace, tokenName, pullSecret.Namespace, pullSecret.Name)
-	_, err = e.client.CoreV1().Secrets(pullSecret.Namespace).Update(pullSecret)
+	_, err = e.client.CoreV1().Secrets(pullSecret.Namespace).Update(context.TODO(), pullSecret, metav1.UpdateOptions{})
 	return err
 }
 

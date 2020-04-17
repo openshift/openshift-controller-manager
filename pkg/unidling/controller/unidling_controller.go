@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -101,11 +102,11 @@ func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, e
 			// No need to list -- we only care about new events
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = fieldSelector.String()
-				return evtNS.Events(metav1.NamespaceAll).List(options)
+				return evtNS.Events(metav1.NamespaceAll).List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.FieldSelector = fieldSelector.String()
-				return evtNS.Events(metav1.NamespaceAll).Watch(options)
+				return evtNS.Events(metav1.NamespaceAll).Watch(context.TODO(), options)
 			},
 		},
 		&corev1.Event{},
@@ -263,7 +264,7 @@ func (c *UnidlingController) awaitRequest() bool {
 // so it will return false).
 func (c *UnidlingController) handleRequest(info types.NamespacedName, lastFired time.Time) (bool, error) {
 	// fetch the endpoints associated with the service in question
-	targetEndpoints, err := c.endpointsNamespacer.Endpoints(info.Namespace).Get(info.Name, metav1.GetOptions{})
+	targetEndpoints, err := c.endpointsNamespacer.Endpoints(info.Namespace).Get(context.TODO(), info.Name, metav1.GetOptions{})
 	if err != nil {
 		return true, fmt.Errorf("unable to retrieve endpoints: %v", err)
 	}
@@ -369,7 +370,7 @@ func (c *UnidlingController) handleRequest(info types.NamespacedName, lastFired 
 		}
 	}
 
-	if _, err = c.endpointsNamespacer.Endpoints(info.Namespace).Update(targetEndpoints); err != nil {
+	if _, err = c.endpointsNamespacer.Endpoints(info.Namespace).Update(context.TODO(), targetEndpoints, metav1.UpdateOptions{}); err != nil {
 		return true, fmt.Errorf("unable to update/remove idle annotations from %s/%s: %v", info.Namespace, info.Name, err)
 	}
 

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -118,7 +119,7 @@ func (c *TemplateInstanceFinalizerController) sync(key string) error {
 
 	errs := []error{}
 	foreground := metav1.DeletePropagationForeground
-	deleteOpts := &metav1.DeleteOptions{PropagationPolicy: &foreground}
+	deleteOpts := metav1.DeleteOptions{PropagationPolicy: &foreground}
 	for _, o := range templateInstance.Status.Objects {
 		klog.V(5).Infof("attempting to delete object: %#v", o)
 
@@ -147,7 +148,7 @@ func (c *TemplateInstanceFinalizerController) sync(key string) error {
 			namespace = o.Ref.Namespace
 		}
 
-		err = c.client.Resource(mapping.Resource).Namespace(namespace).Delete(o.Ref.Name, deleteOpts)
+		err = c.client.Resource(mapping.Resource).Namespace(namespace).Delete(context.TODO(), o.Ref.Name, deleteOpts)
 		if err != nil && !errors.IsNotFound(err) {
 			errs = append(errs, fmt.Errorf("error deleting object %#v with mapping %#v: %v", o, mapping, err))
 			continue
@@ -170,7 +171,7 @@ func (c *TemplateInstanceFinalizerController) sync(key string) error {
 	}
 	templateInstanceCopy.Finalizers = newFinalizers
 
-	_, err = c.templateClient.TemplateV1().TemplateInstances(templateInstanceCopy.Namespace).UpdateStatus(templateInstanceCopy)
+	_, err = c.templateClient.TemplateV1().TemplateInstances(templateInstanceCopy.Namespace).UpdateStatus(context.TODO(), templateInstanceCopy, metav1.UpdateOptions{})
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("TemplateInstanceFinalizer update failed: %v", err))
 		return err

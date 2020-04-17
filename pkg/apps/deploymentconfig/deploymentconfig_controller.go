@@ -1,6 +1,7 @@
 package deploymentconfig
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -104,7 +105,7 @@ func (c *DeploymentConfigController) Handle(config *appsv1.DeploymentConfig) err
 	// If any adoptions are attempted, we should first recheck for deletion with
 	// an uncached quorum read sometime after listing ReplicationControllers (see Kubernetes #42639).
 	canAdoptFunc := kcontroller.RecheckDeletionTimestamp(func() (metav1.Object, error) {
-		fresh, err := c.appsClient.DeploymentConfigs(config.Namespace).Get(config.Name, metav1.GetOptions{})
+		fresh, err := c.appsClient.DeploymentConfigs(config.Namespace).Get(context.TODO(), config.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +145,7 @@ func (c *DeploymentConfigController) Handle(config *appsv1.DeploymentConfig) err
 	if candidateVersion > config.Status.LatestVersion {
 		// FIXME: update LatestVersion to candidateVersion directly when validation allows it in all supported skews
 		configCopy.Status.LatestVersion++
-		_, err := c.appsClient.DeploymentConfigs(configCopy.Namespace).UpdateStatus(configCopy)
+		_, err := c.appsClient.DeploymentConfigs(configCopy.Namespace).UpdateStatus(context.TODO(), configCopy, metav1.UpdateOptions{})
 		return err
 	}
 
@@ -174,7 +175,7 @@ func (c *DeploymentConfigController) Handle(config *appsv1.DeploymentConfig) err
 
 	if shouldTrigger {
 		configCopy.Status.LatestVersion++
-		_, err := c.appsClient.DeploymentConfigs(configCopy.Namespace).UpdateStatus(configCopy)
+		_, err := c.appsClient.DeploymentConfigs(configCopy.Namespace).UpdateStatus(context.TODO(), configCopy, metav1.UpdateOptions{})
 		return err
 	}
 
@@ -196,10 +197,10 @@ func (c *DeploymentConfigController) Handle(config *appsv1.DeploymentConfig) err
 	if err != nil {
 		return fatalError(fmt.Sprintf("couldn't make deployment from (potentially invalid) deployment config %s: %v", appsutil.LabelForDeploymentConfig(config), err))
 	}
-	created, err := c.kubeClient.ReplicationControllers(config.Namespace).Create(deployment)
+	created, err := c.kubeClient.ReplicationControllers(config.Namespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
 		if kapierrors.IsAlreadyExists(err) {
-			rc, err := c.kubeClient.ReplicationControllers(deployment.Namespace).Get(deployment.Name, metav1.GetOptions{})
+			rc, err := c.kubeClient.ReplicationControllers(deployment.Namespace).Get(context.TODO(), deployment.Name, metav1.GetOptions{})
 			if err != nil {
 				return fmt.Errorf("error while getting replication controller %s/%s: %v", deployment.Namespace, deployment.Name, err)
 			}
@@ -293,7 +294,7 @@ func (c *DeploymentConfigController) reconcileDeployments(existingDeployments []
 
 				copied = rc.DeepCopy()
 				copied.Spec.Replicas = &newReplicaCount
-				copied, err = c.kubeClient.ReplicationControllers(copied.Namespace).Update(copied)
+				copied, err = c.kubeClient.ReplicationControllers(copied.Namespace).Update(context.TODO(), copied, metav1.UpdateOptions{})
 				return err
 			}); err != nil {
 				c.recorder.Eventf(config, v1.EventTypeWarning, "ReplicationControllerScaleFailed",
@@ -331,7 +332,7 @@ func (c *DeploymentConfigController) updateStatus(config *appsv1.DeploymentConfi
 	copied := config.DeepCopy()
 	copied.Status = newStatus
 	// TODO: Retry update conficts
-	if _, err := c.appsClient.DeploymentConfigs(copied.Namespace).UpdateStatus(copied); err != nil {
+	if _, err := c.appsClient.DeploymentConfigs(copied.Namespace).UpdateStatus(context.TODO(), copied, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	klog.V(4).Infof(fmt.Sprintf("Updated status for DeploymentConfig: %s, ", appsutil.LabelForDeploymentConfig(config)) +
@@ -380,7 +381,7 @@ func (c *DeploymentConfigController) cancelRunningRollouts(config *appsv1.Deploy
 
 			copied := rc.DeepCopy()
 			appsutil.SetCancelledByNewerDeployment(copied)
-			updatedDeployment, err = c.kubeClient.ReplicationControllers(copied.Namespace).Update(copied)
+			updatedDeployment, err = c.kubeClient.ReplicationControllers(copied.Namespace).Update(context.TODO(), copied, metav1.UpdateOptions{})
 			return err
 		})
 		if err != nil {
@@ -557,7 +558,7 @@ func (c *DeploymentConfigController) cleanupOldDeployments(existingDeployments [
 		}
 
 		policy := metav1.DeletePropagationBackground
-		err := c.kubeClient.ReplicationControllers(deployment.Namespace).Delete(deployment.Name, &metav1.DeleteOptions{
+		err := c.kubeClient.ReplicationControllers(deployment.Namespace).Delete(context.TODO(), deployment.Name, metav1.DeleteOptions{
 			PropagationPolicy: &policy,
 		})
 		if err != nil && !kapierrors.IsNotFound(err) {

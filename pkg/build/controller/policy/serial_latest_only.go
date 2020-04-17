@@ -1,11 +1,13 @@
 package policy
 
 import (
+	"context"
 	"time"
 
 	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -83,7 +85,7 @@ func (s *SerialLatestOnlyPolicy) cancelPreviousBuilds(build *buildv1.Build) []er
 		err := wait.Poll(500*time.Millisecond, 5*time.Second, func() (bool, error) {
 			b = b.DeepCopy()
 			b.Status.Cancelled = true
-			_, err := s.BuildUpdater.Builds(b.Namespace).Update(b)
+			_, err := s.BuildUpdater.Builds(b.Namespace).Update(context.TODO(), b, metav1.UpdateOptions{})
 			if err != nil && errors.IsConflict(err) {
 				klog.V(5).Infof("Error cancelling build %s/%s: %v (will retry)", b.Namespace, b.Name, err)
 				return false, nil

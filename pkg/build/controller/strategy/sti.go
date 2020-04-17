@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -227,7 +228,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 func (bs *SourceBuildStrategy) canRunAsRoot(build *buildv1.Build) bool {
 	rootUser := int64(0)
 
-	review, err := bs.SecurityClient.PodSecurityPolicySubjectReviews(build.Namespace).Create(
+	review, err := bs.SecurityClient.PodSecurityPolicySubjectReviews(build.Namespace).Create(context.TODO(),
 		&securityv1.PodSecurityPolicySubjectReview{
 			Spec: securityv1.PodSecurityPolicySubjectReviewSpec{
 				Template: corev1.PodTemplateSpec{
@@ -246,6 +247,7 @@ func (bs *SourceBuildStrategy) canRunAsRoot(build *buildv1.Build) bool {
 				},
 			},
 		},
+		metav1.CreateOptions{},
 	)
 	if err != nil {
 		utilruntime.HandleError(err)

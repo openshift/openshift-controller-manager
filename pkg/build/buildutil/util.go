@@ -1,6 +1,7 @@
 package buildutil
 
 import (
+	"context"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -96,7 +97,7 @@ func BuildConfigBuildsFromLister(lister buildlisterv1.BuildLister, namespace, na
 // Optionally you can specify a filter function to select only builds that
 // matches your criteria.
 func BuildConfigBuilds(c buildclientv1.BuildsGetter, namespace, name string, filterFunc buildFilter) ([]*buildv1.Build, error) {
-	result, err := c.Builds(namespace).List(metav1.ListOptions{LabelSelector: BuildConfigSelector(name).String()})
+	result, err := c.Builds(namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: BuildConfigSelector(name).String()})
 	if err != nil {
 		return nil, err
 	}

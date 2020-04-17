@@ -58,6 +58,16 @@ func (c *TemplateInstanceController) MetricsCreated() bool {
 	return c.metricsCreated
 }
 
+func (c *TemplateInstanceController) ClearState() {
+	c.metricsCreateLock.Lock()
+	defer c.metricsCreateLock.Unlock()
+	c.metricsCreated = false
+}
+
+func (c *TemplateInstanceController) FQName() string {
+	return "openshift_template_instance_completed_total"
+}
+
 func (c *TemplateInstanceController) Describe(ch chan<- *prometheus.Desc) {
 	templateInstanceActiveAge := newTemplateInstanceActiveAge()
 

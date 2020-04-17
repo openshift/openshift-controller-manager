@@ -82,7 +82,7 @@ func InitializeImportCollector(
 		isc.cbCollectISCounts = cbCollectISCounts
 	}
 
-	if !isc.IsCreated() && isc.cbCollectISCounts != nil && isc.cbCollectScheduledCounts != nil {
+	if !isc.IsCreated() {
 		legacyregistry.MustRegister(&isc)
 		klog.V(4).Info("Image import controller metrics registered with prometherus")
 	}
@@ -128,6 +128,16 @@ func (isc *importStatusCollector) Collect(ch chan<- prometheus.Metric) {
 
 	pushSuccessCounts("true", successCounts, ch)
 	pushErrorCounts("true", errorCounts, ch)
+}
+
+func (isc *importStatusCollector) ClearState() {
+	isc.createLock.Lock()
+	defer isc.createLock.Unlock()
+	isc.isCreated = false
+}
+
+func (isc *importStatusCollector) FQName() string {
+	return metricController
 }
 
 func pushSuccessCounts(scheduled string, counts ImportSuccessCounts, ch chan<- prometheus.Metric) {

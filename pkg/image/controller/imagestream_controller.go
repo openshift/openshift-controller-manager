@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -307,7 +308,7 @@ func handleImageStream(
 		Body(isi).
 		// this instructs the api server to allow our request to take up to an hour - chosen as a high boundary
 		Timeout(time.Hour).
-		Do().
+		Do(context.TODO()).
 		Into(result)
 	if err != nil {
 		if apierrs.IsNotFound(err) && isStatusErrorKind(err, "imageStream") {

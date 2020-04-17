@@ -2,6 +2,7 @@ package build
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -35,7 +36,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/containers/image/pkg/sysregistriesv2"
-	mco "github.com/openshift/machine-config-operator/pkg/controller/container-runtime-config/registries"
+	rutil "github.com/openshift/runtime-utils/pkg/registries"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	configv1 "github.com/openshift/api/config/v1"
@@ -667,7 +668,7 @@ func (bc *BuildController) cancelBuild(build *buildv1.Build) (*buildUpdate, erro
 	klog.V(4).Infof("Cancelling build %s", buildDesc(build))
 
 	podName := buildutil.GetBuildPodName(build)
-	err := bc.podClient.Pods(build.Namespace).Delete(podName, &metav1.DeleteOptions{})
+	err := bc.podClient.Pods(build.Namespace).Delete(context.TODO(), podName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return nil, fmt.Errorf("could not delete build pod %s/%s to cancel build %s: %v", build.Namespace, podName, buildDesc(build), err)
 	}
@@ -1214,7 +1215,7 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 	}
 
 	klog.V(4).Infof("Pod %s/%s for build %s is about to be created", build.Namespace, buildPod.Name, buildDesc(build))
-	pod, err := bc.podClient.Pods(build.Namespace).Create(buildPod)
+	pod, err := bc.podClient.Pods(build.Namespace).Create(context.TODO(), buildPod, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		// Log an event if the pod is not created (most likely due to quota denial).
 		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build pod: %v", err)
@@ -1228,7 +1229,7 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 
 		// If the existing pod was not created by this build, switch to the
 		// Error state.
-		existingPod, err := bc.podClient.Pods(build.Namespace).Get(buildPod.Name, metav1.GetOptions{})
+		existingPod, err := bc.podClient.Pods(build.Namespace).Get(context.TODO(), buildPod.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -1586,14 +1587,14 @@ func (bc *BuildController) patchBuild(build *buildv1.Build, update *buildUpdate)
 	}
 
 	klog.V(5).Infof("Patching build %s with %v", buildDesc(build), update)
-	return bc.buildPatcher.Builds(build.Namespace).Patch(build.Name, types.StrategicMergePatchType, patch)
+	return bc.buildPatcher.Builds(build.Namespace).Patch(context.TODO(), build.Name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
 }
 
 // findMissingPod uses the REST client directly to determine if a pod exists or not.
 // It is called when a corresponding pod for a build is not found in the cache.
 func (bc *BuildController) findMissingPod(build *buildv1.Build) *corev1.Pod {
 	// Make one last attempt to fetch the pod using the REST client
-	pod, err := bc.podClient.Pods(build.Namespace).Get(buildutil.GetBuildPodName(build), metav1.GetOptions{})
+	pod, err := bc.podClient.Pods(build.Namespace).Get(context.TODO(), buildutil.GetBuildPodName(build), metav1.GetOptions{})
 	if err == nil {
 		klog.V(2).Infof("Found missing pod for build %s by using direct client.", buildDesc(build))
 		return pod
@@ -1767,7 +1768,7 @@ func (bc *BuildController) handleBuildConfigError(err error, key interface{}) {
 // that are injected via the platform's proxy support based on setting a particular annotation on the config map
 func (bc *BuildController) createBuildGlobalCAConfigMap(build *buildv1.Build, buildPod *corev1.Pod, update *buildUpdate) (*buildUpdate, error) {
 	configMapSpec := bc.createBuildGlobalCAConfigMapSpec(build, buildPod)
-	cm, err := bc.configMapClient.ConfigMaps(buildPod.Namespace).Create(configMapSpec)
+	cm, err := bc.configMapClient.ConfigMaps(buildPod.Namespace).Create(context.TODO(), configMapSpec, metav1.CreateOptions{})
 	if err != nil {
 		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build proxy certificate authority configMap: %v", err)
 		update.setReason("CannotCreateGlobalCAConfigMap")
@@ -1781,7 +1782,7 @@ func (bc *BuildController) createBuildGlobalCAConfigMap(build *buildv1.Build, bu
 // createBuildCAConfigMap creates a ConfigMap containing certificate authorities used by the build pod.
 func (bc *BuildController) createBuildCAConfigMap(build *buildv1.Build, buildPod *corev1.Pod, update *buildUpdate, additionalCAs map[string]string) (*buildUpdate, error) {
 	configMapSpec := bc.createBuildCAConfigMapSpec(build, buildPod, additionalCAs)
-	configMap, err := bc.configMapClient.ConfigMaps(buildPod.Namespace).Create(configMapSpec)
+	configMap, err := bc.configMapClient.ConfigMaps(buildPod.Namespace).Create(context.TODO(), configMapSpec, metav1.CreateOptions{})
 	if err != nil {
 		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build certificate authority configMap: %v", err)
 		update.setReason("CannotCreateCAConfigMap")
@@ -1870,7 +1871,7 @@ func (bc *BuildController) createBuildGlobalCAConfigMapSpec(build *buildv1.Build
 
 // findOwnedConfigMap finds the ConfigMap with the given name and namespace, and owned by the provided pod.
 func (bc *BuildController) findOwnedConfigMap(owner *corev1.Pod, namespace string, name string) (bool, error) {
-	cm, err := bc.configMapClient.ConfigMaps(namespace).Get(name, metav1.GetOptions{})
+	cm, err := bc.configMapClient.ConfigMaps(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil && errors.IsNotFound(err) {
 		return false, nil
 	} else if err != nil {
@@ -1884,7 +1885,7 @@ func (bc *BuildController) findOwnedConfigMap(owner *corev1.Pod, namespace strin
 
 func (bc *BuildController) createBuildSystemConfConfigMap(build *buildv1.Build, buildPod *corev1.Pod, update *buildUpdate) (*buildUpdate, error) {
 	configMapSpec := bc.createBuildSystemConfigMapSpec(build, buildPod)
-	configMap, err := bc.configMapClient.ConfigMaps(build.Namespace).Create(configMapSpec)
+	configMap, err := bc.configMapClient.ConfigMaps(build.Namespace).Create(context.TODO(), configMapSpec, metav1.CreateOptions{})
 	if err != nil {
 		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Error creating build system config configMap: %v", err)
 		update.setReason("CannotCreateBuildSysConfigMap")
@@ -2099,7 +2100,7 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 	// docker.io must be the only entry in the registry search list
 	// See https://github.com/openshift/builder/pull/40
 	configObj.UnqualifiedSearchRegistries = []string{"docker.io"}
-	err := mco.EditRegistriesConfig(&configObj, insecureRegs, blockedRegs, policies)
+	err := rutil.EditRegistriesConfig(&configObj, insecureRegs, blockedRegs, policies)
 	if err != nil {
 		klog.V(0).Infof("MCO library had problem building registries config: %s", err.Error())
 		return "", err

@@ -32,6 +32,8 @@ import (
 var (
 	showHiddenOnce sync.Once
 	showHidden     atomic.Value
+	registries     []*kubeRegistry // stores all registries created by NewKubeRegistry()
+	registriesLock sync.RWMutex
 )
 
 // shouldHide be used to check if a specific metric with deprecated version should be hidden
@@ -77,6 +79,12 @@ func ValidateShowHiddenMetricsVersion(v string) []error {
 func SetShowHidden() {
 	showHiddenOnce.Do(func() {
 		showHidden.Store(true)
+
+		// re-register collectors that has been hidden in phase of last registry.
+		for _, r := range registries {
+			r.enableHiddenCollectors()
+			r.enableHiddenStableCollectors()
+		}
 	})
 }
 
@@ -91,21 +99,27 @@ func ShouldShowHidden() bool {
 // will register with KubeRegistry.
 type Registerable interface {
 	prometheus.Collector
+
+	// Create will mark deprecated state for the collector
 	Create(version *semver.Version) bool
+
+	// ClearState will clear all the states marked by Create.
+	ClearState()
+
+	// FQName returns the fully-qualified metric name of the collector.
+	FQName() string
 }
 
 // KubeRegistry is an interface which implements a subset of prometheus.Registerer and
 // prometheus.Gatherer interfaces
 type KubeRegistry interface {
 	// Deprecated
-	RawRegister(prometheus.Collector) error
-	// Deprecated
 	RawMustRegister(...prometheus.Collector)
 	CustomRegister(c StableCollector) error
 	CustomMustRegister(cs ...StableCollector)
 	Register(Registerable) error
 	MustRegister(...Registerable)
-	Unregister(Registerable) bool
+	Unregister(collector Collector) bool
 	Gather() ([]*dto.MetricFamily, error)
 }
 
@@ -114,7 +128,11 @@ type KubeRegistry interface {
 // automatic behavior can be configured for metric versioning.
 type kubeRegistry struct {
 	PromRegistry
-	version semver.Version
+	version              semver.Version
+	hiddenCollectors     map[string]Registerable // stores all collectors that has been hidden
+	stableCollectors     []StableCollector       // stores all stable collector
+	hiddenCollectorsLock sync.RWMutex
+	stableCollectorsLock sync.RWMutex
 }
 
 // Register registers a new Collector to be included in metrics
@@ -126,6 +144,9 @@ func (kr *kubeRegistry) Register(c Registerable) error {
 	if c.Create(&kr.version) {
 		return kr.PromRegistry.Register(c)
 	}
+
+	kr.trackHiddenCollector(c)
+
 	return nil
 }
 
@@ -137,6 +158,8 @@ func (kr *kubeRegistry) MustRegister(cs ...Registerable) {
 	for _, c := range cs {
 		if c.Create(&kr.version) {
 			metrics = append(metrics, c)
+		} else {
+			kr.trackHiddenCollector(c)
 		}
 	}
 	kr.PromRegistry.MustRegister(metrics...)
@@ -144,10 +167,11 @@ func (kr *kubeRegistry) MustRegister(cs ...Registerable) {
 
 // CustomRegister registers a new custom collector.
 func (kr *kubeRegistry) CustomRegister(c StableCollector) error {
+	kr.trackStableCollectors(c)
+
 	if c.Create(&kr.version, c) {
 		return kr.PromRegistry.Register(c)
 	}
-
 	return nil
 }
 
@@ -155,6 +179,8 @@ func (kr *kubeRegistry) CustomRegister(c StableCollector) error {
 // StableCollectors and panics upon the first registration that causes an
 // error.
 func (kr *kubeRegistry) CustomMustRegister(cs ...StableCollector) {
+	kr.trackStableCollectors(cs...)
+
 	collectors := make([]prometheus.Collector, 0, len(cs))
 	for _, c := range cs {
 		if c.Create(&kr.version, c) {
@@ -163,15 +189,6 @@ func (kr *kubeRegistry) CustomMustRegister(cs ...StableCollector) {
 	}
 
 	kr.PromRegistry.MustRegister(collectors...)
-}
-
-// RawRegister takes a native prometheus.Collector and registers the collector
-// to the registry. This bypasses metrics safety checks, so should only be used
-// to register custom prometheus collectors.
-//
-// Deprecated
-func (kr *kubeRegistry) RawRegister(c prometheus.Collector) error {
-	return kr.PromRegistry.Register(c)
 }
 
 // RawMustRegister takes a native prometheus.Collector and registers the collector
@@ -189,7 +206,7 @@ func (kr *kubeRegistry) RawMustRegister(cs ...prometheus.Collector) {
 // returns whether a Collector was unregistered. Note that an unchecked
 // Collector cannot be unregistered (as its Describe method does not
 // yield any descriptor).
-func (kr *kubeRegistry) Unregister(collector Registerable) bool {
+func (kr *kubeRegistry) Unregister(collector Collector) bool {
 	return kr.PromRegistry.Unregister(collector)
 }
 
@@ -204,17 +221,85 @@ func (kr *kubeRegistry) Gather() ([]*dto.MetricFamily, error) {
 	return kr.PromRegistry.Gather()
 }
 
+// trackHiddenCollector stores all hidden collectors.
+func (kr *kubeRegistry) trackHiddenCollector(c Registerable) {
+	kr.hiddenCollectorsLock.Lock()
+	defer kr.hiddenCollectorsLock.Unlock()
+
+	kr.hiddenCollectors[c.FQName()] = c
+}
+
+// trackStableCollectors stores all custom collectors.
+func (kr *kubeRegistry) trackStableCollectors(cs ...StableCollector) {
+	kr.stableCollectorsLock.Lock()
+	defer kr.stableCollectorsLock.Unlock()
+
+	kr.stableCollectors = append(kr.stableCollectors, cs...)
+}
+
+// enableHiddenCollectors will re-register all of the hidden collectors.
+func (kr *kubeRegistry) enableHiddenCollectors() {
+	if len(kr.hiddenCollectors) == 0 {
+		return
+	}
+
+	kr.hiddenCollectorsLock.Lock()
+	cs := make([]Registerable, 0, len(kr.hiddenCollectors))
+
+	for _, c := range kr.hiddenCollectors {
+		c.ClearState()
+		cs = append(cs, c)
+	}
+
+	kr.hiddenCollectors = nil
+	kr.hiddenCollectorsLock.Unlock()
+	kr.MustRegister(cs...)
+}
+
+// enableHiddenStableCollectors will re-register the stable collectors if there is one or more hidden metrics in it.
+// Since we can not register a metrics twice, so we have to unregister first then register again.
+func (kr *kubeRegistry) enableHiddenStableCollectors() {
+	if len(kr.stableCollectors) == 0 {
+		return
+	}
+
+	kr.stableCollectorsLock.Lock()
+
+	cs := make([]StableCollector, 0, len(kr.stableCollectors))
+	for _, c := range kr.stableCollectors {
+		if len(c.HiddenMetrics()) > 0 {
+			kr.Unregister(c) // unregister must happens before clear state, otherwise no metrics would be unregister
+			c.ClearState()
+			cs = append(cs, c)
+		}
+	}
+
+	kr.stableCollectors = nil
+	kr.stableCollectorsLock.Unlock()
+	kr.CustomMustRegister(cs...)
+}
+
+// BuildVersion is a helper function that can be easily mocked.
+var BuildVersion = version.Get
+
 func newKubeRegistry(v apimachineryversion.Info) *kubeRegistry {
 	r := &kubeRegistry{
-		PromRegistry: prometheus.NewRegistry(),
-		version:      parseVersion(v),
+		PromRegistry:     prometheus.NewRegistry(),
+		version:          parseVersion(v),
+		hiddenCollectors: make(map[string]Registerable),
 	}
+
+	registriesLock.Lock()
+	defer registriesLock.Unlock()
+	registries = append(registries, r)
+
 	return r
 }
 
 // NewKubeRegistry creates a new vanilla Registry without any Collectors
 // pre-registered.
 func NewKubeRegistry() KubeRegistry {
-	r := newKubeRegistry(version.Get())
+	r := newKubeRegistry(BuildVersion())
+
 	return r
 }

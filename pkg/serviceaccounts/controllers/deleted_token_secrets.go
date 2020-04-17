@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -93,7 +94,7 @@ func (e *DockercfgTokenDeletedController) secretDeleted(obj interface{}) {
 			continue
 		}
 		klog.V(4).Infof("Deleting pull secret %s/%s because its associated token %s/%s has been deleted", dockercfgSecret.Namespace, dockercfgSecret.Name, tokenSecret.Namespace, tokenSecret.Name)
-		if err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(dockercfgSecret.Name, nil); (err != nil) && !apierrors.IsNotFound(err) {
+		if err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(context.TODO(), dockercfgSecret.Name, metav1.DeleteOptions{}); (err != nil) && !apierrors.IsNotFound(err) {
 			utilruntime.HandleError(err)
 		}
 	}
