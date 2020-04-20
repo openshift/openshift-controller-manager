@@ -9,8 +9,8 @@ import (
 
 	"k8s.io/klog"
 
-	"k8s.io/api/core/v1"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -23,10 +23,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	coreinformers "k8s.io/client-go/informers/core/v1"
-	extensionsinformers "k8s.io/client-go/informers/extensions/v1beta1"
+	networkingv1beta1informers "k8s.io/client-go/informers/networking/v1beta1"
 	kv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
-	extensionslisters "k8s.io/client-go/listers/extensions/v1beta1"
+	networkingv1beta1listers "k8s.io/client-go/listers/networking/v1beta1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
@@ -75,7 +75,7 @@ type Controller struct {
 
 	client routeclient.RoutesGetter
 
-	ingressLister extensionslisters.IngressLister
+	ingressLister networkingv1beta1listers.IngressLister
 	secretLister  corelisters.SecretLister
 	routeLister   routelisters.RouteLister
 	serviceLister corelisters.ServiceLister
@@ -160,12 +160,12 @@ type queueKey struct {
 }
 
 // NewController instantiates a Controller
-func NewController(eventsClient kv1core.EventsGetter, client routeclient.RoutesGetter, ingresses extensionsinformers.IngressInformer, secrets coreinformers.SecretInformer, services coreinformers.ServiceInformer, routes routeinformers.RouteInformer) *Controller {
+func NewController(eventsClient kv1core.EventsGetter, client routeclient.RoutesGetter, ingresses networkingv1beta1informers.IngressInformer, secrets coreinformers.SecretInformer, services coreinformers.ServiceInformer, routes routeinformers.RouteInformer) *Controller {
 	broadcaster := record.NewBroadcaster()
 	broadcaster.StartLogging(klog.Infof)
 	// TODO: remove the wrapper when every clients have moved to use the clientset.
 	broadcaster.StartRecordingToSink(&kv1core.EventSinkImpl{Interface: eventsClient.Events("")})
-	recorder := broadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "ingress-to-route-controller"})
+	recorder := broadcaster.NewRecorder(legacyscheme.Scheme, corev1.EventSource{Component: "ingress-to-route-controller"})
 
 	c := &Controller{
 		eventRecorder: recorder,
@@ -193,8 +193,8 @@ func NewController(eventsClient kv1core.EventsGetter, client routeclient.RoutesG
 	secrets.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj interface{}) bool {
 			switch t := obj.(type) {
-			case *v1.Secret:
-				return t.Type == v1.SecretTypeTLS
+			case *corev1.Secret:
+				return t.Type == corev1.SecretTypeTLS
 			}
 			return true
 		},
@@ -277,7 +277,7 @@ func (c *Controller) processRoute(obj interface{}) {
 
 func (c *Controller) processIngress(obj interface{}) {
 	switch t := obj.(type) {
-	case *extensionsv1beta1.Ingress:
+	case *networkingv1beta1.Ingress:
 		// when we see a change to an ingress, reset our expectations
 		// this also allows periodic purging of the expectation list in the event
 		// we miss one or more events.
@@ -456,7 +456,7 @@ func (c *Controller) sync(key queueKey) error {
 
 func hasIngressOwnerRef(owners []metav1.OwnerReference) (string, bool) {
 	for _, ref := range owners {
-		if ref.Kind != "Ingress" || ref.APIVersion != "extensions/v1beta1" || ref.Controller == nil || !*ref.Controller {
+		if ref.Kind != "Ingress" || ref.APIVersion != "networking.k8s.io/v1beta1" || ref.Controller == nil || !*ref.Controller {
 			continue
 		}
 		return ref.Name, true
@@ -465,9 +465,9 @@ func hasIngressOwnerRef(owners []metav1.OwnerReference) (string, bool) {
 }
 
 func newRouteForIngress(
-	ingress *extensionsv1beta1.Ingress,
-	rule *extensionsv1beta1.IngressRule,
-	path *extensionsv1beta1.HTTPIngressPath,
+	ingress *networkingv1beta1.Ingress,
+	rule *networkingv1beta1.IngressRule,
+	path *networkingv1beta1.HTTPIngressPath,
 	secretLister corelisters.SecretLister,
 	serviceLister corelisters.ServiceLister,
 ) *routev1.Route {
@@ -478,20 +478,20 @@ func newRouteForIngress(
 			// secret doesn't exist yet, wait
 			return nil
 		}
-		if secret.Type != v1.SecretTypeTLS {
+		if secret.Type != corev1.SecretTypeTLS {
 			// secret is the wrong type
 			return nil
 		}
-		if _, ok := secret.Data[v1.TLSCertKey]; !ok {
+		if _, ok := secret.Data[corev1.TLSCertKey]; !ok {
 			return nil
 		}
-		if _, ok := secret.Data[v1.TLSPrivateKeyKey]; !ok {
+		if _, ok := secret.Data[corev1.TLSPrivateKeyKey]; !ok {
 			return nil
 		}
 		tlsConfig = &routev1.TLSConfig{
 			Termination:                   routev1.TLSTerminationEdge,
-			Certificate:                   string(secret.Data[v1.TLSCertKey]),
-			Key:                           string(secret.Data[v1.TLSPrivateKeyKey]),
+			Certificate:                   string(secret.Data[corev1.TLSCertKey]),
+			Key:                           string(secret.Data[corev1.TLSPrivateKeyKey]),
 			InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 		}
 	}
@@ -515,7 +515,7 @@ func newRouteForIngress(
 			Labels:       ingress.Labels,
 			Annotations:  ingress.Annotations,
 			OwnerReferences: []metav1.OwnerReference{
-				{APIVersion: "extensions/v1beta1", Kind: "Ingress", Controller: &t, Name: ingress.Name, UID: ingress.UID},
+				{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Controller: &t, Name: ingress.Name, UID: ingress.UID},
 			},
 		},
 		Spec: routev1.RouteSpec{
@@ -543,9 +543,9 @@ func preserveRouteAttributesFromExisting(r, existing *routev1.Route) {
 
 func routeMatchesIngress(
 	route *routev1.Route,
-	ingress *extensionsv1beta1.Ingress,
-	rule *extensionsv1beta1.IngressRule,
-	path *extensionsv1beta1.HTTPIngressPath,
+	ingress *networkingv1beta1.Ingress,
+	rule *networkingv1beta1.IngressRule,
+	path *networkingv1beta1.HTTPIngressPath,
 	secretLister corelisters.SecretLister,
 	serviceLister corelisters.ServiceLister,
 ) bool {
@@ -570,7 +570,7 @@ func routeMatchesIngress(
 		return false
 	}
 
-	var secret *v1.Secret
+	var secret *corev1.Secret
 	if name, ok := referencesSecret(ingress, rule.Host); ok {
 		secret, _ = secretLister.Secrets(ingress.Namespace).Get(name)
 		if secret == nil {
@@ -596,7 +596,7 @@ func routeMatchesIngress(
 // in this case, the Route need have no port specification because omitting the
 // port specification causes the Route to target every port (in this case, the
 // only port) on the Endpoints resource.
-func targetPortForService(namespace string, path *extensionsv1beta1.HTTPIngressPath, serviceLister corelisters.ServiceLister) (*intstr.IntOrString, error) {
+func targetPortForService(namespace string, path *networkingv1beta1.HTTPIngressPath, serviceLister corelisters.ServiceLister) (*intstr.IntOrString, error) {
 	service, err := serviceLister.Services(namespace).Get(path.Backend.ServiceName)
 	if err != nil {
 		// service doesn't exist yet, wait
@@ -625,25 +625,25 @@ func targetPortForService(namespace string, path *extensionsv1beta1.HTTPIngressP
 	return nil, errors.New("no port found")
 }
 
-func secretMatchesRoute(secret *v1.Secret, tlsConfig *routev1.TLSConfig) bool {
+func secretMatchesRoute(secret *corev1.Secret, tlsConfig *routev1.TLSConfig) bool {
 	if secret == nil {
 		return tlsConfig == nil
 	}
-	if secret.Type != v1.SecretTypeTLS {
+	if secret.Type != corev1.SecretTypeTLS {
 		return tlsConfig == nil
 	}
-	if _, ok := secret.Data[v1.TLSCertKey]; !ok {
+	if _, ok := secret.Data[corev1.TLSCertKey]; !ok {
 		return false
 	}
-	if _, ok := secret.Data[v1.TLSPrivateKeyKey]; !ok {
+	if _, ok := secret.Data[corev1.TLSPrivateKeyKey]; !ok {
 		return false
 	}
 	if tlsConfig == nil {
 		return false
 	}
 	return tlsConfig.Termination == routev1.TLSTerminationEdge &&
-		tlsConfig.Certificate == string(secret.Data[v1.TLSCertKey]) &&
-		tlsConfig.Key == string(secret.Data[v1.TLSPrivateKeyKey])
+		tlsConfig.Certificate == string(secret.Data[corev1.TLSCertKey]) &&
+		tlsConfig.Key == string(secret.Data[corev1.TLSPrivateKeyKey])
 }
 
 func splitForPathAndHost(routes []*routev1.Route, host, path string) ([]*routev1.Route, *routev1.Route) {
@@ -657,7 +657,7 @@ func splitForPathAndHost(routes []*routev1.Route, host, path string) ([]*routev1
 	return routes, nil
 }
 
-func referencesSecret(ingress *extensionsv1beta1.Ingress, host string) (string, bool) {
+func referencesSecret(ingress *networkingv1beta1.Ingress, host string) (string, bool) {
 	for _, tls := range ingress.Spec.TLS {
 		for _, tlsHost := range tls.Hosts {
 			if tlsHost == host {
@@ -671,7 +671,7 @@ func referencesSecret(ingress *extensionsv1beta1.Ingress, host string) (string, 
 // createRouteWithName performs client side name generation so we can set a predictable expectation.
 // If we fail multiple times in a row we will return an error.
 // TODO: future optimization, check the local cache for the name first
-func createRouteWithName(client routeclient.RoutesGetter, ingress *extensionsv1beta1.Ingress, route *routev1.Route, expect *expectations) error {
+func createRouteWithName(client routeclient.RoutesGetter, ingress *networkingv1beta1.Ingress, route *routev1.Route, expect *expectations) error {
 	base := route.GenerateName
 	var lastErr error
 	// only retry a limited number of times
