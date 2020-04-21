@@ -1224,7 +1224,11 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		return update, fmt.Errorf("failed to create build pod: %v", err)
 
 	} else if err != nil {
-		bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Pod already exists: %s/%s", buildPod.Namespace, buildPod.Name)
+		// To facilitate usage scenarios often seen with automated scripting generating builds, where scripts
+		// 1. Create build
+		// 2. Pod is created
+		// 3. Delete build and immediately recreate it
+		// we want the build to wait for the old pod (from different build pod UID) to be cleaned up by GC. and then continues
 		klog.V(4).Infof("Build pod %s/%s for build %s already exists", build.Namespace, buildPod.Name, buildDesc(build))
 
 		// If the existing pod was not created by this build, switch to the
@@ -1233,11 +1237,29 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		if err != nil {
 			return nil, err
 		}
+		// HashOwnerReference does not distinguish between having no refs to compare with the build and
+		// having a different ref compared to our build here;  that said, if the pod has not owner refs,
+		// there is no chance GC will clean it up, so bypass our retry here
 		if !strategy.HasOwnerReference(existingPod, build) {
+			if len(existingPod.OwnerReferences) > 0 {
+				// check to see if we have retried long enough for the old pod to get GC'ed
+				twoMinutesAgo := metav1.Now().Add(-2 * time.Minute)
+				if !build.CreationTimestamp.Time.Before(twoMinutesAgo) {
+					// requeue for retry via returning an error
+					return nil, fmt.Errorf("waiting since %s to see if pod %s/%s with incorrect uid %s is "+
+						"gc'ed before commencing build %s/%s",
+						build.CreationTimestamp.String(), build.Namespace, buildPod.Name, existingPod.UID,
+						build.Namespace, build.Name)
+				}
+			}
+
+			// reach this point, we give up
+			bc.recorder.Eventf(build, corev1.EventTypeWarning, "FailedCreate", "Pod already exists: %s/%s", buildPod.Namespace, buildPod.Name)
 			klog.V(4).Infof("Did not recognise pod %s/%s as belonging to build %s", build.Namespace, buildPod.Name, buildDesc(build))
 			update = transitionToPhase(buildv1.BuildPhaseError, buildv1.StatusReasonBuildPodExists, "The pod for this build already exists and is older than the build.")
 			return update, nil
 		}
+
 		klog.V(4).Infof("Recognised pod %s/%s as belonging to build %s", build.Namespace, buildPod.Name, buildDesc(build))
 		// Check if the existing pod has the CA ConfigMap properly attached
 		hasCAMap, err := bc.findOwnedConfigMap(existingPod, build.Namespace, buildutil.GetBuildCAConfigMapName(build))
