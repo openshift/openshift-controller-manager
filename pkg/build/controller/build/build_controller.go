@@ -261,10 +261,10 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 		buildOverrides:           params.BuildOverrides,
 		internalRegistryHostname: params.InternalRegistryHostname,
 
-		buildQueue:            workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		buildQueue:            workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "build"),
 		imageStreamQueue:      newResourceTriggerQueue(),
-		buildConfigQueue:      workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
-		controllerConfigQueue: workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		buildConfigQueue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "build-completed"),
+		controllerConfigQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "build-controller-config"),
 
 		recorder:    eventBroadcaster.NewRecorder(buildscheme.EncoderScheme, corev1.EventSource{Component: "build-controller"}),
 		runPolicies: policy.GetAllRunPolicies(buildLister, params.BuildClient.BuildV1()),

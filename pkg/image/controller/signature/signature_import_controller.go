@@ -41,7 +41,7 @@ type SignatureImportController struct {
 
 func NewSignatureImportController(ctx context.Context, imageClient imagev1client.Interface, imageInformer imagev1informer.ImageInformer, resyncInterval, fetchTimeout time.Duration, limit int) *SignatureImportController {
 	controller := &SignatureImportController{
-		queue:                workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		queue:                workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "image-signature-import"),
 		imageClient:          imageClient,
 		imageLister:          imageInformer.Lister(),
 		imageHasSynced:       imageInformer.Informer().HasSynced,
