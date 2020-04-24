@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -41,7 +41,7 @@ func NewDeploymentConfigController(
 		appsClient: appsClientset.AppsV1(),
 		kubeClient: kubeClientset.CoreV1(),
 
-		queue: workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "deploymentconfig"),
 
 		rcLister:       rcInformer.Lister(),
 		rcListerSynced: rcInformer.Informer().HasSynced,

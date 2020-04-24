@@ -81,7 +81,7 @@ func NewBuildConfigController(buildClient buildclient.Interface, kubeExternalCli
 
 		buildConfigInformer: buildConfigInformer.Informer(),
 
-		queue:    workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		queue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "buildconfig"),
 		recorder: eventBroadcaster.NewRecorder(buildscheme.EncoderScheme, corev1.EventSource{Component: "buildconfig-controller"}),
 	}
 
