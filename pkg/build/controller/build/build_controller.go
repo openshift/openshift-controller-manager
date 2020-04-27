@@ -700,6 +700,11 @@ func (bc *BuildController) handleNewBuild(build *buildv1.Build, pod *corev1.Pod)
 		// creation is done in the transition X->Pending.
 		if strategy.HasOwnerReference(pod, build) {
 			return bc.handleActiveBuild(build, pod)
+		} else {
+			err := retryOnOwnerRef(build, pod)
+			if err != nil {
+				return nil, err
+			}
 		}
 		// If a pod was not created by the current build, move the build to
 		// error.
@@ -1087,6 +1092,21 @@ func (bc *BuildController) resolveImageReferences(build *buildv1.Build, update *
 	return nil
 }
 
+func retryOnOwnerRef(build *buildv1.Build, pod *corev1.Pod) error {
+	if len(pod.OwnerReferences) > 0 {
+		// check to see if we have retried long enough for the old pod to get GC'ed
+		twoMinutesAgo := metav1.Now().Add(-2 * time.Minute)
+		if !build.CreationTimestamp.Time.Before(twoMinutesAgo) {
+			// requeue for retry via returning an error
+			return fmt.Errorf("waiting since %s to see if pod %s/%s with incorrect uid %s is "+
+				"gc'ed before commencing build %s/%s",
+				build.CreationTimestamp.String(), build.Namespace, pod.Name, pod.UID,
+				build.Namespace, build.Name)
+		}
+	}
+	return nil
+}
+
 // createBuildPod creates a new pod to run a build
 func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, error) {
 	update := &buildUpdate{}
@@ -1241,16 +1261,9 @@ func (bc *BuildController) createBuildPod(build *buildv1.Build) (*buildUpdate, e
 		// having a different ref compared to our build here;  that said, if the pod has not owner refs,
 		// there is no chance GC will clean it up, so bypass our retry here
 		if !strategy.HasOwnerReference(existingPod, build) {
-			if len(existingPod.OwnerReferences) > 0 {
-				// check to see if we have retried long enough for the old pod to get GC'ed
-				twoMinutesAgo := metav1.Now().Add(-2 * time.Minute)
-				if !build.CreationTimestamp.Time.Before(twoMinutesAgo) {
-					// requeue for retry via returning an error
-					return nil, fmt.Errorf("waiting since %s to see if pod %s/%s with incorrect uid %s is "+
-						"gc'ed before commencing build %s/%s",
-						build.CreationTimestamp.String(), build.Namespace, buildPod.Name, existingPod.UID,
-						build.Namespace, build.Name)
-				}
+			err := retryOnOwnerRef(build, existingPod)
+			if err != nil {
+				return nil, err
 			}
 
 			// reach this point, we give up

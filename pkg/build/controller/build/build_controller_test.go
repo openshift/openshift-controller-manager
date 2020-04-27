@@ -848,6 +848,82 @@ func TestCreateBuildPodWithExistingRelatedPodBadCA(t *testing.T) {
 	validateUpdate(t, "create build pod with existing related pod and bad CA configMap error", expected, update)
 }
 
+func TestHandleNewBuildWithExistingUnrelatedPod(t *testing.T) {
+	or := &metav1.OwnerReference{
+		APIVersion: "v1",
+		Kind:       "Build",
+		Name:       "foo",
+		UID:        "bar",
+	}
+	tests := []struct {
+		name              string
+		createTime        time.Time
+		expectErr         bool
+		expectedErrPrefix string
+		ownerRef          *metav1.OwnerReference
+	}{
+		{
+			name:              "create-within-two-minutes",
+			createTime:        metav1.Now().Add(-1 * time.Minute),
+			expectErr:         true,
+			expectedErrPrefix: "waiting since",
+			ownerRef:          or,
+		},
+		{
+			name:       "create-after-two-minutes",
+			createTime: metav1.Now().Add(-3 * time.Minute),
+			ownerRef:   or,
+		},
+		{
+			name: "create-existing-pod-no-owner-refs",
+		},
+	}
+	for _, test := range tests {
+		build := dockerStrategy(mockBuild(buildv1.BuildPhaseNew, buildv1.BuildOutput{}))
+		build.CreationTimestamp.Time = test.createTime
+
+		existingPod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      buildutil.GetBuildPodName(build),
+				Namespace: build.Namespace,
+			},
+		}
+
+		if test.ownerRef != nil {
+			existingPod.OwnerReferences = []metav1.OwnerReference{
+				*or,
+			}
+		}
+
+		kubeClient := fakeKubeExternalClientSet(existingPod, registryCAConfigMap)
+		errorReaction := func(action clientgotesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.NewAlreadyExists(schema.GroupResource{Group: "", Resource: "pods"}, existingPod.Name)
+		}
+		kubeClient.(*fake.Clientset).PrependReactor("create", "pods", errorReaction)
+		bc := newFakeBuildController(nil, nil, kubeClient, nil, nil)
+		defer bc.stop()
+
+		update, err := bc.handleNewBuild(build, existingPod)
+
+		if test.expectErr {
+			if err == nil {
+				t.Errorf("expected an error for %s", test.name)
+				continue
+			}
+			if !strings.HasPrefix(err.Error(), test.expectedErrPrefix) {
+				t.Errorf("unexpected error: %s", err.Error())
+			}
+			continue
+		}
+
+		expected := &buildUpdate{}
+		expected.setPhase(buildv1.BuildPhaseError)
+		expected.setReason(buildv1.StatusReasonBuildPodExists)
+		expected.setMessage("The pod for this build already exists and is older than the build.")
+		validateUpdate(t, "create build pod with pod with older existing pod", expected, update)
+	}
+}
+
 func TestCreatedBuildPodWithExistingUnrelatedPod(t *testing.T) {
 	or := &metav1.OwnerReference{
 		APIVersion: "v1",
