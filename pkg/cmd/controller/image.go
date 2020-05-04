@@ -115,6 +115,9 @@ func (u podSpecUpdater) Update(obj runtime.Object) error {
 	case *kappsv1beta2.Deployment:
 		_, err := u.kclient.AppsV1beta2().Deployments(t.Namespace).Update(t)
 		return err
+	case *kappsv1.StatefulSet:
+		_, err := u.kclient.AppsV1().StatefulSets(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
+		return err
 	case *kappsv1beta1.StatefulSet:
 		_, err := u.kclient.AppsV1beta1().StatefulSets(t.Namespace).Update(t)
 		return err
