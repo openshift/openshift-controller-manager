@@ -373,6 +373,67 @@ func TestSetupBuildCAs(t *testing.T) {
 	}
 }
 
+func TestDefaultActiveDeadline(t *testing.T) {
+	// note, existing custom/docker/sti tests check that build deadline override lands
+	// in pod activeDeadlineSeconds
+	tests := []struct {
+		build *buildv1.Build
+		cs    *CustomBuildStrategy
+		ds    *DockerBuildStrategy
+		ss    *SourceBuildStrategy
+	}{
+		{
+			build: mockCustomBuild(false, false),
+			cs:    &CustomBuildStrategy{},
+		},
+		{
+			build: mockDockerBuild(),
+			ds: &DockerBuildStrategy{
+				Image: "docker-test-image",
+			},
+		},
+		{
+			build: mockSTIBuild(),
+			ss: &SourceBuildStrategy{
+				Image:          "sti-test-image",
+				SecurityClient: newFakeSecurityClient(false),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		test.build.Spec.CompletionDeadlineSeconds = nil
+		var pod *corev1.Pod
+		var err error
+		switch {
+		case test.cs != nil:
+			pod, err = test.cs.CreateBuildPod(test.build, nil, testInternalRegistryHost)
+		case test.ds != nil:
+			pod, err = test.ds.CreateBuildPod(test.build, nil, testInternalRegistryHost)
+		case test.ss != nil:
+			pod, err = test.ss.CreateBuildPod(test.build, nil, testInternalRegistryHost)
+
+		}
+		if err != nil {
+			t.Errorf("err creating pod for build %#v: %#v", test.build, err)
+			continue
+		}
+		if pod == nil {
+			t.Errorf("pod nil for build %#v", test.build)
+			continue
+		}
+		//pod = setupActiveDeadline(pod, test.build)
+		if pod.Spec.ActiveDeadlineSeconds == nil {
+			t.Errorf("active deadline not set for build %#v", test.build)
+			continue
+		}
+		if *pod.Spec.ActiveDeadlineSeconds != 604800 {
+			t.Errorf("active deadline set to unexpected value %d for build %#v",
+				*pod.Spec.ActiveDeadlineSeconds, test.build)
+		}
+	}
+}
+
 func TestSetupBuildSystem(t *testing.T) {
 	const registryMount = "build-system-configs"
 	build := mockDockerBuild()
