@@ -112,9 +112,8 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 			NodeSelector:  build.Spec.NodeSelector,
 		},
 	}
-	if build.Spec.CompletionDeadlineSeconds != nil {
-		pod.Spec.ActiveDeadlineSeconds = build.Spec.CompletionDeadlineSeconds
-	}
+
+	pod = setupActiveDeadline(pod, build)
 
 	if !strategy.ForcePull {
 		pod.Spec.Containers[0].ImagePullPolicy = corev1.PullIfNotPresent

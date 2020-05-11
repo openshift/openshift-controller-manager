@@ -289,6 +289,23 @@ func addOutputEnvVars(buildOutput *corev1.ObjectReference, output *[]corev1.EnvV
 	return nil
 }
 
+// setupActiveDeadline sets up the Pod activeDeadlineSeconds field
+func setupActiveDeadline(pod *corev1.Pod, build *buildv1.Build) *corev1.Pod {
+	if build.Spec.CompletionDeadlineSeconds != nil {
+		pod.Spec.ActiveDeadlineSeconds = build.Spec.CompletionDeadlineSeconds
+		return pod
+	}
+
+	// RunOnceDuration admission plugin was used to include the default active deadline for run-once pods, like the build pods
+	// but it was removed from OpenShift in 4.0; rather than ship the RunOnceDuration admission as webhook admission
+	// plugin, which will involve creating new operator, we use a long activeDeadlineSeconds as build are
+	// designed to terminate
+	var defActiveDeadline int64
+	defActiveDeadline = 604800 // 1 week = 60 sec * 60 min * 24 hr * 7 days
+	pod.Spec.ActiveDeadlineSeconds = &defActiveDeadline
+	return pod
+}
+
 // setupAdditionalSecrets creates secret volume mounts in the given pod for the given list of secrets
 func setupAdditionalSecrets(pod *corev1.Pod, container *corev1.Container, secrets []buildv1.SecretSpec) {
 	for _, secretSpec := range secrets {

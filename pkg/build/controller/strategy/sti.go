@@ -186,9 +186,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		},
 	)
 
-	if build.Spec.CompletionDeadlineSeconds != nil {
-		pod.Spec.ActiveDeadlineSeconds = build.Spec.CompletionDeadlineSeconds
-	}
+	pod = setupActiveDeadline(pod, build)
 
 	setOwnerReference(pod, build)
 	setupDockerSecrets(pod, &pod.Spec.Containers[0], build.Spec.Output.PushSecret, strategy.PullSecret, build.Spec.Source.Images)
