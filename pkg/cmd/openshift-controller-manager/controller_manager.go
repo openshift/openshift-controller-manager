@@ -94,10 +94,11 @@ func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftCont
 	}
 	go leaderelection.RunOrDie(context.Background(),
 		leaderelection.LeaderElectionConfig{
-			Lock:          rl,
-			LeaseDuration: config.LeaderElection.LeaseDuration.Duration,
-			RenewDeadline: config.LeaderElection.RenewDeadline.Duration,
-			RetryPeriod:   config.LeaderElection.RetryPeriod.Duration,
+			Lock:            rl,
+			ReleaseOnCancel: true,
+			LeaseDuration:   config.LeaderElection.LeaseDuration.Duration,
+			RenewDeadline:   config.LeaderElection.RenewDeadline.Duration,
+			RetryPeriod:     config.LeaderElection.RetryPeriod.Duration,
 			Callbacks: leaderelection.LeaderCallbacks{
 				OnStartedLeading: originControllerManager,
 				OnStoppedLeading: func() {
