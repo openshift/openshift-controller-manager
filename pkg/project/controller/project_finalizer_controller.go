@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/klog"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -36,7 +36,7 @@ func NewProjectFinalizerController(namespaces corev1informers.NamespaceInformer,
 	c := &ProjectFinalizerController{
 		client:      client,
 		cacheSynced: namespaces.Informer().HasSynced,
-		queue:       workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		queue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "project-finalizer"),
 		nsLister:    namespaces.Lister(),
 	}
 	namespaces.Informer().AddEventHandler(

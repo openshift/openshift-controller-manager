@@ -87,7 +87,7 @@ func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, e
 		scaleNamespacer:     scaleNS,
 		mapper:              mapper,
 		endpointsNamespacer: endptsNS,
-		queue:               workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter()),
+		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "unidling"),
 		lastFiredCache: &lastFiredCache{
 			items: make(map[types.NamespacedName]time.Time),
 		},
