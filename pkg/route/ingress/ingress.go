@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	networkingv1beta1informers "k8s.io/client-go/informers/networking/v1beta1"
+	clientset "k8s.io/client-go/kubernetes"
 	kv1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	networkingv1beta1listers "k8s.io/client-go/listers/networking/v1beta1"
@@ -74,6 +75,8 @@ type Controller struct {
 	eventRecorder record.EventRecorder
 
 	client routeclient.RoutesGetter
+
+	ingressClient clientset.Interface
 
 	ingressLister networkingv1beta1listers.IngressLister
 	secretLister  corelisters.SecretLister
@@ -160,7 +163,7 @@ type queueKey struct {
 }
 
 // NewController instantiates a Controller
-func NewController(eventsClient kv1core.EventsGetter, client routeclient.RoutesGetter, ingresses networkingv1beta1informers.IngressInformer, secrets coreinformers.SecretInformer, services coreinformers.ServiceInformer, routes routeinformers.RouteInformer) *Controller {
+func NewController(eventsClient kv1core.EventsGetter, client routeclient.RoutesGetter, ingressClient clientset.Interface, ingresses networkingv1beta1informers.IngressInformer, secrets coreinformers.SecretInformer, services coreinformers.ServiceInformer, routes routeinformers.RouteInformer) *Controller {
 	broadcaster := record.NewBroadcaster()
 	broadcaster.StartLogging(klog.Infof)
 	// TODO: remove the wrapper when every clients have moved to use the clientset.
@@ -174,7 +177,8 @@ func NewController(eventsClient kv1core.EventsGetter, client routeclient.RoutesG
 		expectations:     newExpectations(),
 		expectationDelay: 2 * time.Second,
 
-		client: client,
+		client:        client,
+		ingressClient: ingressClient,
 
 		ingressLister: ingresses.Lister(),
 		secretLister:  secrets.Lister(),
@@ -405,6 +409,24 @@ func (c *Controller) sync(key queueKey) error {
 			}
 
 			if routeMatchesIngress(existing, ingress, &rule, &path, c.secretLister, c.serviceLister) {
+				var loadbalancerIngresses []corev1.LoadBalancerIngress
+				for _, rule := range ingress.Spec.Rules {
+
+					loadbalancerIngress := corev1.LoadBalancerIngress{
+						Hostname: rule.Host,
+					}
+
+					loadbalancerIngresses = append(loadbalancerIngresses, loadbalancerIngress)
+
+				}
+
+				ingress.Status.LoadBalancer = corev1.LoadBalancerStatus{Ingress: loadbalancerIngresses}
+
+				ingClient := c.ingressClient.NetworkingV1beta1().Ingresses(ingress.Namespace)
+				_, err = ingClient.UpdateStatus(context.TODO(), ingress, metav1.UpdateOptions{})
+				if err != nil {
+					klog.Warningf("error updating ingress rule: %v", err)
+				}
 				continue
 			}
 

@@ -5,6 +5,9 @@ import (
 
 	routeclient "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
 	"github.com/openshift/openshift-controller-manager/pkg/route/ingress"
+
+	ingressclient "k8s.io/client-go/kubernetes"
+
 )
 
 func RunIngressToRouteController(ctx *ControllerContext) (bool, error) {
@@ -17,10 +20,15 @@ func RunIngressToRouteController(ctx *ControllerContext) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	ingressClient, err := ingressclient.NewForConfig(clientConfig)
+	if err != nil {
+		return false, err
+	}
 
 	controller := ingress.NewController(
 		coreClient,
 		routeClient,
+		ingressClient,
 		ctx.KubernetesInformers.Networking().V1beta1().Ingresses(),
 		ctx.KubernetesInformers.Core().V1().Secrets(),
 		ctx.KubernetesInformers.Core().V1().Services(),
