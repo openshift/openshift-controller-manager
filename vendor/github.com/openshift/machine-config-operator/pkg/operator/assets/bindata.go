@@ -653,6 +653,22 @@ spec:
                     version:
                       description: "version string is the semantic version number of the spec"
                       type: string
+                passwd:
+                  type: object
+                  properties:
+                    users:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            description: "name of user. Must be \"core\" user."
+                            type: string
+                          sshAuthorizedKeys:
+                            description: "public keys to be assigned to user core"
+                            type: array
+                            items:
+                              type: string
                 storage:
                   description: "storage describes the desired state of the system's storage devices"
                   type: object
@@ -1654,11 +1670,11 @@ kind: Pod
 apiVersion: v1
 metadata:
   name: coredns
-  namespace: openshift-kni-infra
+  namespace: openshift-openstack-infra
   creationTimestamp:
   deletionGracePeriodSeconds: 65
   labels:
-    app: kni-infra-mdns
+    app: openstack-infra-mdns
 spec:
   volumes:
   - name: resource-dir
@@ -1815,11 +1831,11 @@ kind: Pod
 apiVersion: v1
 metadata:
   name: keepalived
-  namespace: openshift-kni-infra
+  namespace: openshift-openstack-infra
   creationTimestamp:
   deletionGracePeriodSeconds: 65
   labels:
-    app: kni-infra-vrrp
+    app: openstack-infra-vrrp
 spec:
   volumes:
   - name: resource-dir
