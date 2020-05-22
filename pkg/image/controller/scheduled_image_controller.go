@@ -13,6 +13,7 @@ import (
 
 	imagev1 "github.com/openshift/api/image/v1"
 	imagev1lister "github.com/openshift/client-go/image/listers/image/v1"
+	"github.com/openshift/library-go/pkg/image/imageutil"
 	imageref "github.com/openshift/library-go/pkg/image/reference"
 	metrics "github.com/openshift/openshift-controller-manager/pkg/image/metrics/prometheus"
 )
@@ -182,9 +183,10 @@ func resetScheduledTags(stream *imagev1.ImageStream) {
 		if tagImportable(tagRef) && tagRef.ImportPolicy.Scheduled {
 			if ref, err := imageref.Parse(tagRef.From.Name); err != nil && len(tagRef.From.Name) > 0 {
 				continue
-			} else if len(ref.ID) > 0 && !tagNeedsImport(stream, tagRef, true) {
+			} else if len(ref.ID) > 0 && tagImported(stream, tagRef) {
 				// ref.ID is set if this is a canonical, sha/digest ref;
-				// we allow scheduled import of those, but only until the initially succeed
+				// we allow scheduled import of those, but only until it succeeds
+				// at least once.
 				continue
 			}
 			tagRef.Generation = &next
@@ -193,15 +195,25 @@ func resetScheduledTags(stream *imagev1.ImageStream) {
 	}
 }
 
+// tagImported returns if a tag has been imported and is on the last generation.
+func tagImported(stream *imagev1.ImageStream, tag imagev1.TagReference) bool {
+	tagEvents, hasTag := imageutil.StatusHasTag(stream, tag.Name)
+	if !hasTag || tag.Generation == nil || len(tagEvents.Items) == 0 {
+		return false
+	}
+	return tagEvents.Items[0].Generation == *tag.Generation
+}
+
 // needsScheduling returns true if this image stream has any scheduled tags
 func needsScheduling(stream *imagev1.ImageStream) bool {
 	for _, tagRef := range stream.Spec.Tags {
 		if tagImportable(tagRef) && tagRef.ImportPolicy.Scheduled {
 			if ref, err := imageref.Parse(tagRef.From.Name); err != nil && len(tagRef.From.Name) > 0 {
 				continue
-			} else if len(ref.ID) > 0 && !tagNeedsImport(stream, tagRef, true) {
+			} else if len(ref.ID) > 0 && tagImported(stream, tagRef) {
 				// ref.ID is set if this is a canonical, sha/digest ref;
-				// we allow scheduled import of those, but only until the initially succeed
+				// we allow scheduled import of those, but only until it succeeds
+				// at least once.
 				continue
 			}
 			return true
