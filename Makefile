@@ -5,6 +5,7 @@ all: build
 include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
 	golang.mk \
 	targets/openshift/images.mk \
+	targets/openshift/deps.mk \
 )
 
 IMAGE_REGISTRY :=registry.svc.ci.openshift.org
