@@ -2159,17 +2159,25 @@ func (bc *BuildController) createBuildSignaturePolicyData(config *configv1.Image
 		}
 	}
 
+	// Local containers-storage transport should always allow image "pull"
+	containersStorageScopes := make(signature.PolicyTransportScopes)
+	containersStorageScopes[""] = signature.PolicyRequirements{
+		signature.NewPRInsecureAcceptAnything(),
+	}
+
 	// Policies for image pull/push are set on a per-transport basis.
 	// This list will need to be updated if addtitional transports are used by the build pod.
 	// The following transports are currently available in openshift builds:
 	//
 	// 1. docker: a docker v2 registry (docker.io, quay.io, internal registry, etc.)
 	// 2. atomic: an ImageStreamTag reference - deprecated
+	// 3. containers-storage: local image storage
 	//
 	// See man skopeo(1) for the full list of supported transports.
 	policyObj.Transports = map[string]signature.PolicyTransportScopes{
-		"atomic": transportScopes,
-		"docker": transportScopes,
+		"atomic":             transportScopes,
+		"docker":             transportScopes,
+		"containers-storage": containersStorageScopes,
 	}
 
 	policyJSON, err := json.Marshal(policyObj)
