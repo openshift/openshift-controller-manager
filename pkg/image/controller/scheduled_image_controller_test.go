@@ -160,6 +160,41 @@ func TestSchedulingChecks(t *testing.T) {
 			},
 			expectedResult: false,
 		},
+		"sha ref that failed will import": {
+			is: &imagev1.ImageStream{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test", Namespace: "other", UID: "1", ResourceVersion: "1",
+					Annotations: map[string]string{imagev1.DockerImageRepositoryCheckAnnotation: "done"},
+					Generation:  1,
+				},
+				Spec: imagev1.ImageStreamSpec{
+					Tags: []imagev1.TagReference{
+						{
+							Name:         "default1",
+							From:         &corev1.ObjectReference{Kind: "DockerImage", Name: "abc@sha256:3c87c572822935df60f0f5d3665bd376841a7fcfeb806b5f212de6a00e9a7b25"},
+							Generation:   &one,
+							ImportPolicy: imagev1.TagImportPolicy{Scheduled: true},
+						},
+					},
+				},
+				Status: imagev1.ImageStreamStatus{
+					Tags: []imagev1.NamedTagEventList{
+						{
+							Tag: "default1",
+							Conditions: []imagev1.TagEventCondition{
+								{
+									Type:       imagev1.ImportSuccess,
+									Status:     corev1.ConditionFalse,
+									Generation: 1,
+									Message:    "transient error",
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedResult: true,
+		},
 		"sha ref not imported": {
 			is: &imagev1.ImageStream{
 				ObjectMeta: metav1.ObjectMeta{
