@@ -11,6 +11,7 @@ require (
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/docker-credential-helpers v0.0.0-20190720063934-f78081d1f7fe // indirect
+	github.com/google/go-cmp v0.3.1
 	github.com/google/gofuzz v1.1.0
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
