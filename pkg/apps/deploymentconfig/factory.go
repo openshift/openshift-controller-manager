@@ -88,7 +88,7 @@ func (c *DeploymentConfigController) Run(workers int, stopCh <-chan struct{}) {
 		go wait.Until(c.worker, time.Second, stopCh)
 	}
 
-	metrics.InitializeMetricsCollector(c.rcLister)
+	metrics.InitializeMetricsCollector(c.dcLister, c.rcLister)
 
 	<-stopCh
 

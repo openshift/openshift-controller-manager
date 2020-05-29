@@ -2,11 +2,14 @@ package prometheus
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/blang/semver"
+	appsv1 "github.com/openshift/api/apps/v1"
+	appsv1listers "github.com/openshift/client-go/apps/listers/apps/v1"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"k8s.io/apimachinery/pkg/labels"
@@ -21,6 +24,7 @@ const (
 	completeRolloutCount         = "complete_rollouts_total"
 	activeRolloutDurationSeconds = "active_rollouts_duration_seconds"
 	lastFailedRolloutTime        = "last_failed_rollout_time"
+	strategyCount                = "strategy_total"
 
 	availablePhase = "available"
 	failedPhase    = "failed"
@@ -50,19 +54,27 @@ var (
 		[]string{"namespace", "name", "phase", "latest_version"}, nil,
 	)
 
+	strategyCountDesc = prometheus.NewDesc(
+		nameToQuery(strategyCount),
+		"Counts strategy usage",
+		[]string{"type"}, nil,
+	)
+
 	apps = appsCollector{}
 )
 
 type appsCollector struct {
-	lister     kcorelisters.ReplicationControllerLister
+	rcLister   kcorelisters.ReplicationControllerLister
+	dcLister   appsv1listers.DeploymentConfigLister
 	nowFn      func() time.Time
 	isCreated  bool
 	createOnce sync.Once
 	createLock sync.RWMutex
 }
 
-func InitializeMetricsCollector(rcLister kcorelisters.ReplicationControllerLister) {
-	apps.lister = rcLister
+func InitializeMetricsCollector(dcLister appsv1listers.DeploymentConfigLister, rcLister kcorelisters.ReplicationControllerLister) {
+	apps.dcLister = dcLister
+	apps.rcLister = rcLister
 	apps.nowFn = time.Now
 	if !apps.IsCreated() {
 		legacyregistry.MustRegister(&apps)
@@ -89,6 +101,8 @@ func (c *appsCollector) IsCreated() bool {
 func (c *appsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- completeRolloutCountDesc
 	ch <- activeRolloutDurationSecondsDesc
+	ch <- lastFailedRolloutTimeDesc
+	ch <- strategyCountDesc
 }
 
 type failedRollout struct {
@@ -106,19 +120,17 @@ func (c *appsCollector) FQName() string {
 	return "openshift_apps_deploymentconfigs"
 }
 
-// Collect implements the prometheus.Collector interface.
-func (c *appsCollector) Collect(ch chan<- prometheus.Metric) {
-	result, err := c.lister.List(labels.Everything())
+func (c *appsCollector) CollectDeploymentStats(ch chan<- prometheus.Metric) {
+	rcList, err := c.rcLister.List(labels.Everything())
 	if err != nil {
-		klog.V(4).Infof("Collecting metrics for apps failed: %v", err)
+		klog.Warningf("Collecting deployment metrics for deplyomentconfigs.apps failed: %v", err)
 		return
 	}
 
 	var available, failed, cancelled float64
-
 	latestFailedRollouts := map[string]failedRollout{}
-
-	for _, d := range result {
+	latestCompletedRolloutVersion := map[string]int64{}
+	for _, d := range rcList {
 		dcName := util.DeploymentConfigNameFor(d)
 		if len(dcName) == 0 {
 			continue
@@ -145,12 +157,13 @@ func (c *appsCollector) Collect(ch chan<- prometheus.Metric) {
 				continue
 			}
 			if util.IsCompleteDeployment(d) {
-				// If a completed rollout is found AFTER we recorded a failed rollout,
-				// do not record the lastFailedRollout as the latest rollout is not
-				// failed.
-				if r, hasFailedRollout := latestFailedRollouts[key]; hasFailedRollout && r.latestVersion < latestVersion {
-					delete(latestFailedRollouts, key)
+				// Track the latest completed rollout per deployment config so we can prune
+				// the failed ones that are older.
+				v, exists := latestCompletedRolloutVersion[key]
+				if !exists || latestVersion > v {
+					latestCompletedRolloutVersion[key] = latestVersion
 				}
+
 				available++
 				continue
 			}
@@ -178,8 +191,16 @@ func (c *appsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// Record latest failed rollouts
-	for dc, r := range latestFailedRollouts {
-		parts := strings.Split(dc, "/")
+	for key, r := range latestFailedRollouts {
+		// If a completed rollout is found AFTER we recorded a failed rollout,
+		// do not record the lastFailedRollout as the latest rollout is not
+		// failed.
+		v, exists := latestCompletedRolloutVersion[key]
+		if exists && v >= r.latestVersion {
+			continue
+		}
+
+		parts := strings.Split(key, "/")
 		ch <- prometheus.MustNewConstMetric(
 			lastFailedRolloutTimeDesc,
 			prometheus.GaugeValue,
@@ -194,4 +215,38 @@ func (c *appsCollector) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(completeRolloutCountDesc, prometheus.GaugeValue, available, []string{availablePhase}...)
 	ch <- prometheus.MustNewConstMetric(completeRolloutCountDesc, prometheus.GaugeValue, failed, []string{failedPhase}...)
 	ch <- prometheus.MustNewConstMetric(completeRolloutCountDesc, prometheus.GaugeValue, cancelled, []string{cancelledPhase}...)
+}
+
+func (c *appsCollector) CollectDCStats(ch chan<- prometheus.Metric) {
+	dcList, err := c.dcLister.List(labels.Everything())
+	if err != nil {
+		klog.Warningf("Collecting deployment metrics for deplyomentconfigs.apps failed: %v", err)
+		return
+	}
+
+	// Init the map so we always send even 0 metrics
+	strategies := map[string]float64{
+		string(appsv1.DeploymentStrategyTypeRecreate): 0,
+		string(appsv1.DeploymentStrategyTypeRolling):  0,
+		string(appsv1.DeploymentStrategyTypeCustom):   0,
+	}
+	for _, dc := range dcList {
+		strategies[string(dc.Spec.Strategy.Type)] += 1
+	}
+
+	strategiesKeys := make([]string, 0, len(strategies))
+	for k := range strategies {
+		strategiesKeys = append(strategiesKeys, k)
+	}
+	sort.Strings(strategiesKeys)
+	for _, s := range strategiesKeys {
+		v := strategies[s]
+		ch <- prometheus.MustNewConstMetric(strategyCountDesc, prometheus.GaugeValue, v, []string{strings.ToLower(s)}...)
+	}
+}
+
+// Collect implements the prometheus.Collector interface.
+func (c *appsCollector) Collect(ch chan<- prometheus.Metric) {
+	c.CollectDCStats(ch)
+	c.CollectDeploymentStats(ch)
 }
