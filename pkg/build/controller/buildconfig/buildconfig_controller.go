@@ -27,6 +27,7 @@ import (
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildscheme"
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 	buildcommon "github.com/openshift/openshift-controller-manager/pkg/build/controller/common"
+	workqueuemetrics "github.com/openshift/openshift-controller-manager/pkg/metrics"
 )
 
 const (
@@ -84,6 +85,8 @@ func NewBuildConfigController(buildClient buildclient.Interface, kubeExternalCli
 		queue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "buildconfig"),
 		recorder: eventBroadcaster.NewRecorder(buildscheme.EncoderScheme, corev1.EventSource{Component: "buildconfig-controller"}),
 	}
+
+	workqueuemetrics.NewNamedWorkQueueMetrics("buildconfig")
 
 	c.buildConfigInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: c.buildConfigUpdated,

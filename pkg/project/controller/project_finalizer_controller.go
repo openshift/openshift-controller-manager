@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	projectapiv1 "github.com/openshift/api/project/v1"
+	workqueuemetrics "github.com/openshift/openshift-controller-manager/pkg/metrics"
 )
 
 // ProjectFinalizerController is responsible for participating in Kubernetes Namespace termination
@@ -39,6 +40,7 @@ func NewProjectFinalizerController(namespaces corev1informers.NamespaceInformer,
 		queue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "project-finalizer"),
 		nsLister:    namespaces.Lister(),
 	}
+	workqueuemetrics.NewNamedWorkQueueMetrics("project-finalizer")
 	namespaces.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {

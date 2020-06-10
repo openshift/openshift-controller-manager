@@ -24,6 +24,8 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/registry/core/service/allocator"
 	"k8s.io/kubernetes/pkg/registry/core/service/ipallocator"
+
+	workqueuemetrics "github.com/openshift/openshift-controller-manager/pkg/metrics"
 )
 
 const (
@@ -90,6 +92,8 @@ func NewIngressIPController(services cache.SharedIndexInformer, kc kclientset.In
 		maxRetries: 10,
 		recorder:   recorder,
 	}
+
+	workqueuemetrics.NewNamedWorkQueueMetrics("ingressip")
 
 	ic.cache = services.GetStore()
 	ic.controller = services.GetController()

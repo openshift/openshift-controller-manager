@@ -64,6 +64,7 @@ import (
 	"github.com/openshift/openshift-controller-manager/pkg/build/controller/policy"
 	"github.com/openshift/openshift-controller-manager/pkg/build/controller/strategy"
 	metrics "github.com/openshift/openshift-controller-manager/pkg/build/metrics/prometheus"
+	workqueuemetrics "github.com/openshift/openshift-controller-manager/pkg/metrics"
 )
 
 const (
@@ -268,6 +269,10 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 		recorder:    eventBroadcaster.NewRecorder(buildscheme.EncoderScheme, corev1.EventSource{Component: "build-controller"}),
 		runPolicies: policy.GetAllRunPolicies(buildLister, params.BuildClient.BuildV1()),
 	}
+
+	workqueuemetrics.NewNamedWorkQueueMetrics("build")
+	workqueuemetrics.NewNamedWorkQueueMetrics("build-completed")
+	workqueuemetrics.NewNamedWorkQueueMetrics("build-controller-config")
 
 	c.podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: c.podUpdated,
