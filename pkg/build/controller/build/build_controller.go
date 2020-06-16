@@ -1878,26 +1878,28 @@ func (bc *BuildController) createBuildGlobalCAConfigMapSpec(build *buildv1.Build
 				makeBuildPodOwnerRef(buildPod),
 			},
 		},
-		Data: map[string]string{},
+		Data: map[string]string{
+			buildutil.GlobalCAConfigMapKey: "",
+		},
 	}
 
-	globalCAMap, err := bc.controllerManagerConfigMapStore.ConfigMaps("openshift-controller-manager").Get("openshift-global-ca")
+	globalCAMap, err := bc.controllerManagerConfigMapStore.ConfigMaps("openshift-controller-manager").Get("openshift-user-ca")
+	// If a trusted CA is not configured on the cluster proxy config, this ConfigMap will not be present.
 	if errors.IsNotFound(err) {
-		klog.V(2).Infof("WARNING - global certificate authority could not be found. If a proxy with a custom CA is being employed, build %s/%s will fail.", build.Namespace, build.Name)
 		return cm
 	}
 	if err != nil {
-		klog.V(1).Infof("ERROR - failed to read global certificate authority. If a proxy with a custom CA is being employed, build %s/%s will fail. Error: %v", build.Namespace, build.Name, err)
+		klog.V(1).Infof("ERROR - failed to read proxy certificate authority. If a proxy with a custom CA is being employed, build %s/%s will fail. Error: %v", build.Namespace, build.Name, err)
 		return cm
 	}
 	if globalCAMap == nil || len(globalCAMap.Data) == 0 {
-		klog.V(2).Infof("WARNING - global certificate authority data is not available. If a proxy with a custom CA is being employed, build %s/%s will fail.", build.Namespace, build.Name)
+		klog.V(2).Infof("WARNING - proxy certificate authority data is not available. If a proxy with a custom CA is being employed, build %s/%s will fail.", build.Namespace, build.Name)
 		return cm
 
 	}
 	globalCAData, exists := globalCAMap.Data[buildutil.GlobalCAConfigMapKey]
 	if !exists {
-		klog.V(2).Infof("WARNING - global certificate authority data is missing. If a proxy with a custom CA is being employed, build %s/%s will fail.", build.Namespace, build.Name)
+		klog.V(2).Infof("WARNING - proxy certificate authority data is missing. If a proxy with a custom CA is being employed, build %s/%s will fail.", build.Namespace, build.Name)
 		return cm
 	}
 	cm.Data[buildutil.GlobalCAConfigMapKey] = globalCAData
