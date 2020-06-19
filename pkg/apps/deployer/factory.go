@@ -19,6 +19,8 @@ import (
 	kcontroller "k8s.io/kubernetes/pkg/controller"
 
 	"github.com/openshift/library-go/pkg/apps/appsutil"
+
+	"github.com/openshift/openshift-controller-manager/pkg/metrics"
 )
 
 // NewDeployerController creates a new DeploymentController.
@@ -51,6 +53,8 @@ func NewDeployerController(
 		environment:    env,
 		recorder:       recorder,
 	}
+
+	metrics.NewNamedWorkQueueMetrics("deployer")
 
 	rcInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.addReplicationController,

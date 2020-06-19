@@ -28,6 +28,7 @@ import (
 	unidlingapi "github.com/openshift/api/unidling/v1alpha1"
 	appstypedclient "github.com/openshift/client-go/apps/clientset/versioned/typed/apps/v1"
 	"github.com/openshift/library-go/pkg/unidling/unidlingclient"
+	workqueuemetrics "github.com/openshift/openshift-controller-manager/pkg/metrics"
 )
 
 const MaxRetries = 5
@@ -95,6 +96,8 @@ func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, e
 		dcNamespacer: dcNamespacer,
 		rcNamespacer: rcNamespacer,
 	}
+
+	workqueuemetrics.NewNamedWorkQueueMetrics("unidling")
 
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{

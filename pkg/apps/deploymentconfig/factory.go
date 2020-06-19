@@ -23,6 +23,7 @@ import (
 	appsv1client "github.com/openshift/client-go/apps/clientset/versioned"
 	appsv1informer "github.com/openshift/client-go/apps/informers/externalversions/apps/v1"
 	metrics "github.com/openshift/openshift-controller-manager/pkg/apps/metrics/prometheus"
+	workqueuemetrics "github.com/openshift/openshift-controller-manager/pkg/metrics"
 )
 
 // NewDeploymentConfigController creates a new DeploymentConfigController.
@@ -52,6 +53,8 @@ func NewDeploymentConfigController(
 
 		recorder: recorder,
 	}
+
+	workqueuemetrics.NewNamedWorkQueueMetrics("deploymentconfig")
 
 	c.dcLister = dcInformer.Lister()
 	dcInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{

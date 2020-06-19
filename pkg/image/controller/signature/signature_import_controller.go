@@ -17,6 +17,7 @@ import (
 	imagev1client "github.com/openshift/client-go/image/clientset/versioned"
 	imagev1informer "github.com/openshift/client-go/image/informers/externalversions/image/v1"
 	imagev1lister "github.com/openshift/client-go/image/listers/image/v1"
+	workqueuemetrics "github.com/openshift/openshift-controller-manager/pkg/metrics"
 )
 
 type SignatureDownloader interface {
@@ -46,6 +47,7 @@ func NewSignatureImportController(ctx context.Context, imageClient imagev1client
 		imageHasSynced:       imageInformer.Informer().HasSynced,
 		signatureImportLimit: limit,
 	}
+	workqueuemetrics.NewNamedWorkQueueMetrics("image-signature-import")
 	controller.fetcher = NewContainerImageSignatureDownloader(ctx, fetchTimeout)
 
 	imageInformer.Informer().AddEventHandlerWithResyncPeriod(cache.ResourceEventHandlerFuncs{
