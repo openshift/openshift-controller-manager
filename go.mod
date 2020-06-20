@@ -1,46 +1,41 @@
 module github.com/openshift/openshift-controller-manager
 
-go 1.12
+go 1.13
 
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/blang/semver v3.5.0+incompatible
-	github.com/certifi/gocertifi v0.0.0-20180905225744-ee1a9a0726d2 // indirect
-	github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6 // indirect
 	github.com/containers/image v3.0.2+incompatible
 	github.com/containers/storage v0.0.0-20170801145921-47536c89fcc5 // indirect
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/docker-credential-helpers v0.0.0-20190720063934-f78081d1f7fe // indirect
-	github.com/docker/go-metrics v0.0.0-20181218153428-b84716841b82 // indirect
-	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
-	github.com/getsentry/raven-go v0.0.0-20171206001108-32a13797442c // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
-	github.com/google/gofuzz v1.0.0
+	github.com/google/gofuzz v1.1.0
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/mtrmac/gpgme v0.1.2 // indirect
 	github.com/onsi/ginkgo v1.10.2 // indirect
-	github.com/openshift/api v3.9.1-0.20191028134408-abf28f93703b+incompatible
-	github.com/openshift/client-go v0.0.0-20191022152013-2823239d2298
-	github.com/openshift/library-go v0.0.0-20191029093732-d368763acf52
+	github.com/openshift/api v0.0.0-20200217161739-c99157bc6492
+	github.com/openshift/build-machinery-go v0.0.0-20200211121458-5e3d6e570160
+	github.com/openshift/client-go v0.0.0-20200116152001-92a2713fa240
+	github.com/openshift/library-go v0.0.0-20200403110656-d90e89b206c5
 	github.com/openshift/machine-config-operator v0.0.0-20190904184504-49d703c2c17a
-	github.com/pkg/profile v1.3.0 // indirect
-	github.com/prometheus/client_golang v1.0.0
+	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
-	k8s.io/api v0.0.0
-	k8s.io/apimachinery v0.0.0
-	k8s.io/apiserver v0.0.0
-	k8s.io/client-go v0.0.0
-	k8s.io/component-base v0.0.0
+	k8s.io/api v0.17.2
+	k8s.io/apimachinery v0.17.2
+	k8s.io/apiserver v0.17.1
+	k8s.io/client-go v0.17.1
+	k8s.io/component-base v0.17.1
 	k8s.io/klog v1.0.0
 	k8s.io/kubectl v0.0.0
 	k8s.io/kubernetes v0.0.0
