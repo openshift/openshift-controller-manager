@@ -173,7 +173,7 @@ github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
 # github.com/opencontainers/runc v1.0.0-rc10
 github.com/opencontainers/runc/libcontainer/user
-# github.com/openshift/api v0.0.0-20200326160804-ecb9283fe820
+# github.com/openshift/api v0.0.0-20200625192535-213ae491f5ec
 github.com/openshift/api
 github.com/openshift/api/annotations
 github.com/openshift/api/apps
@@ -202,6 +202,8 @@ github.com/openshift/api/openshiftcontrolplane/v1
 github.com/openshift/api/operator
 github.com/openshift/api/operator/v1
 github.com/openshift/api/operator/v1alpha1
+github.com/openshift/api/operatorcontrolplane
+github.com/openshift/api/operatorcontrolplane/v1alpha1
 github.com/openshift/api/osin
 github.com/openshift/api/osin/v1
 github.com/openshift/api/pkg/serialization
@@ -222,7 +224,7 @@ github.com/openshift/api/template/v1
 github.com/openshift/api/unidling/v1alpha1
 github.com/openshift/api/user
 github.com/openshift/api/user/v1
-# github.com/openshift/build-machinery-go v0.0.0-20200211121458-5e3d6e570160
+# github.com/openshift/build-machinery-go v0.0.0-20200424080330-082bf86082cc
 github.com/openshift/build-machinery-go
 github.com/openshift/build-machinery-go/make
 github.com/openshift/build-machinery-go/make/lib
@@ -497,7 +499,7 @@ gopkg.in/square/go-jose.v2/json
 gopkg.in/square/go-jose.v2/jwt
 # gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
-# k8s.io/api v0.18.0 => k8s.io/api v0.18.0
+# k8s.io/api v0.18.3 => k8s.io/api v0.18.0
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
 k8s.io/api/admissionregistration/v1
@@ -541,7 +543,7 @@ k8s.io/api/settings/v1alpha1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apimachinery v0.18.0 => k8s.io/apimachinery v0.18.0
+# k8s.io/apimachinery v0.18.3 => k8s.io/apimachinery v0.18.0
 k8s.io/apimachinery/pkg/api/apitesting
 k8s.io/apimachinery/pkg/api/apitesting/fuzzer
 k8s.io/apimachinery/pkg/api/equality
