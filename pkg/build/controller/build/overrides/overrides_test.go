@@ -13,28 +13,61 @@ import (
 )
 
 func TestBuildOverrideForcePull(t *testing.T) {
+	truePtr := true
+	falsePtr := false
 	tests := []struct {
-		name  string
-		build *buildv1.Build
+		name      string
+		build     *buildv1.Build
+		forcePull *bool
 	}{
 		{
-			name:  "build - custom",
+			name:  "build - custom - forcePull: nil",
 			build: testutil.Build().WithCustomStrategy().AsBuild(),
 		},
 		{
-			name:  "build - docker",
+			name:  "build - docker - forcePull: nil",
 			build: testutil.Build().WithDockerStrategy().AsBuild(),
 		},
 		{
-			name:  "build - source",
+			name:  "build - source - forcePull: nil",
 			build: testutil.Build().WithSourceStrategy().AsBuild(),
+		},
+		{
+			name:      "build - custom - forcePull: true",
+			build:     testutil.Build().WithCustomStrategy().AsBuild(),
+			forcePull: &truePtr,
+		},
+		{
+			name:      "build - docker - forcePull: true",
+			build:     testutil.Build().WithDockerStrategy().AsBuild(),
+			forcePull: &truePtr,
+		},
+		{
+			name:      "build - source - forcePull: true",
+			build:     testutil.Build().WithSourceStrategy().AsBuild(),
+			forcePull: &truePtr,
+		},
+		{
+			name:      "build - custom - forcePull: false",
+			build:     testutil.Build().WithCustomStrategy().AsBuild(),
+			forcePull: &falsePtr,
+		},
+		{
+			name:      "build - docker - forcePull: false",
+			build:     testutil.Build().WithDockerStrategy().AsBuild(),
+			forcePull: &falsePtr,
+		},
+		{
+			name:      "build - source - forcePull: false",
+			build:     testutil.Build().WithSourceStrategy().AsBuild(),
+			forcePull: &falsePtr,
 		},
 	}
 
 	ops := []admission.Operation{admission.Create, admission.Update}
 	for _, test := range tests {
 		for _, op := range ops {
-			overrides := BuildOverrides{Config: &openshiftcontrolplanev1.BuildOverridesConfig{ForcePull: true}}
+			overrides := BuildOverrides{Config: &openshiftcontrolplanev1.BuildOverridesConfig{ForcePull: test.forcePull}}
 			pod := testutil.Pod().WithBuild(t, test.build)
 			err := overrides.ApplyOverrides((*v1.Pod)(pod))
 			if err != nil {
@@ -44,23 +77,47 @@ func TestBuildOverrideForcePull(t *testing.T) {
 			strategy := build.Spec.Strategy
 			switch {
 			case strategy.CustomStrategy != nil:
-				if strategy.CustomStrategy.ForcePull == false {
-					t.Errorf("%s (%s): force pull was false", test.name, op)
+				if test.forcePull == nil {
+					if strategy.CustomStrategy.ForcePull {
+						t.Errorf("%s (%s): force pull was %t but should have been %t", test.name, op, strategy.CustomStrategy.ForcePull, false)
+					}
+				} else {
+					pullPolicy := v1.PullIfNotPresent
+					if *test.forcePull {
+						pullPolicy = v1.PullAlways
+					}
+					if strategy.CustomStrategy.ForcePull != *test.forcePull {
+						t.Errorf("%s (%s): force pull was %t but should have been %t", test.name, op, strategy.CustomStrategy.ForcePull, *test.forcePull)
+					}
+					if pod.Spec.Containers[0].ImagePullPolicy != pullPolicy {
+						t.Errorf("%s (%s): Container image pull policy was %s but should have been %s", test.name, op, pod.Spec.Containers[0].ImagePullPolicy, pullPolicy)
+					}
+					if pod.Spec.InitContainers[0].ImagePullPolicy != pullPolicy {
+						t.Errorf("%s (%s): InitContainer image pull policy was %s but should have been %s", test.name, op, pod.Spec.InitContainers[0].ImagePullPolicy, pullPolicy)
+					}
 				}
-				if pod.Spec.Containers[0].ImagePullPolicy != v1.PullAlways {
-					t.Errorf("%s (%s): image pull policy is not PullAlways", test.name, op)
-				}
-				if pod.Spec.InitContainers[0].ImagePullPolicy != v1.PullAlways {
-					t.Errorf("%s (%s): image pull policy is not PullAlways", test.name, op)
-				}
+
 			case strategy.DockerStrategy != nil:
-				if strategy.DockerStrategy.ForcePull == false {
-					t.Errorf("%s (%s): force pull was false", test.name, op)
+				if test.forcePull == nil {
+					if strategy.DockerStrategy.ForcePull {
+						t.Errorf("%s (%s): force pull was %t but should have been %t", test.name, op, strategy.DockerStrategy.ForcePull, false)
+					}
+				} else {
+					if strategy.DockerStrategy.ForcePull != *test.forcePull {
+						t.Errorf("%s (%s): force pull was %t but should have been %t", test.name, op, strategy.DockerStrategy.ForcePull, *test.forcePull)
+					}
 				}
 			case strategy.SourceStrategy != nil:
-				if strategy.SourceStrategy.ForcePull == false {
-					t.Errorf("%s (%s): force pull was false", test.name, op)
+				if test.forcePull == nil {
+					if strategy.SourceStrategy.ForcePull {
+						t.Errorf("%s (%s): force pull was %t but should have been %t", test.name, op, strategy.SourceStrategy.ForcePull, false)
+					}
+				} else {
+					if strategy.SourceStrategy.ForcePull != *test.forcePull {
+						t.Errorf("%s (%s): force pull was %t but should have been %t", test.name, op, strategy.SourceStrategy.ForcePull, *test.forcePull)
+					}
 				}
+
 			}
 		}
 	}

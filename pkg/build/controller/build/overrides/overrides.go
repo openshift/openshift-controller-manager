@@ -32,22 +32,28 @@ func (b BuildOverrides) ApplyOverrides(pod *corev1.Pod) error {
 
 	klog.V(4).Infof("Applying overrides to build %s/%s", build.Namespace, build.Name)
 
-	if b.Config.ForcePull {
+	if b.Config.ForcePull != nil {
 		if build.Spec.Strategy.DockerStrategy != nil {
-			klog.V(5).Infof("Setting docker strategy ForcePull to true in build %s/%s", build.Namespace, build.Name)
-			build.Spec.Strategy.DockerStrategy.ForcePull = true
+			klog.V(5).Infof("Setting docker strategy ForcePull to %t in build %s/%s", *b.Config.ForcePull, build.Namespace, build.Name)
+			build.Spec.Strategy.DockerStrategy.ForcePull = *b.Config.ForcePull
 		}
 		if build.Spec.Strategy.SourceStrategy != nil {
-			klog.V(5).Infof("Setting source strategy ForcePull to true in build %s/%s", build.Namespace, build.Name)
-			build.Spec.Strategy.SourceStrategy.ForcePull = true
+			klog.V(5).Infof("Setting source strategy ForcePull to %t in build %s/%s", *b.Config.ForcePull, build.Namespace, build.Name)
+			build.Spec.Strategy.SourceStrategy.ForcePull = *b.Config.ForcePull
 		}
 		if build.Spec.Strategy.CustomStrategy != nil {
-			err := applyForcePullToPod(pod)
+			pullPolicy := corev1.PullIfNotPresent
+			if *b.Config.ForcePull {
+				pullPolicy = corev1.PullAlways
+			}
+
+			err := applyPullPolicyToPod(pod, pullPolicy)
 			if err != nil {
 				return err
 			}
-			klog.V(5).Infof("Setting custom strategy ForcePull to true in build %s/%s", build.Namespace, build.Name)
-			build.Spec.Strategy.CustomStrategy.ForcePull = true
+
+			klog.V(5).Infof("Setting custom strategy ForcePull to %t in build %s/%s", *b.Config.ForcePull, build.Namespace, build.Name)
+			build.Spec.Strategy.CustomStrategy.ForcePull = *b.Config.ForcePull
 		}
 	}
 
@@ -98,14 +104,14 @@ func (b BuildOverrides) ApplyOverrides(pod *corev1.Pod) error {
 	return common.SetBuildInPod(pod, build)
 }
 
-func applyForcePullToPod(pod *corev1.Pod) error {
+func applyPullPolicyToPod(pod *corev1.Pod, pullPolicy corev1.PullPolicy) error {
 	for i := range pod.Spec.InitContainers {
-		klog.V(5).Infof("Setting ImagePullPolicy to PullAlways on init container %s of pod %s/%s", pod.Spec.InitContainers[i].Name, pod.Namespace, pod.Name)
-		pod.Spec.InitContainers[i].ImagePullPolicy = corev1.PullAlways
+		klog.V(5).Infof("Setting ImagePullPolicy to %q on init container %s of pod %s/%s", pullPolicy, pod.Spec.InitContainers[i].Name, pod.Namespace, pod.Name)
+		pod.Spec.InitContainers[i].ImagePullPolicy = pullPolicy
 	}
 	for i := range pod.Spec.Containers {
-		klog.V(5).Infof("Setting ImagePullPolicy to PullAlways on container %s of pod %s/%s", pod.Spec.Containers[i].Name, pod.Namespace, pod.Name)
-		pod.Spec.Containers[i].ImagePullPolicy = corev1.PullAlways
+		klog.V(5).Infof("Setting ImagePullPolicy to %q on container %s of pod %s/%s", pullPolicy, pod.Spec.Containers[i].Name, pod.Namespace, pod.Name)
+		pod.Spec.Containers[i].ImagePullPolicy = pullPolicy
 	}
 	return nil
 }
