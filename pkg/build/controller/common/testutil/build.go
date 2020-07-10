@@ -15,7 +15,6 @@ func Build() *TestBuild {
 	b.Spec.Source.Git = &buildv1.GitBuildSource{
 		URI: "http://test.build/source",
 	}
-	b.Spec.TriggeredBy = []buildv1.BuildTriggerCause{}
 	return b
 }
 
