@@ -68,6 +68,10 @@ func IsTerminalPhase(phase buildv1.BuildPhase) bool {
 	return true
 }
 
+func IsBuildSuccessful(phase buildv1.BuildPhase) bool {
+	return phase == buildv1.BuildPhaseComplete
+}
+
 // BuildConfigSelector returns a label Selector which can be used to find all
 // builds for a BuildConfig.
 func BuildConfigSelector(name string) labels.Selector {
