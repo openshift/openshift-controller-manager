@@ -43,6 +43,11 @@ const (
 	// GitCloneContainer is the name of the container that will clone the
 	// build source repository and also handle binary input content.
 	GitCloneContainer = "git-clone"
+
+	// containersStoragePath is the full path to default images storage location.
+	containersStoragePath = "/var/lib/containers/storage"
+	// containersAdditionalStoragePath is the full path to additional images storage location.
+	containersAdditionalStoragePath = "/var/lib/shared"
 )
 
 const (
@@ -450,7 +455,7 @@ func setupContainersStorage(pod *corev1.Pod, container *corev1.Container) {
 	container.VolumeMounts = append(container.VolumeMounts,
 		corev1.VolumeMount{
 			Name:      "container-storage-root",
-			MountPath: "/var/lib/containers/storage",
+			MountPath: containersStoragePath,
 		},
 	)
 	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_STORAGE_DRIVER", Value: "overlay"})
@@ -458,7 +463,8 @@ func setupContainersStorage(pod *corev1.Pod, container *corev1.Container) {
 }
 
 // setupContainersNodeStorage borrows the appropriate storage directories from the node so
-// that we can share layers that we're using with the node
+// that we can share layers that we're using with the node, as a additional read-only
+// mount point.
 func setupContainersNodeStorage(pod *corev1.Pod, container *corev1.Container) {
 	exists := false
 	for _, v := range pod.Spec.Volumes {
@@ -468,23 +474,26 @@ func setupContainersNodeStorage(pod *corev1.Pod, container *corev1.Container) {
 		}
 	}
 	if !exists {
+		directoryOrCreate := corev1.HostPathDirectoryOrCreate
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
-			// TODO: run unprivileged https://github.com/openshift/origin/issues/662
 			corev1.Volume{
 				Name: "node-storage-root",
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
-						Path: "/var/lib/containers/storage",
+						Type: &directoryOrCreate,
+						// default storage path for node images
+						Path: containersStoragePath,
 					},
 				},
 			},
 		)
 	}
 	container.VolumeMounts = append(container.VolumeMounts,
-		// TODO: run unprivileged https://github.com/openshift/origin/issues/662
 		corev1.VolumeMount{
-			Name:      "node-storage-root",
-			MountPath: "/var/lib/containers/storage",
+			Name: "node-storage-root",
+			// mounted as additional storage location
+			MountPath: containersAdditionalStoragePath,
+			ReadOnly:  true,
 		},
 	)
 	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_STORAGE_DRIVER", Value: "overlay"})

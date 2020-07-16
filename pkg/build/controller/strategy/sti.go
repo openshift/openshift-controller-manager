@@ -217,8 +217,8 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	setupInputConfigMaps(pod, &pod.Spec.Containers[0], build.Spec.Source.ConfigMaps)
 	setupContainersConfigs(build, pod)
 	setupBuildCAs(build, pod, additionalCAs, internalRegistryHost)
-	setupContainersStorage(pod, &pod.Spec.Containers[0]) // for unprivileged builds
-	// setupContainersNodeStorage(pod, &pod.Spec.Containers[0]) // for privileged builds
+	setupContainersStorage(pod, &pod.Spec.Containers[0])
+	setupContainersNodeStorage(pod, &pod.Spec.Containers[0])
 	setupBlobCache(pod)
 	return pod, nil
 }
