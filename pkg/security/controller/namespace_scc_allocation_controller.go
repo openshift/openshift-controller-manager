@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	controllerName = "namespace-security-allocation-controller"
-	rangeName      = "scc-uid"
+	controllerName    = "namespace-security-allocation-controller"
+	rangeName         = "scc-uid"
+	periodicRepairKey = "__internal/periodicRepair"
 )
 
 // NamespaceSCCAllocationController allocates uids/labels for namespaces
@@ -95,6 +96,8 @@ func (c *NamespaceSCCAllocationController) Run(stopCh <-chan struct{}) {
 		klog.Fatal(err)
 	}
 	klog.V(1).Infof("Repair complete")
+
+	c.AddNextPeriodicRepair()
 
 	go c.worker()
 	<-stopCh
@@ -200,6 +203,15 @@ func allocateNextContiguousBit(allocated *big.Int, max int) (int, bool) {
 	return 0, false
 }
 
+func (c *NamespaceSCCAllocationController) AddNextPeriodicRepair() {
+	// For this controller to work correctly we need to ensure a periodic repair
+	// of all the range allocations. For that we are adding an artificial key
+	// which will trigger that every 8 hours.
+	delta := time.Duration(8 * time.Hour)
+	c.queue.AddAfter(periodicRepairKey, delta)
+	klog.V(1).Infof("Adding next periodic repair on %s", time.Now().Add(delta))
+}
+
 func (c *NamespaceSCCAllocationController) WaitForRepair(stopCh <-chan struct{}) error {
 	return wait.PollImmediate(10*time.Second, 5*time.Minute, func() (bool, error) {
 		select {
@@ -222,7 +234,7 @@ func (c *NamespaceSCCAllocationController) Repair() error {
 	// the ordering guarantee required to ensure no item is allocated twice is violated.
 	// List must return a ResourceVersion higher than the etcd index Get,
 	// and the release code must not release items that have allocated but not yet been created
-	// See #8295
+	// See https://github.com/kubernetes/kubernetes/issues/8295
 
 	// get the curr so we have a resourceVersion to pin to
 	uidRange, err := c.rangeAllocationClient.RangeAllocations().Get(rangeName, metav1.GetOptions{})
@@ -323,7 +335,20 @@ func (c *NamespaceSCCAllocationController) work() bool {
 	if quit {
 		return false
 	}
-	defer c.queue.Done(key)
+	defer func() {
+		if key != periodicRepairKey {
+			c.queue.Done(key)
+		}
+	}()
+
+	if key == periodicRepairKey {
+		if err := c.Repair(); err != nil {
+			utilruntime.HandleError(fmt.Errorf("error during periodic repair: %v", err))
+		}
+		c.queue.Done(key)
+		c.AddNextPeriodicRepair()
+		return true
+	}
 
 	if err := c.syncNamespace(key.(string)); err == nil {
 		// this means the request was successfully handled.  We should "forget" the item so that any retry
