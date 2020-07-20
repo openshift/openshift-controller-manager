@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"k8s.io/api/core/v1"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	corev1 "k8s.io/api/core/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/client-go/tools/record"
@@ -38,20 +38,22 @@ func RunNamespaceSecurityAllocationController(ctx *ControllerContext) (bool, err
 		return true, err
 	}
 
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartRecordingToSink(&corev1client.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
+
 	controller := sccallocation.NewNamespaceSCCAllocationController(
 		ctx.KubernetesInformers.Core().V1().Namespaces(),
 		kubeClient.CoreV1().Namespaces(),
 		securityClient.SecurityV1(),
 		uidRange,
 		sccallocation.DefaultMCSAllocation(uidRange, mcsRange, ctx.OpenshiftControllerConfig.SecurityAllocator.MCSLabelsPerProject),
+		eventBroadcaster,
 	)
 	controllerRun := func(cntx context.Context) {
 		controller.Run(cntx.Done())
 	}
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(klog.Infof)
-	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
-	eventRecorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "cluster-policy-controller"})
+	eventRecorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, corev1.EventSource{Component: "cluster-policy-controller"})
 	id, err := os.Hostname()
 	if err != nil {
 		return false, err
