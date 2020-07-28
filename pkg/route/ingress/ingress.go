@@ -448,10 +448,7 @@ func (c *Controller) sync(key queueKey) error {
 		}
 	}
 
-	if len(errs) > 0 {
-		return utilerrors.NewAggregate(errs)
-	}
-	return nil
+	return utilerrors.NewAggregate(errs)
 }
 
 func hasIngressOwnerRef(owners []metav1.OwnerReference) (string, bool) {
@@ -489,7 +486,7 @@ func newRouteForIngress(
 			return nil
 		}
 		tlsConfig = &routev1.TLSConfig{
-			Termination:                   routev1.TLSTerminationEdge,
+			Termination:                   terminationPolicyForIngress(ingress),
 			Certificate:                   string(secret.Data[corev1.TLSCertKey]),
 			Key:                           string(secret.Data[corev1.TLSPrivateKeyKey]),
 			InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
@@ -577,7 +574,7 @@ func routeMatchesIngress(
 			return false
 		}
 	}
-	if !secretMatchesRoute(secret, route.Spec.TLS) {
+	if !secretMatchesRoute(secret, route.Spec.TLS, terminationPolicyForIngress(ingress)) {
 		return false
 	}
 	return true
@@ -625,7 +622,7 @@ func targetPortForService(namespace string, path *networkingv1beta1.HTTPIngressP
 	return nil, errors.New("no port found")
 }
 
-func secretMatchesRoute(secret *corev1.Secret, tlsConfig *routev1.TLSConfig) bool {
+func secretMatchesRoute(secret *corev1.Secret, tlsConfig *routev1.TLSConfig, terminationPolicy routev1.TLSTerminationType) bool {
 	if secret == nil {
 		return tlsConfig == nil
 	}
@@ -641,7 +638,7 @@ func secretMatchesRoute(secret *corev1.Secret, tlsConfig *routev1.TLSConfig) boo
 	if tlsConfig == nil {
 		return false
 	}
-	return tlsConfig.Termination == routev1.TLSTerminationEdge &&
+	return tlsConfig.Termination == terminationPolicy &&
 		tlsConfig.Certificate == string(secret.Data[corev1.TLSCertKey]) &&
 		tlsConfig.Key == string(secret.Data[corev1.TLSPrivateKeyKey])
 }
@@ -718,4 +715,17 @@ func generateRouteName(base string) string {
 		base = base[:maxGeneratedNameLength]
 	}
 	return fmt.Sprintf("%s%s", base, utilrand.String(randomLength))
+}
+
+var terminationPolicyAnnotationKey = routev1.GroupName + "/termination"
+
+func terminationPolicyForIngress(ingress *networkingv1beta1.Ingress) routev1.TLSTerminationType {
+	switch {
+	case ingress.Annotations[terminationPolicyAnnotationKey] == string(routev1.TLSTerminationPassthrough):
+		return routev1.TLSTerminationPassthrough
+	case ingress.Annotations[terminationPolicyAnnotationKey] == string(routev1.TLSTerminationReencrypt):
+		return routev1.TLSTerminationReencrypt
+	default:
+		return routev1.TLSTerminationEdge
+	}
 }
