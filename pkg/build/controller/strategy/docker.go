@@ -67,10 +67,10 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 			ServiceAccountName: serviceAccount,
 			Containers: []v1.Container{
 				{
-					Name:    DockerBuild,
-					Image:   bs.Image,
-					Command: []string{"openshift-docker-build"},
-					Env:     copyEnvVarSlice(containerEnv),
+					Name:  DockerBuild,
+					Image: bs.Image,
+					Args:  []string{"openshift-docker-build"},
+					Env:   copyEnvVarSlice(containerEnv),
 					// TODO: run unprivileged https://github.com/openshift/origin/issues/662
 					SecurityContext: &v1.SecurityContext{
 						Privileged: &privileged,
@@ -129,7 +129,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		gitCloneContainer := v1.Container{
 			Name:                     GitCloneContainer,
 			Image:                    bs.Image,
-			Command:                  []string{"openshift-git-clone"},
+			Args:                     []string{"openshift-git-clone"},
 			Env:                      copyEnvVarSlice(containerEnv),
 			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 			VolumeMounts: []v1.VolumeMount{
@@ -150,10 +150,10 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	}
 	if len(build.Spec.Source.Images) > 0 {
 		extractImageContentContainer := v1.Container{
-			Name:    ExtractImageContentContainer,
-			Image:   bs.Image,
-			Command: []string{"openshift-extract-image-content"},
-			Env:     copyEnvVarSlice(containerEnv),
+			Name:  ExtractImageContentContainer,
+			Image: bs.Image,
+			Args:  []string{"openshift-extract-image-content"},
+			Env:   copyEnvVarSlice(containerEnv),
 			// TODO: run unprivileged https://github.com/openshift/origin/issues/662
 			SecurityContext: &v1.SecurityContext{
 				Privileged: &privileged,
@@ -184,7 +184,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		v1.Container{
 			Name:                     "manage-dockerfile",
 			Image:                    bs.Image,
-			Command:                  []string{"openshift-manage-dockerfile"},
+			Args:                     []string{"openshift-manage-dockerfile"},
 			Env:                      copyEnvVarSlice(containerEnv),
 			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 			VolumeMounts: []v1.VolumeMount{

@@ -32,9 +32,9 @@ const (
 	ConfigMapCertsMountPath              = "/var/run/configs/openshift.io/certs"
 	SecretBuildSourceBaseMountPath       = "/var/run/secrets/openshift.io/build"
 	SourceImagePullSecretMountPath       = "/var/run/secrets/openshift.io/source-image"
-	// ConfigMapBuildGlobalCAMountPath is the directory where the tls-ca-bundle.pem file will be mounted
-	// by the cluster CA operator
-	ConfigMapBuildGlobalCAMountPath = "/etc/pki/ca-trust/extracted/pem"
+	// ConfigMapBuildGlobalCAMountPath is the directory where cluster-wide trust bundle will be
+	// mounted in the build pod
+	ConfigMapBuildGlobalCAMountPath = "/var/run/configs/openshift.io/pki"
 
 	// ExtractImageContentContainer is the name of the container that will
 	// pull down input images and extract their content for input to the build.
