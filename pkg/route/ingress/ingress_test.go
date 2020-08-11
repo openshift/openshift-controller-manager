@@ -1260,7 +1260,7 @@ func TestController_sync(t *testing.T) {
 			wantPatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
 				},
 			},
 		},
@@ -1336,6 +1336,74 @@ func TestController_sync(t *testing.T) {
 			},
 		},
 		{
+			name: "update route - termination policy changed to reencrypt and no tls secret",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination": "reencrypt",
+							},
+						},
+						Spec: networkingv1beta1.IngressSpec{
+							Rules: []networkingv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1beta1.IngressRuleValue{
+										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+											Paths: []networkingv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: networkingv1beta1.IngressBackend{
+														ServiceName: "service-1",
+														ServicePort: intstr.FromString("http"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							TLS: &routev1.TLSConfig{
+								Termination:                   routev1.TLSTerminationEdge,
+								Certificate:                   "cert",
+								Key:                           "key",
+								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+							},
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantPatches: []clientgotesting.PatchActionImpl{
+				{
+					Name:  "1-abcdef",
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
+				},
+			},
+		},
+		{
 			name: "termination policy on ingress invalid, nothing happens",
 			fields: fields{
 				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
@@ -1399,6 +1467,134 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "termination policy on ingress invalid, disables tls",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination": "Passthrough",
+							},
+						},
+						Spec: networkingv1beta1.IngressSpec{
+							Rules: []networkingv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1beta1.IngressRuleValue{
+										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+											Paths: []networkingv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: networkingv1beta1.IngressBackend{
+														ServiceName: "service-1",
+														ServicePort: intstr.FromString("http"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							TLS: &routev1.TLSConfig{
+								Termination:                   routev1.TLSTerminationEdge,
+								Certificate:                   "cert",
+								Key:                           "key",
+								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+							},
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantPatches: []clientgotesting.PatchActionImpl{
+				{
+					Name:  "1-abcdef",
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}}]`),
+				},
+			},
+		},
+		{
+			name: "Empty tlsconfig enables edge termination without explicit cert",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1beta1.IngressSpec{
+							TLS: []networkingv1beta1.IngressTLS{{Hosts: []string{"something-else"}}, {}},
+							Rules: []networkingv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1beta1.IngressRuleValue{
+										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+											Paths: []networkingv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: networkingv1beta1.IngressBackend{
+														ServiceName: "service-1",
+														ServicePort: intstr.FromString("http"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantPatches: []clientgotesting.PatchActionImpl{
+				{
+					Name:  "1-abcdef",
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
+				},
+			},
 		},
 		{
 			name: "update route - secret values changed",
