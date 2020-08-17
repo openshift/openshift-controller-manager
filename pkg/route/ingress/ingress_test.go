@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	fake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	networkingv1beta1listers "k8s.io/client-go/listers/networking/v1beta1"
@@ -20,7 +21,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	routev1 "github.com/openshift/api/route/v1"
-	"github.com/openshift/client-go/route/clientset/versioned/fake"
+	routev1fake "github.com/openshift/client-go/route/clientset/versioned/fake"
 	routelisters "github.com/openshift/client-go/route/listers/route/v1"
 )
 
@@ -241,8 +242,8 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 	}}
 
 	var names []string
-	kc := &fake.Clientset{}
-	kc.AddReactor("*", "routes", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
+	routeClientset := &routev1fake.Clientset{}
+	routeClientset.AddReactor("*", "routes", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
 		switch a := action.(type) {
 		case clientgotesting.CreateAction:
 			obj := a.GetObject().DeepCopyObject()
@@ -255,10 +256,15 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 		}
 		return true, nil, nil
 	})
+	kc := fake.NewSimpleClientset()
+	kc.PrependReactor("*", "ingresses", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
+		return true, nil, nil
+	})
 
 	c := &Controller{
 		queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route-test"),
-		client:        kc.RouteV1(),
+		routeClient:   routeClientset.RouteV1(),
+		ingressClient: kc.NetworkingV1beta1(),
 		ingressLister: i,
 		routeLister:   r,
 		secretLister:  s,
@@ -274,9 +280,9 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 	if c.queue.Len() != 1 {
 		t.Fatalf("Controller.sync() unexpected queue: %#v", c.queue.Len())
 	}
-	actions := kc.Actions()
-	if len(actions) != 0 {
-		t.Fatalf("Controller.sync() unexpected actions: %#v", actions)
+	routeActions := routeClientset.Actions()
+	if len(routeActions) != 0 {
+		t.Fatalf("Controller.sync() unexpected actions: %#v", routeActions)
 	}
 
 	// process the ingress
@@ -292,15 +298,15 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 	if c.queue.Len() != 0 {
 		t.Fatalf("Controller.sync() unexpected queue: %#v", c.queue.Len())
 	}
-	actions = kc.Actions()
-	if len(actions) == 0 {
-		t.Fatalf("Controller.sync() unexpected actions: %#v", actions)
+	routeActions = routeClientset.Actions()
+	if len(routeActions) == 0 {
+		t.Fatalf("Controller.sync() unexpected actions: %#v", routeActions)
 	}
 	if !c.expectations.Expecting("test", "test-1") {
 		t.Fatalf("Controller.sync() should be holding an expectation: %#v", c.expectations.expect)
 	}
 
-	for _, action := range actions {
+	for _, action := range routeActions {
 		switch action.GetVerb() {
 		case "create":
 			switch o := action.(clientgotesting.CreateAction).GetObject().(type) {
@@ -328,9 +334,9 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 		t.Errorf("Controller.sync() error = %v", err)
 	}
 	c.queue.Done(key)
-	actions = kc.Actions()
-	if len(actions) == 0 {
-		t.Fatalf("Controller.sync() unexpected actions: %#v", actions)
+	routeActions = routeClientset.Actions()
+	if len(routeActions) == 0 {
+		t.Fatalf("Controller.sync() unexpected actions: %#v", routeActions)
 	}
 	if c.queue.Len() != 1 {
 		t.Fatalf("Controller.sync() unexpected queue: %#v", c.queue.Len())
@@ -343,9 +349,9 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 		t.Errorf("Controller.sync() error = %v", err)
 	}
 	c.queue.Done(key)
-	actions = kc.Actions()
-	if len(actions) == 0 {
-		t.Fatalf("Controller.sync() unexpected actions: %#v", actions)
+	routeActions = routeClientset.Actions()
+	if len(routeActions) == 0 {
+		t.Fatalf("Controller.sync() unexpected actions: %#v", routeActions)
 	}
 	if c.queue.Len() != 0 {
 		t.Fatalf("Controller.sync() unexpected queue: %#v", c.queue.Len())
@@ -455,17 +461,18 @@ func TestController_sync(t *testing.T) {
 		svc corelisters.ServiceLister
 	}
 	tests := []struct {
-		name            string
-		fields          fields
-		args            queueKey
-		expects         *expectations
-		wantErr         bool
-		wantCreates     []*routev1.Route
-		wantPatches     []clientgotesting.PatchActionImpl
-		wantDeletes     []clientgotesting.DeleteActionImpl
-		wantQueue       []queueKey
-		wantExpectation *expectations
-		wantExpects     []queueKey
+		name               string
+		fields             fields
+		args               queueKey
+		expects            *expectations
+		wantErr            bool
+		wantRouteCreates   []*routev1.Route
+		wantRoutePatches   []clientgotesting.PatchActionImpl
+		wantRouteDeletes   []clientgotesting.DeleteActionImpl
+		wantIngressUpdates []clientgotesting.UpdateActionImpl
+		wantQueue          []queueKey
+		wantExpectation    *expectations
+		wantExpects        []queueKey
 	}{
 		{
 			name:   "no changes",
@@ -669,7 +676,7 @@ func TestController_sync(t *testing.T) {
 			},
 			args:        queueKey{namespace: "test", name: "1"},
 			wantExpects: []queueKey{{namespace: "test", name: "1"}},
-			wantCreates: []*routev1.Route{
+			wantRouteCreates: []*routev1.Route{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "<generated>",
@@ -740,7 +747,7 @@ func TestController_sync(t *testing.T) {
 			},
 			args:        queueKey{namespace: "test", name: "1"},
 			wantExpects: []queueKey{{namespace: "test", name: "1"}},
-			wantCreates: []*routev1.Route{
+			wantRouteCreates: []*routev1.Route{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "<generated>",
@@ -860,7 +867,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}}]`),
@@ -1057,7 +1064,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantDeletes: []clientgotesting.DeleteActionImpl{
+			wantRouteDeletes: []clientgotesting.DeleteActionImpl{
 				{
 					Name: "1-abcdef",
 				},
@@ -1124,7 +1131,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}}]`),
@@ -1186,7 +1193,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
@@ -1257,7 +1264,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
@@ -1328,7 +1335,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
@@ -1396,7 +1403,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
@@ -1529,7 +1536,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}}]`),
@@ -1589,7 +1596,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
@@ -1656,7 +1663,7 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantPatches: []clientgotesting.PatchActionImpl{
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key2"}}}]`),
@@ -1818,6 +1825,13 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.foo.com"},
+								},
+							},
+						},
 					},
 				}},
 				r: &routeLister{Items: []*routev1.Route{
@@ -1842,6 +1856,343 @@ func TestController_sync(t *testing.T) {
 								Key:         "key",
 								Certificate: "cert",
 							},
+						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{
+								{
+									RouterCanonicalHostname: "apps.foo.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionTrue,
+									}},
+								},
+							},
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "update route - router admitted route",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1beta1.IngressSpec{
+							Rules: []networkingv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1beta1.IngressRuleValue{
+										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+											Paths: []networkingv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: networkingv1beta1.IngressBackend{
+														ServiceName: "service-1",
+														ServicePort: intstr.FromString("http"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Status: networkingv1beta1.IngressStatus{},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{
+								{
+									RouterCanonicalHostname: "apps.foo.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionTrue,
+									}},
+								},
+								{
+									RouterCanonicalHostname: "apps.bar.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionFalse,
+									}},
+								},
+							},
+						},
+					},
+				}},
+			},
+			wantIngressUpdates: []clientgotesting.UpdateActionImpl{
+				{
+					Object: &networkingv1beta1.Ingress{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{{
+									Hostname: "apps.foo.com",
+								}},
+							},
+						},
+					},
+				},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "update route - second router admitted route",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1beta1.IngressSpec{
+							Rules: []networkingv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1beta1.IngressRuleValue{
+										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+											Paths: []networkingv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: networkingv1beta1.IngressBackend{
+														ServiceName: "service-1",
+														ServicePort: intstr.FromString("http"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.foo.com"},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{
+								{
+									RouterCanonicalHostname: "apps.foo.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionTrue,
+									}},
+								},
+								{
+									RouterCanonicalHostname: "apps.bar.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionTrue,
+									}},
+								},
+							},
+						},
+					},
+				}},
+			},
+			wantIngressUpdates: []clientgotesting.UpdateActionImpl{
+				{
+					Object: &networkingv1beta1.Ingress{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.bar.com"},
+									{Hostname: "apps.foo.com"},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "no-op - ingress status already updated",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1beta1.IngressSpec{
+							Rules: []networkingv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1beta1.IngressRuleValue{
+										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+											Paths: []networkingv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: networkingv1beta1.IngressBackend{
+														ServiceName: "service-1",
+														ServicePort: intstr.FromString("http"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.foo.com"},
+									{Hostname: "apps.bar.com"},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{
+								{
+									RouterCanonicalHostname: "apps.foo.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionTrue,
+									}},
+								},
+								{
+									RouterCanonicalHostname: "apps.bar.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionTrue,
+									}},
+								},
+							},
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "no-op - router rejected route",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1beta1.IngressSpec{
+							Rules: []networkingv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1beta1.IngressRuleValue{
+										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+											Paths: []networkingv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: networkingv1beta1.IngressBackend{
+														ServiceName: "service-1",
+														ServicePort: intstr.FromString("http"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{{
+								RouterCanonicalHostname: "apps.testcluster.com",
+								Conditions: []routev1.RouteIngressCondition{{
+									Type:   routev1.RouteAdmitted,
+									Status: v1.ConditionFalse,
+								}},
+							}},
 						},
 					},
 				}},
@@ -1879,6 +2230,14 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.foo.com"},
+									{Hostname: "apps.bar.com"},
+								},
+							},
+						},
 					},
 				}},
 				r: &routeLister{Items: []*routev1.Route{
@@ -1905,13 +2264,39 @@ func TestController_sync(t *testing.T) {
 								Certificate:                   "cert",
 							},
 						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{{
+								RouterCanonicalHostname: "apps.foo.com",
+								Conditions: []routev1.RouteIngressCondition{{
+									Type:   routev1.RouteAdmitted,
+									Status: v1.ConditionTrue,
+								}},
+							}},
+						},
 					},
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantDeletes: []clientgotesting.DeleteActionImpl{
+			wantRouteDeletes: []clientgotesting.DeleteActionImpl{
 				{
 					Name: "1-abcdef",
+				},
+			},
+			wantIngressUpdates: []clientgotesting.UpdateActionImpl{
+				{
+					Object: &networkingv1beta1.Ingress{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.bar.com"},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -1946,6 +2331,13 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.foo.com"},
+								},
+							},
+						},
 					},
 				}},
 				r: &routeLister{Items: []*routev1.Route{
@@ -1972,13 +2364,37 @@ func TestController_sync(t *testing.T) {
 								Certificate:                   "",
 							},
 						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{{
+								RouterCanonicalHostname: "apps.foo.com",
+								Conditions: []routev1.RouteIngressCondition{{
+									Type:   routev1.RouteAdmitted,
+									Status: v1.ConditionTrue,
+								}},
+							}},
+						},
 					},
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
-			wantDeletes: []clientgotesting.DeleteActionImpl{
+			wantRouteDeletes: []clientgotesting.DeleteActionImpl{
 				{
 					Name: "1-abcdef",
+				},
+			},
+			wantIngressUpdates: []clientgotesting.UpdateActionImpl{
+				{
+					Object: &networkingv1beta1.Ingress{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Status: networkingv1beta1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -2003,8 +2419,8 @@ func TestController_sync(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var names []string
-			kc := &fake.Clientset{}
-			kc.AddReactor("*", "routes", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
+			routeClientset := &routev1fake.Clientset{}
+			routeClientset.AddReactor("*", "routes", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
 				switch a := action.(type) {
 				case clientgotesting.CreateAction:
 					obj := a.GetObject().DeepCopyObject()
@@ -2017,10 +2433,15 @@ func TestController_sync(t *testing.T) {
 				}
 				return true, nil, nil
 			})
+			kc := fake.NewSimpleClientset()
+			kc.PrependReactor("*", "ingresses", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
+				return true, nil, nil
+			})
 
 			c := &Controller{
 				queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route-test"),
-				client:        kc.RouteV1(),
+				routeClient:   routeClientset.RouteV1(),
+				ingressClient: kc.NetworkingV1beta1(),
 				ingressLister: tt.fields.i,
 				routeLister:   tt.fields.r,
 				secretLister:  tt.fields.s,
@@ -2069,63 +2490,85 @@ func TestController_sync(t *testing.T) {
 				t.Errorf("unexpected expectations: %s", diff.ObjectReflectDiff(wants.expect, c.expectations.expect))
 			}
 
-			actions := kc.Actions()
+			routeActions := routeClientset.Actions()
 
-			for i := range tt.wantCreates {
-				if i > len(actions)-1 {
-					t.Fatalf("Controller.sync() unexpected action[%d]: %#v", i, tt.wantCreates[i])
+			for i := range tt.wantRouteCreates {
+				if i > len(routeActions)-1 {
+					t.Fatalf("Controller.sync() unexpected action[%d]: %#v", i, tt.wantRouteCreates[i])
 				}
-				if actions[i].GetVerb() != "create" {
-					t.Fatalf("Controller.sync() unexpected action[%d]: %#v", i, tt.wantCreates[i])
+				if routeActions[i].GetVerb() != "create" {
+					t.Fatalf("Controller.sync() unexpected action[%d]: %#v", i, tt.wantRouteCreates[i])
 				}
-				action := actions[i].(clientgotesting.CreateAction)
+				action := routeActions[i].(clientgotesting.CreateAction)
 				if action.GetNamespace() != tt.args.namespace {
 					t.Errorf("unexpected action[%d]: %#v", i, action)
 				}
 				obj := action.GetObject()
-				if tt.wantCreates[i].Name == "<generated>" {
-					tt.wantCreates[i].Name = names[0]
+				if tt.wantRouteCreates[i].Name == "<generated>" {
+					tt.wantRouteCreates[i].Name = names[0]
 					names = names[1:]
 				}
-				if !reflect.DeepEqual(tt.wantCreates[i], obj) {
-					t.Errorf("unexpected create: %s", diff.ObjectReflectDiff(tt.wantCreates[i], obj))
+				if !reflect.DeepEqual(tt.wantRouteCreates[i], obj) {
+					t.Errorf("unexpected create: %s", diff.ObjectReflectDiff(tt.wantRouteCreates[i], obj))
 				}
 			}
-			actions = actions[len(tt.wantCreates):]
+			routeActions = routeActions[len(tt.wantRouteCreates):]
 
-			for i := range tt.wantPatches {
-				if i > len(actions)-1 {
-					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
+			for i := range tt.wantRoutePatches {
+				if i > len(routeActions)-1 {
+					t.Fatalf("Controller.sync() unexpected actions: %#v", routeClientset.Actions())
 				}
-				if actions[i].GetVerb() != "patch" {
-					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
+				if routeActions[i].GetVerb() != "patch" {
+					t.Fatalf("Controller.sync() unexpected actions: %#v", routeClientset.Actions())
 				}
-				action := actions[i].(clientgotesting.PatchAction)
-				if action.GetNamespace() != tt.args.namespace || action.GetName() != tt.wantPatches[i].Name {
+				action := routeActions[i].(clientgotesting.PatchAction)
+				if action.GetNamespace() != tt.args.namespace || action.GetName() != tt.wantRoutePatches[i].Name {
 					t.Errorf("unexpected action[%d]: %#v", i, action)
 				}
-				if !reflect.DeepEqual(string(action.GetPatch()), string(tt.wantPatches[i].Patch)) {
+				if !reflect.DeepEqual(string(action.GetPatch()), string(tt.wantRoutePatches[i].Patch)) {
 					t.Errorf("unexpected action[%d]: %s", i, string(action.GetPatch()))
 				}
 			}
-			actions = actions[len(tt.wantPatches):]
+			routeActions = routeActions[len(tt.wantRoutePatches):]
 
-			for i := range tt.wantDeletes {
-				if i > len(actions)-1 {
-					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
+			for i := range tt.wantRouteDeletes {
+				if i > len(routeActions)-1 {
+					t.Fatalf("Controller.sync() unexpected actions: %#v", routeClientset.Actions())
 				}
-				if actions[i].GetVerb() != "delete" {
-					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
+				if routeActions[i].GetVerb() != "delete" {
+					t.Fatalf("Controller.sync() unexpected actions: %#v", routeClientset.Actions())
 				}
-				action := actions[i].(clientgotesting.DeleteAction)
-				if action.GetName() != tt.wantDeletes[i].Name || action.GetNamespace() != tt.args.namespace {
+				action := routeActions[i].(clientgotesting.DeleteAction)
+				if action.GetName() != tt.wantRouteDeletes[i].Name || action.GetNamespace() != tt.args.namespace {
 					t.Errorf("unexpected action[%d]: %#v", i, action)
 				}
 			}
-			actions = actions[len(tt.wantDeletes):]
+			routeActions = routeActions[len(tt.wantRouteDeletes):]
 
-			if len(actions) != 0 {
-				t.Fatalf("Controller.sync() unexpected actions: %#v", actions)
+			if len(routeActions) != 0 {
+				t.Fatalf("Controller.sync() unexpected actions: %#v", routeActions)
+			}
+
+			ingressActions := kc.Actions()
+			for i := range tt.wantIngressUpdates {
+				if i > len(ingressActions)-1 {
+					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
+				}
+				if ingressActions[i].GetVerb() != "update" {
+					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
+				}
+				action := ingressActions[i].(clientgotesting.UpdateAction)
+				ingress, ok := action.GetObject().(*networkingv1beta1.Ingress)
+				if !ok {
+					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
+				}
+				if ingress.Name != tt.wantIngressUpdates[i].Object.(*networkingv1beta1.Ingress).Name || ingress.Namespace != tt.args.namespace || !reflect.DeepEqual(ingress.Status, tt.wantIngressUpdates[i].Object.(*networkingv1beta1.Ingress).Status) {
+					t.Errorf("unexpected ingress action[%d]: %#v", i, action)
+				}
+			}
+			ingressActions = ingressActions[len(tt.wantIngressUpdates):]
+			if len(ingressActions) != 0 {
+				t.Fatalf("Controller.sync() unexpected actions: %#v", ingressActions)
 			}
 		})
 	}
