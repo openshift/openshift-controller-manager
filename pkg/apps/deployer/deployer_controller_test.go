@@ -1187,6 +1187,8 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.Overhead = nil
 				p.Spec.EphemeralContainers = nil
 				p.Spec.TopologySpreadConstraints = nil
+				// k8s 1.19
+				p.Spec.SetHostnameAsFQDN = nil
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}

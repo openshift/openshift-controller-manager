@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apiserver/pkg/admission"
 
@@ -355,5 +356,143 @@ func TestBuildOverrideAnnotations(t *testing.T) {
 				t.Errorf("%s: incorrect annotation value for key %s, expected %s, got %s", test.name, k, ev, v)
 			}
 		}
+	}
+}
+
+func TestBuildOverrideTolerations(t *testing.T) {
+	tests := []struct {
+		name                string
+		buildTolerations    []corev1.Toleration
+		overrideTolerations []corev1.Toleration
+		expected            []corev1.Toleration
+	}{
+		{
+			name:                "everything nil",
+			buildTolerations:    nil,
+			overrideTolerations: nil,
+			expected:            nil,
+		},
+		{
+			name:             "no build tolerations, only overrides",
+			buildTolerations: nil,
+			overrideTolerations: []corev1.Toleration{
+				{
+					Key:    "toleration1",
+					Value:  "value1",
+					Effect: corev1.TaintEffectNoSchedule,
+				},
+				{
+					Key:   "toleration2",
+					Value: "value2",
+				},
+			},
+			expected: []corev1.Toleration{
+				{
+					Key:    "toleration1",
+					Value:  "value1",
+					Effect: corev1.TaintEffectNoSchedule,
+				},
+				{
+					Key:   "toleration2",
+					Value: "value2",
+				},
+			},
+		},
+		{
+			name: "should override value",
+			buildTolerations: []corev1.Toleration{
+				{
+					Key:    "toleration1",
+					Value:  "value1",
+					Effect: corev1.TaintEffectNoExecute,
+				},
+				{
+					Key:   "toleration2",
+					Value: "value2",
+				},
+			},
+			overrideTolerations: []corev1.Toleration{
+				{
+					Key:   "toleration1",
+					Value: "value3",
+				},
+				{
+					Key:   "toleration2",
+					Value: "value2",
+				},
+			},
+			expected: []corev1.Toleration{
+				{
+					Key:   "toleration1",
+					Value: "value3",
+				},
+				{
+					Key:   "toleration2",
+					Value: "value2",
+				},
+			},
+		},
+		{
+			name: "should override and add additional",
+			buildTolerations: []corev1.Toleration{
+				{
+					Key:   "toleration1",
+					Value: "value1",
+				},
+				{
+					Key:   "toleration2",
+					Value: "value2",
+				},
+			},
+			overrideTolerations: []corev1.Toleration{
+				{
+					Key:   "toleration1",
+					Value: "value3",
+				},
+				{
+					Key:   "toleration2",
+					Value: "value4",
+				},
+				{
+					Key:    "toleration3",
+					Value:  "value5",
+					Effect: corev1.TaintEffectPreferNoSchedule,
+				},
+			},
+			expected: []corev1.Toleration{
+				{
+					Key:   "toleration1",
+					Value: "value3",
+				},
+				{
+					Key:   "toleration2",
+					Value: "value4",
+				},
+				{
+					Key:    "toleration3",
+					Value:  "value5",
+					Effect: corev1.TaintEffectPreferNoSchedule,
+				},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			overridesConfig := &openshiftcontrolplanev1.BuildOverridesConfig{
+				Tolerations: test.overrideTolerations,
+			}
+
+			admitter := BuildOverrides{overridesConfig}
+			pod := testutil.Pod().WithTolerations(test.buildTolerations).WithBuild(t, testutil.Build().AsBuild())
+			err := admitter.ApplyOverrides((*v1.Pod)(pod))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if !reflect.DeepEqual(pod.Spec.Tolerations, test.expected) {
+				t.Errorf("expected[%d]: %v, got: %v", i, test.expected, pod.Spec.Tolerations)
+			}
+		})
 	}
 }

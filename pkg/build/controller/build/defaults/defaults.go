@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -155,17 +154,10 @@ func (b BuildDefaults) applyPodDefaults(pod *corev1.Pod, isCustomBuild bool) {
 	for _, c := range allContainers {
 		// All env vars are allowed to be set in a custom build pod, the user already has
 		// total control over the env+logic in a custom build pod anyway.
-		externalEnv := make([]corev1.EnvVar, len(b.Config.Env))
-		for i, v := range b.Config.Env {
-			externalEnv[i] = corev1.EnvVar{}
-			if err := legacyscheme.Scheme.Convert(&v, &externalEnv[i], nil); err != nil {
-				panic(err)
-			}
-		}
 		if isCustomBuild {
-			buildutil.MergeEnvWithoutDuplicates(externalEnv, &c.Env, false, []string{})
+			buildutil.MergeEnvWithoutDuplicates(b.Config.Env, &c.Env, false, []string{})
 		} else {
-			buildutil.MergeTrustedEnvWithoutDuplicates(externalEnv, &c.Env, false)
+			buildutil.MergeTrustedEnvWithoutDuplicates(b.Config.Env, &c.Env, false)
 		}
 
 		if c.Resources.Limits == nil {
@@ -193,11 +185,7 @@ func (b BuildDefaults) applyBuildDefaults(build *buildv1.Build) {
 	// Apply default env
 	for _, envVar := range b.Config.Env {
 		klog.V(5).Infof("Adding default environment variable %s=%s to build %s/%s", envVar.Name, envVar.Value, build.Namespace, build.Name)
-		externalEnv := corev1.EnvVar{}
-		if err := legacyscheme.Scheme.Convert(&envVar, &externalEnv, nil); err != nil {
-			panic(err)
-		}
-		addDefaultEnvVar(build, externalEnv)
+		addDefaultEnvVar(build, envVar)
 	}
 
 	// Apply default labels
