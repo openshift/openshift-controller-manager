@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -468,34 +469,14 @@ func newRouteForIngress(
 	secretLister corelisters.SecretLister,
 	serviceLister corelisters.ServiceLister,
 ) *routev1.Route {
-	var tlsConfig *routev1.TLSConfig
-	if name, ok := referencesSecret(ingress, rule.Host); ok {
-		secret, err := secretLister.Secrets(ingress.Namespace).Get(name)
-		if err != nil {
-			// secret doesn't exist yet, wait
-			return nil
-		}
-		if secret.Type != corev1.SecretTypeTLS {
-			// secret is the wrong type
-			return nil
-		}
-		if _, ok := secret.Data[corev1.TLSCertKey]; !ok {
-			return nil
-		}
-		if _, ok := secret.Data[corev1.TLSPrivateKeyKey]; !ok {
-			return nil
-		}
-		tlsConfig = &routev1.TLSConfig{
-			Termination:                   terminationPolicyForIngress(ingress),
-			Certificate:                   string(secret.Data[corev1.TLSCertKey]),
-			Key:                           string(secret.Data[corev1.TLSPrivateKeyKey]),
-			InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
-		}
-	}
-
 	targetPort, err := targetPortForService(ingress.Namespace, path, serviceLister)
 	if err != nil {
 		// no valid target port
+		return nil
+	}
+
+	tlsSecret, hasInvalidTLSSecret := tlsSecretIfValid(ingress, rule, secretLister)
+	if hasInvalidTLSSecret {
 		return nil
 	}
 
@@ -522,7 +503,7 @@ func newRouteForIngress(
 				Name: path.Backend.ServiceName,
 			},
 			Port: port,
-			TLS:  tlsConfig,
+			TLS:  tlsConfigForIngress(ingress, rule, tlsSecret),
 		},
 	}
 }
@@ -567,17 +548,15 @@ func routeMatchesIngress(
 		return false
 	}
 
-	var secret *corev1.Secret
-	if name, ok := referencesSecret(ingress, rule.Host); ok {
-		secret, _ = secretLister.Secrets(ingress.Namespace).Get(name)
-		if secret == nil {
-			return false
-		}
-	}
-	if !secretMatchesRoute(secret, route.Spec.TLS, terminationPolicyForIngress(ingress)) {
+	tlsSecret, hasInvalidTLSSecret := tlsSecretIfValid(ingress, rule, secretLister)
+	if hasInvalidTLSSecret {
 		return false
 	}
-	return true
+	tlsConfig := tlsConfigForIngress(ingress, rule, tlsSecret)
+	if route.Spec.TLS != nil && tlsConfig != nil {
+		tlsConfig.InsecureEdgeTerminationPolicy = route.Spec.TLS.InsecureEdgeTerminationPolicy
+	}
+	return reflect.DeepEqual(tlsConfig, route.Spec.TLS)
 }
 
 // targetPortForService returns a target port for a Route based on the given
@@ -620,27 +599,6 @@ func targetPortForService(namespace string, path *networkingv1beta1.HTTPIngressP
 		}
 	}
 	return nil, errors.New("no port found")
-}
-
-func secretMatchesRoute(secret *corev1.Secret, tlsConfig *routev1.TLSConfig, terminationPolicy routev1.TLSTerminationType) bool {
-	if secret == nil {
-		return tlsConfig == nil
-	}
-	if secret.Type != corev1.SecretTypeTLS {
-		return tlsConfig == nil
-	}
-	if _, ok := secret.Data[corev1.TLSCertKey]; !ok {
-		return false
-	}
-	if _, ok := secret.Data[corev1.TLSPrivateKeyKey]; !ok {
-		return false
-	}
-	if tlsConfig == nil {
-		return false
-	}
-	return tlsConfig.Termination == terminationPolicy &&
-		tlsConfig.Certificate == string(secret.Data[corev1.TLSCertKey]) &&
-		tlsConfig.Key == string(secret.Data[corev1.TLSPrivateKeyKey])
 }
 
 func splitForPathAndHost(routes []*routev1.Route, host, path string) ([]*routev1.Route, *routev1.Route) {
@@ -715,6 +673,70 @@ func generateRouteName(base string) string {
 		base = base[:maxGeneratedNameLength]
 	}
 	return fmt.Sprintf("%s%s", base, utilrand.String(randomLength))
+}
+
+func tlsConfigForIngress(
+	ingress *networkingv1beta1.Ingress,
+	rule *networkingv1beta1.IngressRule,
+	potentiallyNilTLSSecret *corev1.Secret,
+) *routev1.TLSConfig {
+	if !tlsEnabled(ingress, rule, potentiallyNilTLSSecret) {
+		return nil
+	}
+	// Edge: May have cert
+	// Re-Encrypt: May have cert
+	// Passthrough: Must not have cert
+	terminationPolicy := terminationPolicyForIngress(ingress)
+	tlsConfig := &routev1.TLSConfig{
+		Termination:                   terminationPolicy,
+		InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+	}
+	if terminationPolicy != routev1.TLSTerminationPassthrough && potentiallyNilTLSSecret != nil {
+		tlsConfig.Certificate = string(potentiallyNilTLSSecret.Data[corev1.TLSCertKey])
+		tlsConfig.Key = string(potentiallyNilTLSSecret.Data[corev1.TLSPrivateKeyKey])
+	}
+	return tlsConfig
+}
+
+var emptyTLS = networkingv1beta1.IngressTLS{}
+
+func tlsEnabled(ingress *networkingv1beta1.Ingress, rule *networkingv1beta1.IngressRule, potentiallyNilTLSSecret *corev1.Secret) bool {
+	switch ingress.Annotations[terminationPolicyAnnotationKey] {
+	case string(routev1.TLSTerminationPassthrough), string(routev1.TLSTerminationReencrypt), string(routev1.TLSTerminationEdge):
+		return true
+	}
+	if potentiallyNilTLSSecret != nil {
+		return true
+	}
+	for _, tls := range ingress.Spec.TLS {
+		if reflect.DeepEqual(tls, emptyTLS) {
+			return true
+		}
+	}
+	return false
+}
+
+func tlsSecretIfValid(ingress *networkingv1beta1.Ingress, rule *networkingv1beta1.IngressRule, secretLister corelisters.SecretLister) (_ *corev1.Secret, hasInvalidSecret bool) {
+	name, ok := referencesSecret(ingress, rule.Host)
+	if !ok {
+		return nil, false
+	}
+	secret, err := secretLister.Secrets(ingress.Namespace).Get(name)
+	if err != nil {
+		// secret doesn't exist yet, wait
+		return nil, true
+	}
+	if secret.Type != corev1.SecretTypeTLS {
+		// secret is the wrong type
+		return nil, true
+	}
+	if _, ok := secret.Data[corev1.TLSCertKey]; !ok {
+		return nil, true
+	}
+	if _, ok := secret.Data[corev1.TLSPrivateKeyKey]; !ok {
+		return nil, true
+	}
+	return secret, false
 }
 
 var terminationPolicyAnnotationKey = routev1.GroupName + "/termination"
