@@ -1,14 +1,11 @@
 package overrides
 
 import (
-	"fmt"
 	"strings"
 
 	"k8s.io/klog"
 
 	corev1 "k8s.io/api/core/v1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
@@ -91,13 +88,7 @@ func (b BuildOverrides) ApplyOverrides(pod *corev1.Pod) error {
 		klog.V(5).Infof("Overriding tolerations for pod %s/%s", pod.Namespace, pod.Name)
 		pod.Spec.Tolerations = []corev1.Toleration{}
 		for _, toleration := range b.Config.Tolerations {
-			t := corev1.Toleration{}
-			if err := legacyscheme.Scheme.Convert(&toleration, &t, nil); err != nil {
-				err := fmt.Errorf("unable to convert core.Toleration to corev1.Toleration: %v", err)
-				utilruntime.HandleError(err)
-				return err
-			}
-			pod.Spec.Tolerations = append(pod.Spec.Tolerations, t)
+			pod.Spec.Tolerations = append(pod.Spec.Tolerations, toleration)
 		}
 	}
 

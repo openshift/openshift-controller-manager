@@ -10,6 +10,7 @@ import (
 
 	"k8s.io/klog"
 
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	apifilters "k8s.io/apiserver/pkg/endpoints/filters"
 	apiserver "k8s.io/apiserver/pkg/server"
@@ -58,7 +59,9 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 	authz := newBypassAuthorizer(remoteAuthz, "/healthz", "/healthz/ready")
 	handler := apifilters.WithAuthorization(mux, authz, legacyscheme.Codecs)
 	// TODO need audiences
-	handler = apifilters.WithAuthentication(handler, authn, apifilters.Unauthorized(legacyscheme.Codecs, false), nil)
+
+	//handler = apifilters.WithAuthentication(handler, authn, apifilters.Unauthorized(legacyscheme.Codecs, false), nil)
+	handler = apifilters.WithAuthentication(handler, authn, apifilters.Unauthorized(serializer.WithoutConversionCodecFactory{CodecFactory: legacyscheme.Codecs}), nil)
 	handler = apiserverfilters.WithPanicRecovery(handler)
 	handler = apifilters.WithRequestInfo(handler, requestInfoResolver)
 

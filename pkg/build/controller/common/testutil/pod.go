@@ -26,6 +26,11 @@ func (p *TestPod) WithAnnotation(name, value string) *TestPod {
 	return p
 }
 
+func (p *TestPod) WithTolerations(tolerations []corev1.Toleration) *TestPod {
+	p.Spec.Tolerations = tolerations
+	return p
+}
+
 func (p *TestPod) WithEnvVar(name, value string) *TestPod {
 	if len(p.Spec.InitContainers) == 0 {
 		p.Spec.InitContainers = append(p.Spec.InitContainers, corev1.Container{})
