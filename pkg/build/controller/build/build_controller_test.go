@@ -1402,7 +1402,7 @@ func TestHandleControllerConfig(t *testing.T) {
 				},
 				Spec: configv1.ImageSpec{
 					RegistrySources: configv1.RegistrySources{
-						AllowedRegistries: []string{"quay.io"},
+						AllowedRegistries: []string{"quay.io", "registry.redhat.io"},
 					},
 				},
 			},
@@ -1415,7 +1415,7 @@ func TestHandleControllerConfig(t *testing.T) {
 				},
 				Spec: configv1.ImageSpec{
 					RegistrySources: configv1.RegistrySources{
-						BlockedRegistries: []string{"docker.io"},
+						BlockedRegistries: []string{"docker.io", "quay.io"},
 					},
 				},
 			},
@@ -1612,7 +1612,7 @@ func TestHandleControllerConfig(t *testing.T) {
 			}
 			if !equality.Semantic.DeepEqual(insecureRegistries,
 				buildRegistriesConfig.InsecureRegistries) {
-				t.Errorf("expected insecure registries to equal %v, got %v",
+				t.Errorf("expected insecure registries to equal %s, got %s",
 					buildRegistriesConfig.InsecureRegistries,
 					insecureRegistries)
 			}
@@ -1631,7 +1631,7 @@ func TestHandleControllerConfig(t *testing.T) {
 			}
 			if !equality.Semantic.DeepEqual(registriesConfig.UnqualifiedSearchRegistries,
 				expectedSearchRegistries) {
-				t.Errorf("expected search registries to equal %v, got %v",
+				t.Errorf("expected search registries to equal %s, got %s",
 					expectedSearchRegistries,
 					registriesConfig.UnqualifiedSearchRegistries)
 			}
@@ -1646,7 +1646,7 @@ func TestHandleControllerConfig(t *testing.T) {
 			if len(buildRegistriesConfig.AllowedRegistries) > 0 && len(buildRegistriesConfig.BlockedRegistries) > 0 {
 				// Condition is not allowed - no policy should be set
 				if len(signatureJSON) > 0 {
-					t.Errorf("signature policy should be empty if both allowed and blocked registries are set, got %v", signatureJSON)
+					t.Errorf("signature policy should be empty if both allowed and blocked registries are set, got %s", signatureJSON)
 				}
 				return
 			}
@@ -1654,26 +1654,33 @@ func TestHandleControllerConfig(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error decoding signature policy config: %v", err)
 			}
+			expectedStorageScopes := signature.PolicyTransportScopes{
+				"": signature.PolicyRequirements{
+					signature.NewPRInsecureAcceptAnything(),
+				},
+			}
 
 			if len(buildRegistriesConfig.AllowedRegistries) > 0 {
 				expectedDefaults := signature.PolicyRequirements{
 					signature.NewPRReject(),
 				}
 				if !reflect.DeepEqual(expectedDefaults, policy.Default) {
-					t.Errorf("expected signature defaults %v, got %v", expectedDefaults, policy.Default)
+					t.Errorf("expected signature defaults %s, got %s", expectedDefaults, policy.Default)
 				}
-				expectedRepos := make(signature.PolicyTransportScopes)
+				expectedImageScopes := make(signature.PolicyTransportScopes)
 				for _, reg := range buildRegistriesConfig.AllowedRegistries {
-					expectedRepos[reg] = signature.PolicyRequirements{
+					expectedImageScopes[reg] = signature.PolicyRequirements{
 						signature.NewPRInsecureAcceptAnything(),
 					}
 				}
+
 				expectedScopes := map[string]signature.PolicyTransportScopes{
-					"atomic": expectedRepos,
-					"docker": expectedRepos,
+					"atomic":             expectedImageScopes,
+					"docker":             expectedImageScopes,
+					"containers-storage": expectedStorageScopes,
 				}
 				if !reflect.DeepEqual(expectedScopes, policy.Transports) {
-					t.Errorf("expected transport scopes %v, got %v", expectedScopes, policy.Transports)
+					t.Errorf("expected transport scopes %s, got %s", expectedScopes, policy.Transports)
 				}
 			}
 			if len(buildRegistriesConfig.BlockedRegistries) > 0 {
@@ -1681,20 +1688,21 @@ func TestHandleControllerConfig(t *testing.T) {
 					signature.NewPRInsecureAcceptAnything(),
 				}
 				if !reflect.DeepEqual(expectedDefaults, policy.Default) {
-					t.Errorf("expected signature defaults %v, got %v", expectedDefaults, policy.Default)
+					t.Errorf("expected signature defaults %s, got %s", expectedDefaults, policy.Default)
 				}
-				expectedRepos := make(signature.PolicyTransportScopes)
+				expectedImageScopes := make(signature.PolicyTransportScopes)
 				for _, reg := range buildRegistriesConfig.BlockedRegistries {
-					expectedRepos[reg] = signature.PolicyRequirements{
+					expectedImageScopes[reg] = signature.PolicyRequirements{
 						signature.NewPRReject(),
 					}
 				}
 				expectedScopes := map[string]signature.PolicyTransportScopes{
-					"atomic": expectedRepos,
-					"docker": expectedRepos,
+					"atomic":             expectedImageScopes,
+					"docker":             expectedImageScopes,
+					"containers-storage": expectedStorageScopes,
 				}
 				if !reflect.DeepEqual(expectedScopes, policy.Transports) {
-					t.Errorf("expected transport scopes %v, got %v", expectedScopes, policy.Transports)
+					t.Errorf("expected transport scopes %s, got %s", expectedScopes, policy.Transports)
 				}
 			}
 		})
