@@ -596,6 +596,11 @@ func scenario_1_buildConfig_strategy() *buildv1.BuildConfig {
 				},
 			},
 		},
+		Status: buildv1.BuildConfigStatus{
+			ImageChangeTriggersState: []buildv1.ImageChangeTrigger{
+				{},
+			},
+		},
 	}
 }
 
@@ -651,6 +656,18 @@ func scenario_1_buildConfig_imageSource_defaultImageTag() *buildv1.BuildConfig {
 						From: &corev1.ObjectReference{APIVersion: imagev1.GroupVersion.Version, Kind: "ImageStreamTag", Name: "stream:latest"},
 					},
 				},
+			},
+		},
+		Status: buildv1.BuildConfigStatus{
+			ImageChangeTriggersState: []buildv1.ImageChangeTrigger{
+				{},
+				{
+					From: &corev1.ObjectReference{APIVersion: imagev1.GroupVersion.Version, Kind: "ImageStreamTag",
+						Name:      "stream:latest",
+						Namespace: "other"},
+					LastTriggeredImageID: "image/result:2",
+				},
+				{From: &corev1.ObjectReference{Kind: "DockerImage", Name: "mysql", Namespace: "other"}},
 			},
 		},
 	}
@@ -747,6 +764,16 @@ func scenario_1_buildConfig_imageSource() *buildv1.BuildConfig {
 				},
 			},
 		},
+		Status: buildv1.BuildConfigStatus{
+			ImageChangeTriggersState: []buildv1.ImageChangeTrigger{
+				{},
+				{
+					From:                 &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:2", Namespace: "other"},
+					LastTriggeredImageID: "image/result:2",
+				},
+				{From: &corev1.ObjectReference{Kind: "DockerImage", Name: "mysql", Namespace: "other"}},
+			},
+		},
 	}
 }
 
@@ -767,6 +794,18 @@ func scenario_1_buildConfig_imageSource_previousBuildForTag() *buildv1.BuildConf
 					DockerStrategy: &buildv1.DockerBuildStrategy{
 						From: &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:1"},
 					},
+				},
+			},
+		},
+		Status: buildv1.BuildConfigStatus{
+			ImageChangeTriggersState: []buildv1.ImageChangeTrigger{
+				{},
+				{
+					From:                 &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:2", Namespace: "other"},
+					LastTriggeredImageID: "image/result:3",
+				},
+				{
+					From: &corev1.ObjectReference{Kind: "DockerImage", Name: "mysql", Namespace: "other"},
 				},
 			},
 		},
@@ -791,6 +830,17 @@ func scenario_1_buildConfig_imageSource_noImageIDChange() *buildv1.BuildConfig {
 						From: &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:1"},
 					},
 				},
+			},
+		},
+		Status: buildv1.BuildConfigStatus{
+			ImageChangeTriggersState: []buildv1.ImageChangeTrigger{
+				{},
+				{
+					From:                 &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:2", Namespace: "other"},
+					LastTriggeredImageID: "image/result:1",
+				},
+				{
+					From: &corev1.ObjectReference{Kind: "DockerImage", Name: "mysql", Namespace: "other"}},
 			},
 		},
 	}
@@ -874,6 +924,11 @@ func benchmark_1_buildConfig(r *rand.Rand, identity, maxStreams, maxTags, trigge
 				},
 			},
 		},
+		Status: buildv1.BuildConfigStatus{
+			ImageChangeTriggersState: []buildv1.ImageChangeTrigger{
+				{},
+			},
+		},
 	}
 	if triggers == 0 {
 		bc.Spec.Triggers = nil
@@ -881,6 +936,9 @@ func benchmark_1_buildConfig(r *rand.Rand, identity, maxStreams, maxTags, trigge
 	for i := int32(0); i < (triggers - 1); i++ {
 		bc.Spec.Triggers = append(bc.Spec.Triggers, buildv1.BuildTriggerPolicy{
 			ImageChange: &buildv1.ImageChangeTrigger{From: &corev1.ObjectReference{Kind: "ImageStreamTag", Name: randomStreamTag(r, maxStreams, maxTags)}},
+		})
+		bc.Status.ImageChangeTriggersState = append(bc.Status.ImageChangeTriggersState, buildv1.ImageChangeTrigger{
+			From: &corev1.ObjectReference{Kind: "ImageStreamTag", Name: randomStreamTag(r, maxStreams, maxTags)},
 		})
 	}
 	return bc

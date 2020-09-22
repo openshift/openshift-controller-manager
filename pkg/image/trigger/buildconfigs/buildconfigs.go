@@ -144,13 +144,23 @@ func (r *buildConfigReactor) ImageChanged(obj runtime.Object, tagRetriever trigg
 
 	var request *buildv1.BuildRequest
 	var fired map[corev1.ObjectReference]string
-	for _, t := range bc.Spec.Triggers {
-		p := t.ImageChange
-		if p == nil || (p.From != nil && p.From.Kind != "ImageStreamTag") {
+	if bc.Status.ImageChangeTriggersState == nil {
+		bc.Status.ImageChangeTriggersState = []buildv1.ImageChangeTrigger{}
+	}
+	if len(bc.Status.ImageChangeTriggersState) == 0 {
+		for _, t := range bc.Spec.Triggers {
+			if t.ImageChange == nil {
+				continue
+			}
+			bc.Status.ImageChangeTriggersState = append(bc.Status.ImageChangeTriggersState, *t.ImageChange)
+		}
+	}
+	for _, p := range bc.Status.ImageChangeTriggersState {
+		if p.From != nil && p.From.Kind != "ImageStreamTag" {
 			continue
 		}
 		if p.Paused {
-			klog.V(5).Infof("Skipping paused build on bc: %s/%s for trigger: %+v", bc.Namespace, bc.Name, t)
+			klog.V(5).Infof("Skipping paused build on bc: %s/%s for trigger: %+v", bc.Namespace, bc.Name, p)
 			continue
 		}
 		var from *corev1.ObjectReference
