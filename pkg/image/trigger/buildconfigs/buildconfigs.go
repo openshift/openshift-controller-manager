@@ -225,6 +225,83 @@ func (r *buildConfigReactor) ImageChanged(obj runtime.Object, tagRetriever trigg
 		}
 	}
 
+	//TODO temp block until we get both OCM and O-API operating with status for LastTriggeredImageID
+	// FYI encapsulating this in a temp method got too tricky with the fired map
+	if request == nil {
+		for _, t := range bc.Spec.Triggers {
+			p := t.ImageChange
+			if p == nil || (p.From != nil && p.From.Kind != "ImageStreamTag") {
+				continue
+			}
+			if p.Paused {
+				klog.V(5).Infof("Skipping paused build on bc: %s/%s for trigger: %+v", bc.Namespace, bc.Name, t)
+				continue
+			}
+			var from *corev1.ObjectReference
+			if p.From != nil {
+				from = p.From
+			} else {
+				from = buildutil.GetInputReference(bc.Spec.Strategy)
+			}
+			namespace := from.Namespace
+			if len(namespace) == 0 {
+				namespace = bc.Namespace
+			}
+
+			// lookup the source if we haven't already retrieved it
+			var newSource bool
+			latest, found := fired[*from]
+			if !found {
+				latest, _, found = tagRetriever.ImageStreamTag(namespace, from.Name)
+				if !found {
+					continue
+				}
+				newSource = true
+			}
+
+			// LastTriggeredImageID is an image ref, despite the name
+			if latest == p.LastTriggeredImageID {
+				continue
+			}
+
+			// prevent duplicate build trigger causes
+			if fired == nil {
+				fired = make(map[corev1.ObjectReference]string)
+			}
+			fired[*from] = latest
+
+			if request == nil {
+				request = &buildv1.BuildRequest{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      bc.Name,
+						Namespace: bc.Namespace,
+					},
+				}
+			}
+			if request.TriggeredByImage == nil {
+				request.TriggeredByImage = &corev1.ObjectReference{
+					Kind: "DockerImage",
+					Name: latest,
+				}
+			}
+			if request.From == nil {
+				request.From = from
+			}
+
+			if newSource {
+				request.TriggeredBy = append(request.TriggeredBy, buildv1.BuildTriggerCause{
+					Message: BuildTriggerCauseImageMsg,
+					ImageChangeBuild: &buildv1.ImageChangeCause{
+						ImageID: latest,
+						FromRef: from,
+					},
+				})
+			}
+		}
+
+	}
+	//TODO end of temp block
+
 	if request == nil {
 		return nil
 	}
