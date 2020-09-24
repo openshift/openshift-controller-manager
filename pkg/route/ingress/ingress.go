@@ -26,6 +26,7 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	networkingv1beta1informers "k8s.io/client-go/informers/networking/v1beta1"
 	kv1core "k8s.io/client-go/kubernetes/typed/core/v1"
+	kv1beta1networking "k8s.io/client-go/kubernetes/typed/networking/v1beta1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	networkingv1beta1listers "k8s.io/client-go/listers/networking/v1beta1"
 	"k8s.io/client-go/tools/cache"
@@ -74,7 +75,8 @@ import (
 type Controller struct {
 	eventRecorder record.EventRecorder
 
-	client routeclient.RoutesGetter
+	routeClient   routeclient.RoutesGetter
+	ingressClient kv1beta1networking.IngressesGetter
 
 	ingressLister networkingv1beta1listers.IngressLister
 	secretLister  corelisters.SecretLister
@@ -161,7 +163,7 @@ type queueKey struct {
 }
 
 // NewController instantiates a Controller
-func NewController(eventsClient kv1core.EventsGetter, client routeclient.RoutesGetter, ingresses networkingv1beta1informers.IngressInformer, secrets coreinformers.SecretInformer, services coreinformers.ServiceInformer, routes routeinformers.RouteInformer) *Controller {
+func NewController(eventsClient kv1core.EventsGetter, routeClient routeclient.RoutesGetter, ingressClient kv1beta1networking.IngressesGetter, ingresses networkingv1beta1informers.IngressInformer, secrets coreinformers.SecretInformer, services coreinformers.ServiceInformer, routes routeinformers.RouteInformer) *Controller {
 	broadcaster := record.NewBroadcaster()
 	broadcaster.StartLogging(klog.Infof)
 	// TODO: remove the wrapper when every clients have moved to use the clientset.
@@ -175,7 +177,8 @@ func NewController(eventsClient kv1core.EventsGetter, client routeclient.RoutesG
 		expectations:     newExpectations(),
 		expectationDelay: 2 * time.Second,
 
-		client: client,
+		routeClient:   routeClient,
+		ingressClient: ingressClient,
 
 		ingressLister: ingresses.Lister(),
 		secretLister:  secrets.Lister(),
@@ -383,7 +386,7 @@ func (c *Controller) sync(key queueKey) error {
 
 	// walk the ingress and identify whether any of the child routes need to be updated, deleted,
 	// or created, as efficiently as possible.
-	var creates, updates []*routev1.Route
+	var creates, updates, matches []*routev1.Route
 	for _, rule := range ingress.Spec.Rules {
 		if rule.HTTP == nil {
 			continue
@@ -406,6 +409,7 @@ func (c *Controller) sync(key queueKey) error {
 			}
 
 			if routeMatchesIngress(existing, ingress, &rule, &path, c.secretLister, c.serviceLister) {
+				matches = append(matches, existing)
 				continue
 			}
 
@@ -424,7 +428,7 @@ func (c *Controller) sync(key queueKey) error {
 
 	// add the new routes
 	for _, route := range creates {
-		if err := createRouteWithName(c.client, ingress, route, c.expectations); err != nil {
+		if err := createRouteWithName(c.routeClient, ingress, route, c.expectations); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -436,7 +440,7 @@ func (c *Controller) sync(key queueKey) error {
 			return err
 		}
 		data = []byte(fmt.Sprintf(`[{"op":"replace","path":"/spec","value":%s}]`, data))
-		_, err = c.client.Routes(route.Namespace).Patch(context.TODO(), route.Name, types.JSONPatchType, data, metav1.PatchOptions{})
+		_, err = c.routeClient.Routes(route.Namespace).Patch(context.TODO(), route.Name, types.JSONPatchType, data, metav1.PatchOptions{})
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -444,7 +448,58 @@ func (c *Controller) sync(key queueKey) error {
 
 	// purge any previously managed routes
 	for _, route := range old {
-		if err := c.client.Routes(route.Namespace).Delete(context.TODO(), route.Name, metav1.DeleteOptions{}); err != nil && !kerrors.IsNotFound(err) {
+		if err := c.routeClient.Routes(route.Namespace).Delete(context.TODO(), route.Name, metav1.DeleteOptions{}); err != nil && !kerrors.IsNotFound(err) {
+			errs = append(errs, err)
+		}
+	}
+
+	// reflect route status to ingress status
+	//
+	// We must preserve status that other controllers may have added, so we
+	// cannot simply compute the new status from the routes associated with
+	// the ingress; instead, we need to take the current status, remove
+	// hosts for routes we've just deleted, and then add hosts for current
+	// routes.  In sum, we compute
+	// ingress.Status.LoadBalancer.Ingress[*].Hostname -
+	// old[*].Status.Ingress[*].RouterCanonicalHostname +
+	// matches[*].Status.Ingress[*].RouterCanonicalHostname.
+	oldCanonicalHostnames := sets.NewString()
+	for _, ingressIngress := range ingress.Status.LoadBalancer.Ingress {
+		oldCanonicalHostnames.Insert(ingressIngress.Hostname)
+	}
+	newCanonicalHostnames := sets.NewString(oldCanonicalHostnames.List()...)
+	for _, route := range old {
+		for _, routeIngress := range route.Status.Ingress {
+			for _, cond := range routeIngress.Conditions {
+				if cond.Type == routev1.RouteAdmitted {
+					if cond.Status == corev1.ConditionTrue {
+						newCanonicalHostnames.Delete(routeIngress.RouterCanonicalHostname)
+					}
+					break
+				}
+			}
+		}
+	}
+	for _, route := range matches {
+		for _, routeIngress := range route.Status.Ingress {
+			for _, cond := range routeIngress.Conditions {
+				if cond.Type == routev1.RouteAdmitted {
+					if cond.Status == corev1.ConditionTrue {
+						newCanonicalHostnames.Insert(routeIngress.RouterCanonicalHostname)
+					}
+					break
+				}
+			}
+		}
+	}
+	if !newCanonicalHostnames.Equal(oldCanonicalHostnames) {
+		updatedIngress := ingress.DeepCopy()
+		ingressIngresses := make([]corev1.LoadBalancerIngress, 0, newCanonicalHostnames.Len())
+		for _, canonicalHostname := range newCanonicalHostnames.List() {
+			ingressIngresses = append(ingressIngresses, corev1.LoadBalancerIngress{Hostname: canonicalHostname})
+		}
+		updatedIngress.Status.LoadBalancer.Ingress = ingressIngresses
+		if _, err := c.ingressClient.Ingresses(key.namespace).UpdateStatus(context.TODO(), updatedIngress, metav1.UpdateOptions{}); err != nil {
 			errs = append(errs, err)
 		}
 	}
