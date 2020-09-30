@@ -15,14 +15,44 @@ func TestLabelValue(t *testing.T) {
 		expectedOutput string
 	}{
 		{
-			name:           "do-not-end-with-hyphen",
-			input:          "cluster-kube-controller-manager-operator-4.3.0.ipv6-2019-11-27-0001-build",
-			expectedOutput: "cluster-kube-controller-manager-operator-4",
+			name:           "allow-decimals",
+			input:          "my.label.with.decimals",
+			expectedOutput: "my.label.with.decimals",
 		},
 		{
-			name:           "typical-name",
-			input:          "ruby-1-build",
-			expectedOutput: "ruby-1-build",
+			name:           "do-not-end-with-a-decimal",
+			input:          "my.label.ends.with.a.decimal.",
+			expectedOutput: "my.label.ends.with.a.decimal",
+		},
+		{
+			name:           "allow-hyphens",
+			input:          "my-label-with-hyphens",
+			expectedOutput: "my-label-with-hyphens",
+		},
+		{
+			name:           "do-not-end-with-a-hyphen",
+			input:          "my-label-ends-with-a-hyphen-",
+			expectedOutput: "my-label-ends-with-a-hyphen",
+		},
+		{
+			name:           "allow-underscores",
+			input:          "my_label_with_underscores",
+			expectedOutput: "my_label_with_underscores",
+		},
+		{
+			name:           "do-not-end-with-an-underscore",
+			input:          "my_label_ends_with_an_underscore_",
+			expectedOutput: "my_label_ends_with_an_underscore",
+		},
+		{
+			name:           "truncate-to-63-characters",
+			input:          "myreallylonglabelthatshouldbelessthan63charactersbutismorethanthat",
+			expectedOutput: "myreallylonglabelthatshouldbelessthan63charactersbutismorethant",
+		},
+		{
+			name:           "allow-a-label-with-semantic-versioning",
+			input:          "some-label-v4.3.2-beta3",
+			expectedOutput: "some-label-v4.3.2-beta3",
 		},
 	}
 
