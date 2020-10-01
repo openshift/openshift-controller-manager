@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	v1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"

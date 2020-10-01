@@ -2,7 +2,7 @@ package controller
 
 import (
 	clientset "k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	buildclient "github.com/openshift/client-go/build/clientset/versioned"
 
