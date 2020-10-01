@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // ImageTemplate is a class to assist in expanding parameterized container image references

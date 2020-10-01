@@ -8,7 +8,6 @@ require (
 	github.com/containers/image v3.0.2+incompatible
 	github.com/containers/storage v0.0.0-20170801145921-47536c89fcc5 // indirect
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
-	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/docker-credential-helpers v0.0.0-20190720063934-f78081d1f7fe // indirect
 	github.com/google/go-cmp v0.4.0
@@ -27,7 +26,6 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
-	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
 	k8s.io/api v0.19.0-rc.3
@@ -35,7 +33,7 @@ require (
 	k8s.io/apiserver v0.19.0-rc.3
 	k8s.io/client-go v0.19.0-rc.3
 	k8s.io/component-base v0.19.0-rc.3
-	k8s.io/klog v1.0.0
+	k8s.io/klog/v2 v2.2.0
 	k8s.io/kubectl v0.19.0-rc.3
 	k8s.io/kubernetes v1.19.0-rc.3
 	k8s.io/utils v0.0.0-20200720150651-0bdb4ca86cbc

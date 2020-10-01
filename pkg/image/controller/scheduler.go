@@ -5,7 +5,7 @@ import (
 
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/flowcontrol"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // NOTE: scheduler's semantics do not lend it for reuse elsewhere and its use in

@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -237,7 +237,7 @@ func (r *DeploymentConfigReactor) ImageChanged(obj runtime.Object, tagRetriever 
 		return err
 	}
 	if !resolvable {
-		if klog.V(4) {
+		if klog.V(4).Enabled() {
 			klog.Infof("Ignoring changes to deployment config %s, has unresolved images: %s", dc.Name, printDeploymentTriggers(newDC.Spec.Triggers))
 		}
 		return nil

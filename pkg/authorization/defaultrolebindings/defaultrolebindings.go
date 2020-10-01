@@ -19,7 +19,7 @@ import (
 	rbaclisters "k8s.io/client-go/listers/rbac/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 var defaultRoleBindingNames = GetBootstrapServiceAccountProjectRoleBindingNames()

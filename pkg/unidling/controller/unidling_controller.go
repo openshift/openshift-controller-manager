@@ -23,7 +23,7 @@ import (
 	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	"github.com/openshift/api"
 	unidlingapi "github.com/openshift/api/unidling/v1alpha1"

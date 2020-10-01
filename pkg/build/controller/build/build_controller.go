@@ -13,7 +13,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containers/image/signature"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -2014,7 +2014,7 @@ func (bc *BuildController) readAllProxyConfigs() error {
 		globalProxy = nil
 	}
 
-	if klog.V(5) {
+	if klog.V(5).Enabled() {
 		var configJSON []byte
 		if buildConfig != nil {
 			configJSON, _ = json.Marshal(buildConfig)
@@ -2053,7 +2053,7 @@ func (bc *BuildController) readClusterImageConfig() []error {
 		return configErrs
 	}
 
-	if klog.V(5) {
+	if klog.V(5).Enabled() {
 		configJSON, _ := json.Marshal(imageConfig)
 		if configJSON != nil {
 			klog.Infof("image config: %s", string(configJSON))
@@ -2108,7 +2108,7 @@ func (bc *BuildController) getAdditionalTrustedCAData(config *configv1.Image) (m
 			config.Spec.AdditionalTrustedCA.Name)
 		return nil, nil
 	}
-	if klog.V(5) {
+	if klog.V(5).Enabled() {
 		keys := make([]string, len(additionalCA.Data))
 		i := 0
 		for key := range additionalCA.Data {

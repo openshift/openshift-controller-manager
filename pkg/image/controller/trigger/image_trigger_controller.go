@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -342,7 +342,7 @@ func (c *TriggerController) handleResourceErr(err error, key string) {
 // syncImageStream will sync the image stream with the given key.
 // This function is not meant to be invoked concurrently with the same key.
 func (c *TriggerController) syncImageStream(key string) error {
-	if klog.V(4) {
+	if klog.V(4).Enabled() {
 		startTime := time.Now()
 		klog.Infof("Started syncing image stream %q", key)
 		defer func() {
@@ -370,7 +370,7 @@ func (c *TriggerController) syncImageStream(key string) error {
 
 // syncResource handles a set of changes against one of the possible resources generically.
 func (c *TriggerController) syncResource(key string) error {
-	if klog.V(4) {
+	if klog.V(4).Enabled() {
 		startTime := time.Now()
 		klog.Infof("Started syncing resource %q", key)
 		defer func() {
