@@ -1554,7 +1554,9 @@ func (bc *BuildController) updateBuild(build *buildv1.Build, update *buildUpdate
 }
 
 func (bc *BuildController) handleBuildCompletion(build *buildv1.Build) {
+	metrics.IncrementBuildFinished(build)
 	bcName := sharedbuildutil.ConfigNameForBuild(build)
+	// empty bcName means that user submitted a raw Build object, with no associated BuildConfig
 	if len(strings.TrimSpace(bcName)) != 0 {
 		bc.enqueueBuildConfig(build.Namespace, bcName)
 		if err := common.HandleBuildPruning(bcName, build.Namespace, bc.buildLister, bc.buildConfigLister, bc.buildDeleter); err != nil {

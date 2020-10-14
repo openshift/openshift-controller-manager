@@ -1,6 +1,7 @@
 package prometheus
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/blang/semver"
@@ -8,11 +9,13 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kselector "k8s.io/apimachinery/pkg/labels"
+	"k8s.io/component-base/metrics"
 	"k8s.io/component-base/metrics/legacyregistry"
 	"k8s.io/klog/v2"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	buildlister "github.com/openshift/client-go/build/listers/build/v1"
+	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 )
 
 const (
@@ -20,6 +23,7 @@ const (
 	buildSubsystem   = "openshift_build"
 	buildCount       = "total"
 	buildCountQuery  = buildSubsystem + separator + buildCount
+	buildResultQuery = buildSubsystem + separator + "result" + separator + buildCount
 	activeBuild      = "active_time_seconds"
 	activeBuildQuery = buildSubsystem + separator + activeBuild
 )
@@ -37,6 +41,11 @@ var (
 		[]string{"namespace", "name", "phase", "reason", "strategy"},
 		nil,
 	)
+	buildResultCounter = metrics.NewCounterVec(&metrics.CounterOpts{
+		Name:           buildResultQuery,
+		Help:           "Counts the total number of finished builds across all namespaces by result and strategy",
+		StabilityLevel: metrics.ALPHA,
+	}, []string{"result", "strategy"})
 	bc             = buildCollector{}
 	cancelledPhase = string(buildv1.BuildPhaseCancelled)
 	completePhase  = string(buildv1.BuildPhaseComplete)
@@ -59,7 +68,7 @@ type buildCollector struct {
 func IntializeMetricsCollector(buildLister buildlister.BuildLister) {
 	if !bc.IsCreated() {
 		bc.lister = buildLister
-		legacyregistry.MustRegister(&bc)
+		legacyregistry.MustRegister(&bc, buildResultCounter)
 	}
 	klog.V(4).Info("build metrics registered with prometheus")
 }
@@ -122,6 +131,23 @@ func (bc *buildCollector) ClearState() {
 
 func (bc *buildCollector) FQName() string {
 	return buildSubsystem
+}
+
+// IncrementBuildFinished increments the openshift_build_result_count metric based on the terminal
+// state of the build.
+func IncrementBuildFinished(build *buildv1.Build) {
+	if build == nil {
+		return
+	}
+	resultLabel := "failed"
+	if buildutil.IsBuildSuccessful(build.Status.Phase) {
+		resultLabel = "success"
+	}
+	buildResultCounter.
+		WithLabelValues(
+			resultLabel,
+			strings.ToLower(strategyType(build.Spec.Strategy)),
+		).Inc()
 }
 
 func addCountGauge(ch chan<- prometheus.Metric, desc *prometheus.Desc, phase, reason, strategy string, v float64) {
