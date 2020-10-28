@@ -453,7 +453,7 @@ func setupContainersStorage(pod *corev1.Pod, container *corev1.Container) {
 			MountPath: "/var/lib/containers/storage",
 		},
 	)
-	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_STORAGE_DRIVER", Value: "overlay"})
+	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_STORAGE_DRIVER", Value: "vfs"})
 	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_ISOLATION", Value: "chroot"})
 }
 
@@ -469,7 +469,6 @@ func setupContainersNodeStorage(pod *corev1.Pod, container *corev1.Container) {
 	}
 	if !exists {
 		pod.Spec.Volumes = append(pod.Spec.Volumes,
-			// TODO: run unprivileged https://github.com/openshift/origin/issues/662
 			corev1.Volume{
 				Name: "node-storage-root",
 				VolumeSource: corev1.VolumeSource{
@@ -481,13 +480,12 @@ func setupContainersNodeStorage(pod *corev1.Pod, container *corev1.Container) {
 		)
 	}
 	container.VolumeMounts = append(container.VolumeMounts,
-		// TODO: run unprivileged https://github.com/openshift/origin/issues/662
 		corev1.VolumeMount{
 			Name:      "node-storage-root",
 			MountPath: "/var/lib/containers/storage",
 		},
 	)
-	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_STORAGE_DRIVER", Value: "overlay"})
+	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_STORAGE_DRIVER", Value: "vfs"})
 	container.Env = append(container.Env, corev1.EnvVar{Name: "BUILD_ISOLATION", Value: "chroot"})
 }
 
