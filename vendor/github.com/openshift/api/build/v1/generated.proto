@@ -138,6 +138,11 @@ message BuildConfigSpec {
   // When a BuildConfig is created, the 5 most recent failed builds are retained unless this value is set.
   // If removed after the BuildConfig has been created, all failed builds are retained.
   optional int32 failedBuildsHistoryLimit = 5;
+
+  // UseClusterCA denotes whether the builder container will use CAs from the cluster, or the CAs included in the builder image's own /etc/pki/ca-trust directory.
+  // Setting this to true will overwrite the contents of /etc/pki/ca-trust w/ the CA trust values from the cluster. Default: false
+  // +optional
+  optional bool useClusterCA = 6;
 }
 
 // BuildConfigStatus contains current state of the build config object.
@@ -687,6 +692,7 @@ message DockerBuildStrategy {
 
   // dockerfilePath is the path of the Dockerfile that will be used to build the container image,
   // relative to the root of the context (contextDir).
+  // Defaults to `Dockerfile` if unset.
   optional string dockerfilePath = 6;
 
   // buildArgs contains build arguments that will be resolved in the Dockerfile.  See

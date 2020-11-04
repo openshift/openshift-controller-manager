@@ -713,6 +713,7 @@ type DockerBuildStrategy struct {
 
 	// dockerfilePath is the path of the Dockerfile that will be used to build the container image,
 	// relative to the root of the context (contextDir).
+	// Defaults to `Dockerfile` if unset.
 	DockerfilePath string `json:"dockerfilePath,omitempty" protobuf:"bytes,6,opt,name=dockerfilePath"`
 
 	// buildArgs contains build arguments that will be resolved in the Dockerfile.  See
@@ -937,6 +938,11 @@ type BuildConfigSpec struct {
 	// When a BuildConfig is created, the 5 most recent failed builds are retained unless this value is set.
 	// If removed after the BuildConfig has been created, all failed builds are retained.
 	FailedBuildsHistoryLimit *int32 `json:"failedBuildsHistoryLimit,omitempty" protobuf:"varint,5,opt,name=failedBuildsHistoryLimit"`
+
+	// UseClusterCA denotes whether the builder container will use CAs from the cluster, or the CAs included in the builder image's own /etc/pki/ca-trust directory.
+	// Setting this to true will overwrite the contents of /etc/pki/ca-trust w/ the CA trust values from the cluster. Default: false
+	// +optional
+	UseClusterCA bool `json:"useClusterCA,omitempty" protobuf:"bool,6,opt,name=useClusterCA"`
 }
 
 // BuildRunPolicy defines the behaviour of how the new builds are executed

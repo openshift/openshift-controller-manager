@@ -18,7 +18,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/mtrmac/gpgme v0.1.2 // indirect
 	github.com/openshift/api v0.0.0-20200723134351-89de68875e7c
-	github.com/openshift/build-machinery-go v0.0.0-20200713135615-1f43d26dccc7
+	github.com/openshift/build-machinery-go v0.0.0-20200917070002-f171684f77ab
 	github.com/openshift/client-go v0.0.0-20200722173614-5a1b0aaeff15
 	github.com/openshift/library-go v0.0.0-20200731134909-dbf343342338
 	github.com/openshift/runtime-utils v0.0.0-20200415173359-c45d4ff3f912
@@ -28,8 +28,8 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
-	k8s.io/api v0.19.0-rc.3
-	k8s.io/apimachinery v0.19.0-rc.3
+	k8s.io/api v0.19.2
+	k8s.io/apimachinery v0.19.2
 	k8s.io/apiserver v0.19.0-rc.3
 	k8s.io/client-go v0.19.0-rc.3
 	k8s.io/component-base v0.19.0-rc.3
@@ -40,6 +40,7 @@ require (
 )
 
 replace (
+	github.com/openshift/api => github.com/coreydaley/api v0.0.0-20201105160231-98bf0391e2c3
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for each of these k8s deps in its go.mod
 	k8s.io/api => k8s.io/api v0.19.0-rc.3
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.19.0-rc.3
