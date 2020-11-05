@@ -194,6 +194,7 @@ type BuildController struct {
 	registryConfData        string
 	signaturePolicyData     string
 	additionalTrustedCAData map[string]string
+	mountsConfData          string
 	configLock              sync.Mutex
 }
 
@@ -369,6 +370,35 @@ func (bc *BuildController) setSignaturePolicyJSON(json string) {
 	bc.configLock.Lock()
 	defer bc.configLock.Unlock()
 	bc.signaturePolicyData = json
+}
+
+// mountsConf returns the contents of the mounts.conf file used by the build pod
+func (bc *BuildController) mountsConf() map[string]string {
+	bc.configLock.Lock()
+	defer bc.configLock.Unlock()
+
+	m := make(map[string]string)
+	if len(bc.mountsConfData) != 0 {
+		contents := strings.Split(bc.mountsConfData, "\n")
+		for _, line := range contents {
+			parts := strings.Split(line, ":")
+			m[parts[0]] = m[parts[1]]
+		}
+	}
+
+	return m
+}
+
+func (bc *BuildController) setMountsConf(m map[string]string) {
+	bc.configLock.Lock()
+	defer bc.configLock.Unlock()
+
+	b := new(bytes.Buffer)
+	for key, value := range m {
+		fmt.Fprintf(b, "%s:\"%s\"\n", key, value)
+	}
+
+	bc.mountsConfData = b.String()
 }
 
 // defaults returns a copy of the buildDefaults to be applied to a build pod.
@@ -1953,6 +1983,12 @@ func (bc *BuildController) createBuildSystemConfigMapSpec(build *buildv1.Build, 
 	if len(signaturePolicy) > 0 {
 		cm.Data[buildv1.SignaturePolicyKey] = signaturePolicy
 	}
+
+	mountsConf := bc.mountsConf()
+	if len(mountsConf) > 0 {
+		cm.Data[buildv1.MountsConfKey] = bc.mountsConfData
+	}
+
 	return cm
 }
 
@@ -2052,6 +2088,7 @@ func (bc *BuildController) readClusterImageConfig() []error {
 		bc.setAdditionalTrustedCAs(nil)
 		bc.setRegistryConfTOML("")
 		bc.setSignaturePolicyJSON("")
+		bc.setMountsConf(map[string]string{})
 		return configErrs
 	}
 
@@ -2089,6 +2126,13 @@ func (bc *BuildController) readClusterImageConfig() []error {
 		configErrs = append(configErrs, sigErr)
 	} else {
 		bc.setSignaturePolicyJSON(signatureJSON)
+	}
+
+	mountsConf, mErr := bc.createMountsConfData()
+	if mErr != nil {
+		configErrs = append(configErrs, mErr)
+	} else {
+		bc.setMountsConf(mountsConf)
 	}
 
 	return configErrs
@@ -2158,6 +2202,14 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 	klog.V(4).Info("overrode registry settings for builds")
 	klog.V(5).Infof("generated registries.conf for build pods: \n%s", string(newData.Bytes()))
 	return string(newData.Bytes()), nil
+}
+
+func (bc *BuildController) createMountsConfData() (map[string]string, error) {
+	mountsConf := bc.mountsConf()
+	if _, ok := mountsConf["/etc/pki/ca-trust"]; !ok {
+		mountsConf["/etc/pki/ca-trust"] = "/etc/pki/ca-trust"
+	}
+	return mountsConf, nil
 }
 
 func (bc *BuildController) createBuildSignaturePolicyData(config *configv1.Image) (string, error) {

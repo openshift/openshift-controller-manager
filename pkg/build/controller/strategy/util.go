@@ -418,12 +418,16 @@ func updateConfigsForContainer(c corev1.Container, volumeName string, configDir 
 	// currently not created/managed by OpenShift
 	storageConfPath := filepath.Join(configDir, "storage.conf")
 
+	// mounts.conf
+	mountsConfPath := filepath.Join(configDir, "mounts.conf")
+
 	// Setup environment variables for buildah
 	// If these paths do not exist in the build container, buildah falls back to sane defaults.
 	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_REGISTRIES_CONF_PATH", Value: registriesConfPath})
 	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_REGISTRIES_DIR_PATH", Value: registriesDirPath})
 	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_SIGNATURE_POLICY_PATH", Value: signaturePolicyPath})
 	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_STORAGE_CONF_PATH", Value: storageConfPath})
+	c.Env = append(c.Env, corev1.EnvVar{Name: "BUILD_MOUNTS_CONF_PATH", Value: mountsConfPath})
 	return c
 }
 
