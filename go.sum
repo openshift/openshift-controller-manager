@@ -58,6 +58,8 @@ github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuy
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
 github.com/alecthomas/units v0.0.0-20190717042225-c3de453c63f4/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
+github.com/alvaroaleman/api v0.0.0-20201109165148-6d5eebc3a6f4 h1:a6jcpAt5zRdtM25LBgfI4uvkrd/r5HKpZemfVZ0Z0r8=
+github.com/alvaroaleman/api v0.0.0-20201109165148-6d5eebc3a6f4/go.mod h1:RDvBcRQMGLa3aNuDuejVBbTEQj/2i14NXdpOLqbNBvM=
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883/go.mod h1:rCTlJbsFo29Kk6CurOXKm700vrz8f0KW0JNfpkRJY/8=
 github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e/go.mod h1:3U/XgcO3hCbHZ8TKRvWD2dDTCfh9M9ya+I9JpbB7O8o=
 github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5doyWs3UAsr3K4I6qtAmlQcZDesFNEHPZAzj8=
@@ -514,15 +516,12 @@ github.com/opencontainers/runtime-spec v1.0.2/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/
 github.com/opencontainers/runtime-spec v1.0.3-0.20200520003142-237cc4f519e2/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
 github.com/opencontainers/selinux v1.5.1/go.mod h1:yTcKuYAh6R95iDpefGLQaPaRwJFwyzAJufJyiTt7s0g=
 github.com/opencontainers/selinux v1.5.2/go.mod h1:yTcKuYAh6R95iDpefGLQaPaRwJFwyzAJufJyiTt7s0g=
-github.com/openshift/api v0.0.0-20200326160804-ecb9283fe820 h1:pEmlKM0gcAPwPEOUt0JOMBd+3bDEOaSZLdvPTm2eU6E=
-github.com/openshift/api v0.0.0-20200326160804-ecb9283fe820/go.mod h1:RKMJ5CBnljLfnej+BJ/xnOWc3kZDvJUaIAEq2oKSPtE=
-github.com/openshift/api v0.0.0-20200722170803-0ba2c3658da6/go.mod h1:IXsT3F4NjLtRzfnQvwU+g/oPWpoNsVV5vd5aaOMO8eU=
-github.com/openshift/api v0.0.0-20200723134351-89de68875e7c h1:qsj/GaQ1sdT584yIcGmqqRpR5xtX5jTw5Gis3/09YI4=
-github.com/openshift/api v0.0.0-20200723134351-89de68875e7c/go.mod h1:IXsT3F4NjLtRzfnQvwU+g/oPWpoNsVV5vd5aaOMO8eU=
 github.com/openshift/build-machinery-go v0.0.0-20200211121458-5e3d6e570160 h1:V4E6yt4XWiBEPKnJbs/E8pgUq9AjZqzQfsL3eeT84Qs=
 github.com/openshift/build-machinery-go v0.0.0-20200211121458-5e3d6e570160/go.mod h1:1CkcsT3aVebzRBzVTSbiKSkJMsC/CASqxesfqEMfJEc=
 github.com/openshift/build-machinery-go v0.0.0-20200713135615-1f43d26dccc7 h1:iP7TOaN+tEVNUQ0ODEbN1ukjLz918lsIt7Czf8giWlM=
 github.com/openshift/build-machinery-go v0.0.0-20200713135615-1f43d26dccc7/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
+github.com/openshift/build-machinery-go v0.0.0-20200917070002-f171684f77ab h1:lBrojddP6C9C2p67EMs2vcdpC8eF+H0DDom+fgI2IF0=
+github.com/openshift/build-machinery-go v0.0.0-20200917070002-f171684f77ab/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/openshift/client-go v0.0.0-20200722173614-5a1b0aaeff15 h1:b2QkHrmaYtY6kzy2VrYLc+KBmCuTpJjgvBahPqpt6V0=
 github.com/openshift/client-go v0.0.0-20200722173614-5a1b0aaeff15/go.mod h1:yd4Zpcdk+8JyMWi6v+h78jPqK0FvXbJY41Wq3SZxl+c=
 github.com/openshift/library-go v0.0.0-20191003152030-97c62d8a2901/go.mod h1:NBttNjZpWwup/nthuLbPAPSYC8Qyo+BBK5bCtFoyYjo=
@@ -858,8 +857,6 @@ golang.org/x/tools v0.0.0-20191012152004-8de300cfc20a/go.mod h1:b+2E5dAYhXwXZwtn
 golang.org/x/tools v0.0.0-20191119224855-298f0cb1881e/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/tools v0.0.0-20191125144606-a911d9008d1f/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/tools v0.0.0-20191227053925-7b8e75db28f4/go.mod h1:TB2adYChydJhpapKDTa4BR/hXlZSLoq2Wpct/0txZ28=
-golang.org/x/tools v0.0.0-20200115044656-831fdb1e1868/go.mod h1:TB2adYChydJhpapKDTa4BR/hXlZSLoq2Wpct/0txZ28=
-golang.org/x/tools v0.0.0-20200602230032-c00d67ef29d0/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/tools v0.0.0-20200616133436-c1934b75d054/go.mod h1:EkVYQZoAsY45+roYkvgYkIh4xh/qjgUK9TdY2XT94GE=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
@@ -986,8 +983,6 @@ k8s.io/csi-translation-lib v0.19.0-rc.3/go.mod h1:hfEYQ2Ox/CdJWNAERa7a+QQYC9YX1m
 k8s.io/gengo v0.0.0-20200413195148-3a45101e95ac/go.mod h1:ezvh/TsK7cY6rbqRK0oQQ8IAqLxYwwyPxAX1Pzy0ii0=
 k8s.io/gengo v0.0.0-20200428234225-8167cfdcfc14/go.mod h1:ezvh/TsK7cY6rbqRK0oQQ8IAqLxYwwyPxAX1Pzy0ii0=
 k8s.io/heapster v1.2.0-beta.1/go.mod h1:h1uhptVXMwC8xtZBYsPXKVi8fpdlYkTs6k949KozGrM=
-k8s.io/klog v1.0.0 h1:Pt+yjF5aB1xDSVbau4VsWe+dQNzA0qv1LlXdC2dF6Q8=
-k8s.io/klog v1.0.0/go.mod h1:4Bi6QPql/J/LkTDqv7R/cd3hPo4k2DG6Ptcz060Ez5I=
 k8s.io/klog/v2 v2.0.0/go.mod h1:PBfzABfn139FHAV07az/IF9Wp1bkk3vpT2XSJ76fSDE=
 k8s.io/klog/v2 v2.2.0 h1:XRvcwJozkgZ1UQJmfMGpvRthQHOvihEhYtDfAaxMz/A=
 k8s.io/klog/v2 v2.2.0/go.mod h1:Od+F08eJP+W3HUb4pSrPpgp9DGU4GzlpG/TmITuYh/Y=
