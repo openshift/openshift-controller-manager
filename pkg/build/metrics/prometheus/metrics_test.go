@@ -40,7 +40,7 @@ func (f *fakeResponseWriter) WriteHeader(statusCode int) {
 	f.statusCode = statusCode
 }
 
-func TestMetrics(t *testing.T) {
+func TestBuildMetrics(t *testing.T) {
 	// went per line vs. a block of expected test in case assumptions on ordering are subverted, as well as defer on
 	// getting newlines right
 	expectedResponse := []string{

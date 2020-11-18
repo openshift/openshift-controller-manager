@@ -25,6 +25,7 @@ import (
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
 	buildinformer "github.com/openshift/client-go/build/informers/externalversions/build/v1"
 	buildlister "github.com/openshift/client-go/build/listers/build/v1"
+	lgbuildutil "github.com/openshift/library-go/pkg/build/buildutil"
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildscheme"
 	"github.com/openshift/openshift-controller-manager/pkg/build/buildutil"
 	buildcommon "github.com/openshift/openshift-controller-manager/pkg/build/controller/common"
@@ -174,7 +175,51 @@ func (c *BuildConfigController) buildConfigAdded(obj interface{}) {
 // buildconfig is updated or there is a relist of buildconfigs
 func (c *BuildConfigController) buildConfigUpdated(old, cur interface{}) {
 	bc := cur.(*buildv1.BuildConfig)
+	oldBuildConfig := old.(*buildv1.BuildConfig)
+	// TODO: Remove the event after the image trigger behavior is removed.
+	// See https://issues.redhat.com/browse/BUILD-188
+	if c.imageChangeTriggerCleared(oldBuildConfig, bc) {
+		c.recorder.Event(bc,
+			corev1.EventTypeWarning,
+			"ImageChangeTriggerCleared",
+			"spec.triggers[*].imagechange.lastTriggeredImageID was cleared, which will trigger a build. This behavior is deprecated and will be removed in a future OpenShift release.")
+	}
 	c.enqueueBuildConfig(bc)
+}
+
+func (c *BuildConfigController) imageChangeTriggerCleared(old, cur *buildv1.BuildConfig) bool {
+	if old == nil || cur == nil {
+		return false
+	}
+	imageLastTriggers := map[corev1.ObjectReference]string{}
+	for _, oldTrigger := range old.Spec.Triggers {
+		if oldTrigger.ImageChange == nil {
+			continue
+		}
+		from := c.getImageChangeTriggerInputReference(old, oldTrigger)
+		imageLastTriggers[*from] = oldTrigger.ImageChange.LastTriggeredImageID
+	}
+	for _, currentTrigger := range cur.Spec.Triggers {
+		if currentTrigger.ImageChange == nil {
+			continue
+		}
+		from := c.getImageChangeTriggerInputReference(cur, currentTrigger)
+		prev, found := imageLastTriggers[*from]
+		if found && len(prev) > 0 && len(currentTrigger.ImageChange.LastTriggeredImageID) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *BuildConfigController) getImageChangeTriggerInputReference(bc *buildv1.BuildConfig, trigger buildv1.BuildTriggerPolicy) *corev1.ObjectReference {
+	if trigger.ImageChange == nil {
+		return nil
+	}
+	if trigger.ImageChange.From != nil {
+		return trigger.ImageChange.From
+	}
+	return lgbuildutil.GetInputReference(bc.Spec.Strategy)
 }
 
 // enqueueBuild adds the given build to the queue.
