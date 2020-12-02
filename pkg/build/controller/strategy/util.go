@@ -463,7 +463,7 @@ func setupContainersStorage(pod *corev1.Pod, container *corev1.Container) {
 }
 
 // setupContainersNodeStorage borrows the appropriate storage directories from the node so
-// that we can share layers that we're using with the node, as a additional read-only
+// that we can share layers that we're using with the node, as an additional read-only
 // mount point.
 func setupContainersNodeStorage(pod *corev1.Pod, container *corev1.Container) {
 	exists := false
