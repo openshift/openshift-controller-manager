@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ktesting "k8s.io/client-go/testing"
@@ -105,6 +106,143 @@ func TestHandleBuildConfig(t *testing.T) {
 
 }
 
+func TestCheckImageChangeTriggerCleared(t *testing.T) {
+	cases := []struct {
+		name            string
+		oldTriggers     []tagTriggerID
+		currentTriggers []tagTriggerID
+		setOldNil       bool
+		setCurrentNil   bool
+		expectedResult  bool
+	}{
+		{
+			name:      "old nil",
+			setOldNil: true,
+		},
+		{
+			name:          "current nil",
+			setCurrentNil: true,
+		},
+		{
+			name:          "both nil",
+			setOldNil:     true,
+			setCurrentNil: true,
+		},
+		{
+			name: "no trigger changes",
+			oldTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "abcdef0",
+				},
+			},
+			currentTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "abcdef0",
+				},
+			},
+		},
+		{
+			name: "empty to populated",
+			oldTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "",
+				},
+			},
+			currentTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "abcdef0",
+				},
+			},
+		},
+		{
+			name: "populated to empty",
+			oldTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "abcdef0",
+				},
+			},
+			currentTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "",
+				},
+			},
+			expectedResult: true,
+		},
+		{
+			name: "multi empty to populated",
+			oldTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "abcdef0",
+				},
+				{
+					ImageStreamTag:  "test-build:latest",
+					LastTriggeredId: "",
+				},
+			},
+			currentTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "abcdef0",
+				},
+				{
+					ImageStreamTag:  "test-build:latest",
+					LastTriggeredId: "abcdef0",
+				},
+			},
+		},
+		{
+			name: "multi populated to empty",
+			oldTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "abcdef0",
+				},
+				{
+					ImageStreamTag:  "test-build:latest",
+					LastTriggeredId: "abcdef0",
+				},
+			},
+			currentTriggers: []tagTriggerID{
+				{
+					LastTriggeredId: "abcdef0",
+				},
+				{
+					ImageStreamTag:  "test-build:latest",
+					LastTriggeredId: "",
+				},
+			},
+			expectedResult: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			objects := []runtime.Object{}
+
+			var current *buildv1.BuildConfig
+			if !tc.setCurrentNil {
+				current = buildConfigWithImageChangeTriggers(tc.currentTriggers)
+			}
+			if current != nil {
+				objects = append(objects, current)
+			}
+			buildClient := fake.NewSimpleClientset(objects...)
+			controller := &BuildConfigController{
+				buildLister:       &okBuildLister{},
+				buildConfigGetter: buildClient.BuildV1(),
+				buildGetter:       buildClient.BuildV1(),
+				buildConfigLister: &okBuildConfigGetter{BuildConfig: current},
+				recorder:          &record.FakeRecorder{},
+			}
+			var old *buildv1.BuildConfig
+			if !tc.setOldNil {
+				old = buildConfigWithImageChangeTriggers(tc.oldTriggers)
+			}
+			changed := controller.imageChangeTriggerCleared(old, current)
+			if changed != tc.expectedResult {
+				t.Errorf("expected ImageChangeTriggerCleared to be %v, got %v", tc.expectedResult, changed)
+			}
+		})
+	}
+}
+
 func baseBuildConfig() *buildv1.BuildConfig {
 	bc := &buildv1.BuildConfig{}
 	bc.Name = "testBuildConfig"
@@ -126,6 +264,31 @@ func buildConfigWithNonZeroLastVersion() *buildv1.BuildConfig {
 	bc := buildConfigWithConfigChangeTrigger()
 	bc.Status.LastVersion = 1
 	return bc
+}
+
+func buildConfigWithImageChangeTriggers(triggers []tagTriggerID) *buildv1.BuildConfig {
+	bc := baseBuildConfig()
+	for _, trigger := range triggers {
+		imageChangeTrigger := &buildv1.ImageChangeTrigger{
+			LastTriggeredImageID: trigger.LastTriggeredId,
+		}
+		if len(trigger.ImageStreamTag) > 0 {
+			imageChangeTrigger.From = &corev1.ObjectReference{
+				Kind: "ImageStreamTag",
+				Name: trigger.ImageStreamTag,
+			}
+		}
+		bc.Spec.Triggers = append(bc.Spec.Triggers, buildv1.BuildTriggerPolicy{
+			Type:        buildv1.ImageChangeBuildTriggerType,
+			ImageChange: imageChangeTrigger,
+		})
+	}
+	return bc
+}
+
+type tagTriggerID struct {
+	ImageStreamTag  string
+	LastTriggeredId string
 }
 
 type okBuildLister struct{}

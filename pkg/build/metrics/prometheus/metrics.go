@@ -37,6 +37,7 @@ var (
 		[]string{"namespace", "name", "phase", "reason", "strategy"},
 		nil,
 	)
+
 	bc             = buildCollector{}
 	cancelledPhase = string(buildv1.BuildPhaseCancelled)
 	completePhase  = string(buildv1.BuildPhaseComplete)
