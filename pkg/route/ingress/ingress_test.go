@@ -870,7 +870,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
 				},
 			},
 		},
@@ -1134,7 +1134,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
 				},
 			},
 		},
@@ -1196,7 +1196,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
 				},
 			},
 		},
@@ -1267,7 +1267,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"passthrough"}}]`),
 				},
 			},
 		},
@@ -1338,7 +1338,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"reencrypt"}}]`),
 				},
 			},
 		},
@@ -1406,7 +1406,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"reencrypt"}}]`),
 				},
 			},
 		},
@@ -1452,6 +1452,7 @@ func TestController_sync(t *testing.T) {
 							Name:            "1-abcdef",
 							Namespace:       "test",
 							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							Annotations:     map[string]string{"route.openshift.io/termination": "Passthrough"},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1539,7 +1540,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"Passthrough"}}]`),
 				},
 			},
 		},
@@ -1599,7 +1600,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Redirect"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
 				},
 			},
 		},
@@ -1666,7 +1667,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key2"}}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key2"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
 				},
 			},
 		},
@@ -2414,6 +2415,78 @@ func TestController_sync(t *testing.T) {
 				}},
 			},
 			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "update route - termination policy changed to passthrough and timeout set",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination":      "passthrough",
+								"haproxy.router.openshift.io/timeout": "6m",
+							},
+						},
+						Spec: networkingv1beta1.IngressSpec{
+							TLS: []networkingv1beta1.IngressTLS{
+								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
+							},
+							Rules: []networkingv1beta1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1beta1.IngressRuleValue{
+										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+											Paths: []networkingv1beta1.HTTPIngressPath{
+												{
+													Path: "/", Backend: networkingv1beta1.IngressBackend{
+														ServiceName: "service-1",
+														ServicePort: intstr.FromString("http"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							TLS: &routev1.TLSConfig{
+								Termination:                   routev1.TLSTerminationEdge,
+								Certificate:                   "cert",
+								Key:                           "key",
+								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+							},
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
+				{
+					Name:  "1-abcdef",
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":{"haproxy.router.openshift.io/timeout":"6m","route.openshift.io/termination":"passthrough"}}]`),
+				},
+			},
 		},
 	}
 	for _, tt := range tests {

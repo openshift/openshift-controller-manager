@@ -425,7 +425,6 @@ func (c *Controller) sync(key queueKey) error {
 	}
 
 	var errs []error
-
 	// add the new routes
 	for _, route := range creates {
 		if err := createRouteWithName(c.routeClient, ingress, route, c.expectations); err != nil {
@@ -439,13 +438,18 @@ func (c *Controller) sync(key queueKey) error {
 		if err != nil {
 			return err
 		}
-		data = []byte(fmt.Sprintf(`[{"op":"replace","path":"/spec","value":%s}]`, data))
+		annotations, err := json.Marshal(&route.Annotations)
+		if err != nil {
+			return err
+		}
+		data = []byte(fmt.Sprintf(`[{"op":"replace","path":"/spec","value":%s},`+
+			`{"op":"replace","path":"/metadata/annotations","value":%s}]`,
+			data, annotations))
 		_, err = c.routeClient.Routes(route.Namespace).Patch(context.TODO(), route.Name, types.JSONPatchType, data, metav1.PatchOptions{})
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
-
 	// purge any previously managed routes
 	for _, route := range old {
 		if err := c.routeClient.Routes(route.Namespace).Delete(context.TODO(), route.Name, metav1.DeleteOptions{}); err != nil && !kerrors.IsNotFound(err) {
@@ -586,7 +590,8 @@ func routeMatchesIngress(
 		route.Spec.Path == path.Path &&
 		route.Spec.To.Name == path.Backend.ServiceName &&
 		route.Spec.WildcardPolicy == routev1.WildcardPolicyNone &&
-		len(route.Spec.AlternateBackends) == 0
+		len(route.Spec.AlternateBackends) == 0 &&
+		reflect.DeepEqual(route.Annotations, ingress.Annotations)
 	if !match {
 		return false
 	}
