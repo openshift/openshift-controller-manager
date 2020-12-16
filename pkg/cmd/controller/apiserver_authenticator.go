@@ -22,7 +22,7 @@ func newRemoteAuthenticator(tokenReview authenticationclient.TokenReviewInterfac
 	authenticators := []authenticator.Request{}
 
 	// TODO audiences
-	tokenAuthenticator, err := webhooktoken.NewFromInterface(tokenReview, nil)
+	tokenAuthenticator, err := webhooktoken.NewFromInterface(tokenReview, nil, *webhooktoken.DefaultRetryBackoff())
 	if err != nil {
 		return nil, err
 	}
