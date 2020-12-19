@@ -1,4 +1,4 @@
-FROM registry.svc.ci.openshift.org/ocp/builder:golang-1.14 AS builder
+FROM registry.svc.ci.openshift.org/openshift/release:golang-1.14 AS builder
 WORKDIR /go/src/github.com/openshift/openshift-controller-manager
 COPY . .
 RUN make build --warn-undefined-variables
