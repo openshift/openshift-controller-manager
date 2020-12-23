@@ -67,6 +67,7 @@ func TestDockerCreateBuildPod(t *testing.T) {
 		"BUILD_STORAGE_CONF_PATH":     "",
 		"BUILD_STORAGE_DRIVER":        "",
 		"BUILD_BLOBCACHE_DIR":         "",
+		"BUILD_MOUNT_ETC_PKI_CATRUST": "",
 	}
 	gotKeys := map[string]string{}
 	for _, k := range container.Env {
@@ -168,6 +169,7 @@ func TestDockerBuildLongName(t *testing.T) {
 
 func mockDockerBuild() *buildv1.Build {
 	timeout := int64(60)
+	mountCA := true
 	return &buildv1.Build{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "dockerBuild",
@@ -228,6 +230,7 @@ func mockDockerBuild() *buildv1.Build {
 				},
 				CompletionDeadlineSeconds: &timeout,
 				NodeSelector:              nodeSelector,
+				MountTrustedCA:            &mountCA,
 			},
 		},
 		Status: buildv1.BuildStatus{

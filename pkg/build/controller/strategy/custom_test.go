@@ -102,7 +102,15 @@ func TestCustomCreateBuildPod(t *testing.T) {
 		0: {"BUILD", string(buildJSON)},
 		1: {"LANG", "en_US.utf8"},
 	}
-	standardEnv := []string{"SOURCE_REPOSITORY", "SOURCE_URI", "SOURCE_CONTEXT_DIR", "SOURCE_REF", "OUTPUT_IMAGE", "OUTPUT_REGISTRY"}
+	standardEnv := []string{
+		"SOURCE_REPOSITORY",
+		"SOURCE_URI",
+		"SOURCE_CONTEXT_DIR",
+		"SOURCE_REF",
+		"OUTPUT_IMAGE",
+		"OUTPUT_REGISTRY",
+		"BUILD_MOUNT_ETC_PKI_CATRUST",
+	}
 	for index, exp := range errorCases {
 		if e := container.Env[index]; e.Name != exp[0] || e.Value != exp[1] {
 			t.Errorf("Expected %s:%s, got %s:%s!\n", exp[0], exp[1], e.Name, e.Value)
@@ -190,6 +198,7 @@ func TestCustomBuildLongName(t *testing.T) {
 
 func mockCustomBuild(forcePull, emptySource bool) *buildv1.Build {
 	timeout := int64(60)
+	mountCA := true
 	src := buildv1.BuildSource{}
 	if !emptySource {
 		src = buildv1.BuildSource{
@@ -250,6 +259,7 @@ func mockCustomBuild(forcePull, emptySource bool) *buildv1.Build {
 				},
 				CompletionDeadlineSeconds: &timeout,
 				NodeSelector:              nodeSelector,
+				MountTrustedCA:            &mountCA,
 			},
 		},
 		Status: buildv1.BuildStatus{

@@ -103,6 +103,7 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 		"BUILD_STORAGE_CONF_PATH":     "",
 		"BUILD_STORAGE_DRIVER":        "",
 		"BUILD_BLOBCACHE_DIR":         "",
+		"BUILD_MOUNT_ETC_PKI_CATRUST": "",
 	}
 	if !rootAllowed {
 		expectedKeys["ALLOWED_UIDS"] = ""
@@ -228,6 +229,7 @@ func TestS2IBuildLongName(t *testing.T) {
 
 func mockSTIBuild() *buildv1.Build {
 	timeout := int64(60)
+	mountCA := true
 	return &buildv1.Build{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "stiBuild",
@@ -293,6 +295,7 @@ func mockSTIBuild() *buildv1.Build {
 				},
 				CompletionDeadlineSeconds: &timeout,
 				NodeSelector:              nodeSelector,
+				MountTrustedCA:            &mountCA,
 			},
 		},
 		Status: buildv1.BuildStatus{
