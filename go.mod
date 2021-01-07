@@ -18,7 +18,7 @@ require (
 	github.com/mtrmac/gpgme v0.1.2 // indirect
 	github.com/openshift/api v0.0.0-20201209094822-71d5d69227c6
 	github.com/openshift/build-machinery-go v0.0.0-20200917070002-f171684f77ab
-	github.com/openshift/client-go v0.0.0-20200722173614-5a1b0aaeff15
+	github.com/openshift/client-go v0.0.0-20201020074620-f8fd44879f7c
 	github.com/openshift/library-go v0.0.0-20200731134909-dbf343342338
 	github.com/openshift/runtime-utils v0.0.0-20200415173359-c45d4ff3f912
 	github.com/prometheus/client_golang v1.7.1
@@ -41,6 +41,7 @@ require (
 
 replace (
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for each of these k8s deps in its go.mod
+	github.com/openshift/library-go => github.com/kevinrizza/library-go v0.0.0-20201216155812-db26a7547735
 	k8s.io/api => k8s.io/api v0.20.0
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.20.0
 	k8s.io/apimachinery => k8s.io/apimachinery v0.20.0
