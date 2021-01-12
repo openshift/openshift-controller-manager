@@ -66,7 +66,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	}
 
 	hostPathFile := corev1.HostPathFile
-	privileged := true
+	privileged := false
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      buildutil.GetBuildPodName(build),

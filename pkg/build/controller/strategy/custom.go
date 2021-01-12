@@ -87,7 +87,7 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		serviceAccount = buildutil.BuilderServiceAccountName
 	}
 
-	privileged := true
+	privileged := false
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      buildutil.GetBuildPodName(build),
