@@ -65,7 +65,6 @@ func TestDockerCreateBuildPod(t *testing.T) {
 		"BUILD_REGISTRIES_DIR_PATH":   "",
 		"BUILD_SIGNATURE_POLICY_PATH": "",
 		"BUILD_STORAGE_CONF_PATH":     "",
-		"BUILD_ISOLATION":             "",
 		"BUILD_STORAGE_DRIVER":        "",
 		"BUILD_BLOBCACHE_DIR":         "",
 	}
