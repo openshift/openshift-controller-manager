@@ -29,6 +29,7 @@ func RunUnidlingController(ctx *ControllerContext) (bool, error) {
 	}
 
 	coreClient := ctx.ClientBuilder.ClientOrDie(infraUnidlingControllerServiceAccountName).CoreV1()
+	discoveryClient := ctx.ClientBuilder.ClientOrDie(infraUnidlingControllerServiceAccountName).DiscoveryV1beta1()
 	controller := unidlingcontroller.NewUnidlingController(
 		scaleClient,
 		ctx.RestMapper,
@@ -36,6 +37,7 @@ func RunUnidlingController(ctx *ControllerContext) (bool, error) {
 		coreClient,
 		appsClient.AppsV1(),
 		coreClient,
+		discoveryClient,
 		resyncPeriod,
 	)
 

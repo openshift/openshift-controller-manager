@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	discoveryv1beta1client "k8s.io/client-go/kubernetes/typed/discovery/v1beta1"
 	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/pager"
@@ -66,12 +67,13 @@ func (c *lastFiredCache) AddIfNewer(info types.NamespacedName, newLastFired time
 }
 
 type UnidlingController struct {
-	controller          cache.Controller
-	scaleNamespacer     scale.ScalesGetter
-	mapper              meta.RESTMapper
-	endpointsNamespacer corev1client.EndpointsGetter
-	queue               workqueue.RateLimitingInterface
-	lastFiredCache      *lastFiredCache
+	controller              cache.Controller
+	scaleNamespacer         scale.ScalesGetter
+	mapper                  meta.RESTMapper
+	endpointsNamespacer     corev1client.EndpointsGetter
+	endpointSliceNamespacer discoveryv1beta1client.EndpointSlicesGetter
+	queue                   workqueue.RateLimitingInterface
+	lastFiredCache          *lastFiredCache
 
 	// TODO: remove these once we get the scale-source functionality in the scale endpoints
 	dcNamespacer appstypedclient.DeploymentConfigsGetter
@@ -79,17 +81,18 @@ type UnidlingController struct {
 }
 
 func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, endptsNS corev1client.EndpointsGetter, evtNS corev1client.EventsGetter,
-	dcNamespacer appstypedclient.DeploymentConfigsGetter, rcNamespacer corev1client.ReplicationControllersGetter,
+	dcNamespacer appstypedclient.DeploymentConfigsGetter, rcNamespacer corev1client.ReplicationControllersGetter, sliceNS discoveryv1beta1client.EndpointSlicesGetter,
 	resyncPeriod time.Duration) *UnidlingController {
 	fieldSet := fields.Set{}
 	fieldSet["reason"] = unidlingapi.NeedPodsReason
 	fieldSelector := fieldSet.AsSelector()
 
 	unidlingController := &UnidlingController{
-		scaleNamespacer:     scaleNS,
-		mapper:              mapper,
-		endpointsNamespacer: endptsNS,
-		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "unidling"),
+		scaleNamespacer:         scaleNS,
+		mapper:                  mapper,
+		endpointsNamespacer:     endptsNS,
+		endpointSliceNamespacer: sliceNS,
+		queue:                   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "unidling"),
 		lastFiredCache: &lastFiredCache{
 			items: make(map[types.NamespacedName]time.Time),
 		},
@@ -392,8 +395,48 @@ func (c *UnidlingController) handleRequest(info types.NamespacedName, lastFired 
 	if _, err = c.endpointsNamespacer.Endpoints(info.Namespace).Update(context.TODO(), targetEndpoints, metav1.UpdateOptions{}); err != nil {
 		return true, fmt.Errorf("unable to update/remove idle annotations from %s/%s: %v", info.Namespace, info.Name, err)
 	}
+	klog.V(2).Infof("Updated idle annotations on endpoint %s/%s: %v", info.Namespace, info.Name, targetEndpoints.Annotations)
 
+	// endpoints handle the idling logic, but idling annotations are propagated to
+	// the corresponding endpoint slices so other applications that has migrated to endpoint slices
+	// can keep consuming the idling annotations transparently.
+	c.mirrorEndpointIdlingAnnotations(targetEndpoints.Annotations, info.Namespace, info.Name)
 	return false, nil
+}
+
+func (c *UnidlingController) mirrorEndpointIdlingAnnotations(endpointAnnotations map[string]string, namespace, name string) {
+	// Obtain the slices that belong to the service
+	opts := metav1.ListOptions{
+		LabelSelector: "kubernetes.io/service-name=" + name,
+	}
+	targetSlices, err := c.endpointSliceNamespacer.EndpointSlices(namespace).List(context.TODO(), opts)
+	if err != nil {
+		klog.Warningf("unable to retrieve endpoint slices for service %s/%s: %v", namespace, name, err)
+		return
+	}
+	// Mirror the endpoints idling annotations to the endpoint slices
+	idlingAnnotations := []string{unidlingapi.UnidleTargetAnnotation, unidlingapi.IdledAtAnnotation}
+	for _, slice := range targetSlices.Items {
+		targetSlice := slice.DeepCopy()
+		if len(targetSlice.Annotations) == 0 {
+			targetSlice.Annotations = map[string]string{}
+		}
+		// add or remove the idling annotations
+		for _, idleAnnotation := range idlingAnnotations {
+			value, exist := endpointAnnotations[idleAnnotation]
+			if exist {
+				targetSlice.Annotations[idleAnnotation] = value
+			} else {
+				delete(targetSlice.Annotations, idleAnnotation)
+			}
+		}
+
+		if _, err = c.endpointSliceNamespacer.EndpointSlices(namespace).Update(context.TODO(), targetSlice, metav1.UpdateOptions{}); err != nil {
+			klog.Warningf("unable to update/remove endpoint slices idle annotation %s/%s: %v", namespace, name, err)
+			return
+		}
+		klog.V(2).Infof("Updated idle annotations on endpoint slice %s/%s: %v", targetSlice.Namespace, targetSlice.Name, targetSlice.Annotations)
+	}
 }
 
 var (

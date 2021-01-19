@@ -1,26 +1,30 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	corev1 "k8s.io/api/core/v1"
-	kexternalfake "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/restmapper"
-	scalefake "k8s.io/client-go/scale/fake"
-	clientgotesting "k8s.io/client-go/testing"
-
 	appsv1 "github.com/openshift/api/apps/v1"
 	unidlingapi "github.com/openshift/api/unidling/v1alpha1"
 	appsfake "github.com/openshift/client-go/apps/clientset/versioned/fake"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	discovery "k8s.io/api/discovery/v1beta1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/fake"
+	kexternalfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/restmapper"
+	scalefake "k8s.io/client-go/scale/fake"
+	clientgotesting "k8s.io/client-go/testing"
 )
 
 type fakeResults struct {
@@ -224,11 +228,12 @@ func TestControllerHandlesStaleEvents(t *testing.T) {
 	nowTime := time.Now().Truncate(time.Second)
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, nowTime)
 	controller := &UnidlingController{
-		mapper:              mapper,
-		endpointsNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:        fakeClient.CoreV1(),
-		dcNamespacer:        fakeDeployClient.AppsV1(),
-		scaleNamespacer:     fakeScaleClient,
+		mapper:                  mapper,
+		endpointsNamespacer:     fakeClient.CoreV1(),
+		endpointSliceNamespacer: fakeClient.DiscoveryV1beta1(),
+		rcNamespacer:            fakeClient.CoreV1(),
+		dcNamespacer:            fakeDeployClient.AppsV1(),
+		scaleNamespacer:         fakeScaleClient,
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -281,11 +286,12 @@ func TestControllerIgnoresAlreadyScaledObjects(t *testing.T) {
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, idledTime, baseScales...)
 
 	controller := &UnidlingController{
-		mapper:              mapper,
-		scaleNamespacer:     fakeScaleClient,
-		endpointsNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:        fakeClient.CoreV1(),
-		dcNamespacer:        fakeDeployClient.AppsV1(),
+		mapper:                  mapper,
+		scaleNamespacer:         fakeScaleClient,
+		endpointsNamespacer:     fakeClient.CoreV1(),
+		endpointSliceNamespacer: fakeClient.DiscoveryV1beta1(),
+		rcNamespacer:            fakeClient.CoreV1(),
+		dcNamespacer:            fakeDeployClient.AppsV1(),
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -394,11 +400,12 @@ func TestControllerUnidlesProperly(t *testing.T) {
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, nowTime.Add(-10*time.Second), baseScales...)
 
 	controller := &UnidlingController{
-		mapper:              mapper,
-		endpointsNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:        fakeClient.CoreV1(),
-		dcNamespacer:        fakeDeployClient.AppsV1(),
-		scaleNamespacer:     fakeScaleClient,
+		mapper:                  mapper,
+		endpointsNamespacer:     fakeClient.CoreV1(),
+		endpointSliceNamespacer: fakeClient.DiscoveryV1beta1(),
+		rcNamespacer:            fakeClient.CoreV1(),
+		dcNamespacer:            fakeDeployClient.AppsV1(),
+		scaleNamespacer:         fakeScaleClient,
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -767,11 +774,12 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 	for _, test := range tests {
 		fakeClient, fakeDeployClient, fakeScaleClient, mapper := prepareFakeClientForFailureTest(test)
 		controller := &UnidlingController{
-			mapper:              mapper,
-			endpointsNamespacer: fakeClient.CoreV1(),
-			rcNamespacer:        fakeClient.CoreV1(),
-			dcNamespacer:        fakeDeployClient.AppsV1(),
-			scaleNamespacer:     fakeScaleClient,
+			mapper:                  mapper,
+			endpointsNamespacer:     fakeClient.CoreV1(),
+			endpointSliceNamespacer: fakeClient.DiscoveryV1beta1(),
+			rcNamespacer:            fakeClient.CoreV1(),
+			dcNamespacer:            fakeDeployClient.AppsV1(),
+			scaleNamespacer:         fakeScaleClient,
 		}
 
 		var retry bool
@@ -794,5 +802,206 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 			t.Errorf("for test 'it should %s': expected retry to be %v, but it was %v with error %v", test.name, test.retryExpected, retry, err)
 			return
 		}
+	}
+}
+
+func TestUnidlingController_mirrorEndpointIdlingAnnotations(t *testing.T) {
+	svcName := "testname"
+	svcNamespace := "testnamespace"
+	sliceName := svcName + "xyz"
+	nowTime := time.Now().Truncate(time.Second)
+
+	tests := []struct {
+		testname      string
+		endpoints     *corev1.Endpoints
+		endpointSlice *discovery.EndpointSlice
+	}{
+		{
+			testname: "empty annotations",
+			endpoints: &v1.Endpoints{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      svcName,
+					Namespace: svcNamespace,
+				},
+				Subsets: []v1.EndpointSubset{{
+					Ports: []v1.EndpointPort{{Port: 80}},
+				}},
+			},
+			endpointSlice: &discovery.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      sliceName,
+					Namespace: svcNamespace,
+					Labels: map[string]string{
+						discovery.LabelServiceName: svcName,
+					},
+				},
+				AddressType: discovery.AddressTypeIPv4,
+			},
+		},
+		{
+			testname: "update slice with UnidleTargetAnnotation annotation",
+			endpoints: &v1.Endpoints{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      svcName,
+					Namespace: svcNamespace,
+					Annotations: map[string]string{
+						unidlingapi.UnidleTargetAnnotation: "idletargetannotation",
+					},
+				},
+				Subsets: []v1.EndpointSubset{{
+					Ports: []v1.EndpointPort{{Port: 80}},
+				}},
+			},
+			endpointSlice: &discovery.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      sliceName,
+					Namespace: svcNamespace,
+					Labels: map[string]string{
+						discovery.LabelServiceName: svcName,
+					},
+				},
+				AddressType: discovery.AddressTypeIPv4,
+			},
+		},
+		{
+			testname: "update slice with IdledAtAnnotation annotation",
+			endpoints: &v1.Endpoints{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      svcName,
+					Namespace: svcNamespace,
+					Annotations: map[string]string{
+						unidlingapi.IdledAtAnnotation: nowTime.Format(time.RFC3339),
+					},
+				},
+				Subsets: []v1.EndpointSubset{{
+					Ports: []v1.EndpointPort{{Port: 80}},
+				}},
+			},
+			endpointSlice: &discovery.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      sliceName,
+					Namespace: svcNamespace,
+					Labels: map[string]string{
+						discovery.LabelServiceName: svcName,
+					},
+				},
+				AddressType: discovery.AddressTypeIPv4,
+			},
+		},
+		{
+			testname: "update slice with both idle annotations",
+			endpoints: &v1.Endpoints{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      svcName,
+					Namespace: svcNamespace,
+					Annotations: map[string]string{
+						unidlingapi.IdledAtAnnotation:      nowTime.Format(time.RFC3339),
+						unidlingapi.UnidleTargetAnnotation: "idletargetannotation",
+					},
+				},
+				Subsets: []v1.EndpointSubset{{
+					Ports: []v1.EndpointPort{{Port: 80}},
+				}},
+			},
+			endpointSlice: &discovery.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      sliceName,
+					Namespace: svcNamespace,
+					Labels: map[string]string{
+						discovery.LabelServiceName: svcName,
+					},
+				},
+				AddressType: discovery.AddressTypeIPv4,
+			},
+		},
+		{
+			testname: "stomp slice annotations",
+			endpoints: &v1.Endpoints{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      svcName,
+					Namespace: svcNamespace,
+					Annotations: map[string]string{
+						unidlingapi.IdledAtAnnotation:      nowTime.Format(time.RFC3339),
+						unidlingapi.UnidleTargetAnnotation: "idletargetannotation",
+					},
+				},
+				Subsets: []v1.EndpointSubset{{
+					Ports: []v1.EndpointPort{{Port: 80}},
+				}},
+			},
+			endpointSlice: &discovery.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      sliceName,
+					Namespace: svcNamespace,
+					Labels: map[string]string{
+						discovery.LabelServiceName: svcName,
+					},
+					Annotations: map[string]string{
+						unidlingapi.IdledAtAnnotation:      "updateme",
+						unidlingapi.UnidleTargetAnnotation: "updateme",
+					},
+				},
+				AddressType: discovery.AddressTypeIPv4,
+			},
+		},
+		{
+			testname: "remove slice annotations",
+			endpoints: &v1.Endpoints{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        svcName,
+					Namespace:   svcNamespace,
+					Annotations: map[string]string{},
+				},
+				Subsets: []v1.EndpointSubset{{
+					Ports: []v1.EndpointPort{{Port: 80}},
+				}},
+			},
+			endpointSlice: &discovery.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      sliceName,
+					Namespace: svcNamespace,
+					Labels: map[string]string{
+						discovery.LabelServiceName: svcName,
+					},
+					Annotations: map[string]string{
+						unidlingapi.IdledAtAnnotation:      "updateme",
+						unidlingapi.UnidleTargetAnnotation: "updateme",
+					},
+				},
+				AddressType: discovery.AddressTypeIPv4,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.testname, func(t *testing.T) {
+			client := fake.NewSimpleClientset(tt.endpointSlice)
+			// copy annotations from the original endpoint to verify we don´t mutate the original object
+			expectedAnnotations := map[string]string{}
+			for k, v := range tt.endpoints.Annotations {
+				expectedAnnotations[k] = v
+			}
+
+			controller := &UnidlingController{
+				endpointSliceNamespacer: client.DiscoveryV1beta1(),
+			}
+			controller.mirrorEndpointIdlingAnnotations(tt.endpoints.Annotations, tt.endpoints.Namespace, tt.endpoints.Name)
+
+			fetchedSlices, err := client.DiscoveryV1beta1().EndpointSlices(tt.endpoints.Namespace).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: discovery.LabelServiceName + "=" + svcName,
+			})
+			if err != nil {
+				t.Fatalf("Expected no error fetching Endpoint Slices, got: %v", err)
+			}
+			// check the annotations wree mirrored correctly
+			for _, slice := range fetchedSlices.Items {
+				if !apiequality.Semantic.DeepEqual(tt.endpoints.Annotations, slice.Annotations) {
+					t.Fatalf("expected annotations %v received %v", expectedAnnotations, slice.Annotations)
+				}
+			}
+			// verify the original object annotations were not mutated
+			if !apiequality.Semantic.DeepEqual(tt.endpoints.Annotations, expectedAnnotations) {
+				t.Fatalf("endpoints annotations mutated, original %v expected %v", tt.endpoints.Annotations, expectedAnnotations)
+			}
+		})
 	}
 }
