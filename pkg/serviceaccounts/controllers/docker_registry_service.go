@@ -11,6 +11,7 @@ import (
 	"k8s.io/klog/v2"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -23,6 +24,9 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/credentialprovider"
+
+	configinformer "github.com/openshift/client-go/config/informers/externalversions/config/v1"
+	configlister "github.com/openshift/client-go/config/listers/config/v1"
 )
 
 // DockerRegistryServiceControllerOptions contains options for the DockerRegistryServiceController
@@ -54,7 +58,7 @@ var serviceLocations = []serviceLocation{
 }
 
 // NewDockerRegistryServiceController returns a new *DockerRegistryServiceController.
-func NewDockerRegistryServiceController(secrets informers.SecretInformer, serviceInformer informers.ServiceInformer, cl kclientset.Interface, options DockerRegistryServiceControllerOptions) *DockerRegistryServiceController {
+func NewDockerRegistryServiceController(secrets informers.SecretInformer, serviceInformer informers.ServiceInformer, imageInformer configinformer.ImageInformer, cl kclientset.Interface, options DockerRegistryServiceControllerOptions) *DockerRegistryServiceController {
 	e := &DockerRegistryServiceController{
 		client:                 cl,
 		additionalRegistryURLs: options.AdditionalRegistryURLs,
@@ -63,7 +67,22 @@ func NewDockerRegistryServiceController(secrets informers.SecretInformer, servic
 		registryLocationQueue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "serviceaccount-registry-location"),
 		secretsToUpdate:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "serviceaccount-registry-location-reactions"),
 		dockerURLsInitialized:  options.DockerURLsInitialized,
+		imageConfigLister:      imageInformer.Lister(),
 	}
+
+	imageInformer.Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				e.enqueueRegistryLocationQueue()
+			},
+			UpdateFunc: func(old, cur interface{}) {
+				e.enqueueRegistryLocationQueue()
+			},
+			DeleteFunc: func(obj interface{}) {
+				e.enqueueRegistryLocationQueue()
+			},
+		},
+	)
 
 	// we're only watching two of these, but we already watch all services for the service serving cert signer
 	// and this correctly handles namespaces coming and going
@@ -95,6 +114,8 @@ func NewDockerRegistryServiceController(secrets informers.SecretInformer, servic
 	e.servicesSynced = serviceInformer.Informer().HasSynced
 	e.serviceLister = serviceInformer.Lister()
 
+	e.imageConfigSynced = imageInformer.Informer().HasSynced
+
 	e.syncRegistryLocationHandler = e.syncRegistryLocationChange
 
 	e.secretCache = secrets.Informer().GetIndexer()
@@ -117,6 +138,9 @@ type DockerRegistryServiceController struct {
 
 	serviceLister  listers.ServiceLister
 	servicesSynced func() bool
+
+	imageConfigLister configlister.ImageLister
+	imageConfigSynced func() bool
 
 	syncRegistryLocationHandler func() error
 
@@ -175,13 +199,22 @@ func (e *DockerRegistryServiceController) waitForDockerURLs(ready chan<- struct{
 	defer utilruntime.HandleCrash()
 
 	// Wait for the stores to fill
-	if !cache.WaitForCacheSync(stopCh, e.servicesSynced, e.secretsSynced) {
+	if !cache.WaitForCacheSync(stopCh, e.servicesSynced, e.secretsSynced, e.imageConfigSynced) {
 		return
 	}
 
 	// after syncing, determine the current state and assume that we're up to date for it if you don't do this,
 	// you'll get an initial storm as you mess with all the dockercfg secrets every time you startup
-	urls := e.getDockerRegistryLocations()
+	var urls []string
+	var err error
+	for {
+		if urls, err = e.getDockerRegistryLocations(); err == nil {
+			break
+		}
+		klog.Errorf("error getting docker registry locations: %s", err)
+		time.Sleep(time.Second)
+		break
+	}
 	e.setRegistryURLs(urls...)
 	e.dockercfgController.SetDockerURLs(urls...)
 	close(e.dockerURLsInitialized)
@@ -234,13 +267,25 @@ func (e *DockerRegistryServiceController) watchForDockerURLChanges() {
 }
 
 // getDockerRegistryLocations returns the dns form and the ip form of the secret
-func (e *DockerRegistryServiceController) getDockerRegistryLocations() []string {
+func (e *DockerRegistryServiceController) getDockerRegistryLocations() ([]string, error) {
 	ret := append([]string{}, e.additionalRegistryURLs...)
+
+	imgConfig, err := e.imageConfigLister.Get("cluster")
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, err
+	} else if err == nil {
+		// XXX config seems not to sync spec.ExternalRegistryHostnames with
+		// status.ExternalRegistryHostnames, here we add both, if URLs are
+		// duplicated this won't cause issue.
+		ret = append(ret, imgConfig.Spec.ExternalRegistryHostnames...)
+		ret = append(ret, imgConfig.Status.ExternalRegistryHostnames...)
+	}
+
 	for _, location := range serviceLocations {
 		ret = append(ret, getDockerRegistryLocations(e.serviceLister, location, e.clusterDNSSuffix)...)
 	}
 	klog.V(4).Infof("found container image registry urls: %v", ret)
-	return ret
+	return ret, nil
 }
 
 func getDockerRegistryLocations(lister listers.ServiceLister, location serviceLocation, clusterDNSSuffix string) []string {
@@ -288,7 +333,11 @@ func getDockerRegistryLocations(lister listers.ServiceLister, location serviceLo
 
 // syncRegistryLocationChange goes through all service account dockercfg secrets and updates them to point at a new docker-registry location
 func (e *DockerRegistryServiceController) syncRegistryLocationChange() error {
-	newLocations := e.getDockerRegistryLocations()
+	newLocations, err := e.getDockerRegistryLocations()
+	if err != nil {
+		return fmt.Errorf("error getting docker registry URLs: %w", err)
+	}
+
 	newDockerRegistryLocations := sets.NewString(newLocations...)
 	existingURLs := e.getRegistryURLs()
 	if existingURLs.Equal(newDockerRegistryLocations) && e.initialSecretsCheckDone {

@@ -78,6 +78,7 @@ func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error
 	go serviceaccountcontrollers.NewDockerRegistryServiceController(
 		ctx.KubernetesInformers.Core().V1().Secrets(),
 		ctx.KubernetesInformers.Core().V1().Services(),
+		ctx.ConfigInformers.Config().V1().Images(),
 		kc,
 		dockerRegistryControllerOptions,
 	).Run(10, ctx.Stop)
