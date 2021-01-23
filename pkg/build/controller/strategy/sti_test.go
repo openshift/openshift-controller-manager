@@ -102,7 +102,6 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 		"BUILD_SIGNATURE_POLICY_PATH": "",
 		"BUILD_STORAGE_CONF_PATH":     "",
 		"BUILD_STORAGE_DRIVER":        "",
-		"BUILD_ISOLATION":             "",
 		"BUILD_BLOBCACHE_DIR":         "",
 	}
 	if !rootAllowed {
