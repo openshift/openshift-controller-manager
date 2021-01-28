@@ -65,19 +65,20 @@ func (c *lastFiredCache) AddIfNewer(info types.NamespacedName, newLastFired time
 }
 
 type UnidlingController struct {
-	controller         cache.Controller
-	scaleNamespacer    scale.ScalesGetter
-	mapper             meta.RESTMapper
-	servicesNamespacer corev1client.ServicesGetter
-	queue              workqueue.RateLimitingInterface
-	lastFiredCache     *lastFiredCache
+	controller          cache.Controller
+	scaleNamespacer     scale.ScalesGetter
+	mapper              meta.RESTMapper
+	endpointsNamespacer corev1client.EndpointsGetter
+	servicesNamespacer  corev1client.ServicesGetter
+	queue               workqueue.RateLimitingInterface
+	lastFiredCache      *lastFiredCache
 
 	// TODO: remove these once we get the scale-source functionality in the scale endpoints
 	dcNamespacer appstypedclient.DeploymentConfigsGetter
 	rcNamespacer corev1client.ReplicationControllersGetter
 }
 
-func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, servicesNS corev1client.ServicesGetter, evtNS corev1client.EventsGetter,
+func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, endptsNS corev1client.EndpointsGetter, servicesNS corev1client.ServicesGetter, evtNS corev1client.EventsGetter,
 	dcNamespacer appstypedclient.DeploymentConfigsGetter, rcNamespacer corev1client.ReplicationControllersGetter,
 	resyncPeriod time.Duration) *UnidlingController {
 	fieldSet := fields.Set{}
@@ -85,10 +86,11 @@ func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, s
 	fieldSelector := fieldSet.AsSelector()
 
 	unidlingController := &UnidlingController{
-		scaleNamespacer:    scaleNS,
-		mapper:             mapper,
-		servicesNamespacer: servicesNS,
-		queue:              workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "unidling"),
+		scaleNamespacer:     scaleNS,
+		mapper:              mapper,
+		endpointsNamespacer: endptsNS,
+		servicesNamespacer:  servicesNS,
+		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "unidling"),
 		lastFiredCache: &lastFiredCache{
 			items: make(map[types.NamespacedName]time.Time),
 		},
@@ -372,6 +374,46 @@ func (c *UnidlingController) handleRequest(info types.NamespacedName, lastFired 
 
 	if _, err = c.servicesNamespacer.Services(info.Namespace).Update(context.TODO(), targetService, metav1.UpdateOptions{}); err != nil {
 		return true, fmt.Errorf("unable to update/remove idle annotations from %s/%s: %v", info.Namespace, info.Name, err)
+	}
+
+	// oc idle still annotates endpoints for backwards
+	// compatibilty. We need to remove any idled annotations on
+	// the endpoints.
+
+	// fetch the endpoints in question
+	targetEndpoints, err := c.endpointsNamespacer.Endpoints(info.Namespace).Get(context.TODO(), info.Name, metav1.GetOptions{})
+	if err != nil {
+		return true, fmt.Errorf("unable to retrieve endpoints: %v", err)
+	}
+
+	// make sure we actually were idled...
+	idledTimeRaw, wasIdled = targetEndpoints.Annotations[unidlingapi.IdledAtAnnotation]
+	if !wasIdled {
+		klog.V(5).Infof("UnidlingController received a NeedPods event for a service that was not idled, ignoring")
+		return false, nil
+	}
+
+	// ...and make sure this request was to wake up from the most recent idling, and not a previous one
+	idledTime, err = time.Parse(time.RFC3339, idledTimeRaw)
+	if err != nil {
+		// retrying here won't help, we're just stuck as idle since we can't get parse the idled time
+		return false, fmt.Errorf("unable to check idled-at time: %v", err)
+	}
+	if lastFired.Before(idledTime) {
+		klog.V(5).Infof("UnidlingController received an out-of-date NeedPods event, ignoring")
+		return false, nil
+	}
+
+	_, unidledAnnotation := targetEndpoints.Annotations[unidlingapi.UnidleTargetAnnotation]
+	_, idledAtAnnotation := targetEndpoints.Annotations[unidlingapi.IdledAtAnnotation]
+
+	if unidledAnnotation || idledAtAnnotation {
+		delete(targetEndpoints.Annotations, unidlingapi.UnidleTargetAnnotation)
+		delete(targetEndpoints.Annotations, unidlingapi.IdledAtAnnotation)
+
+		if _, err = c.endpointsNamespacer.Endpoints(info.Namespace).Update(context.TODO(), targetEndpoints, metav1.UpdateOptions{}); err != nil {
+			return true, fmt.Errorf("unable to update/remove idle annotations from %s/%s: %v", info.Namespace, info.Name, err)
+		}
 	}
 
 	return false, nil
