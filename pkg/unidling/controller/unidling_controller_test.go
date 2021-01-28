@@ -24,8 +24,8 @@ import (
 )
 
 type fakeResults struct {
-	resMap       map[unidlingapi.CrossGroupObjectReference]autoscalingv1.Scale
-	resEndpoints *corev1.Endpoints
+	resMap     map[unidlingapi.CrossGroupObjectReference]autoscalingv1.Scale
+	resService *corev1.Service
 }
 
 func prepFakeClient(t *testing.T, nowTime time.Time, scales ...autoscalingv1.Scale) (*kexternalfake.Clientset, *appsfake.Clientset, *scalefake.FakeScaleClient, meta.RESTMapper, *fakeResults) {
@@ -50,7 +50,7 @@ func prepFakeClient(t *testing.T, nowTime time.Time, scales ...autoscalingv1.Sca
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	endpointsObj := corev1.Endpoints{
+	serviceObj := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "somesvc",
 			Annotations: map[string]string{
@@ -59,9 +59,10 @@ func prepFakeClient(t *testing.T, nowTime time.Time, scales ...autoscalingv1.Sca
 			},
 		},
 	}
-	fakeClient.PrependReactor("get", "endpoints", func(action clientgotesting.Action) (bool, runtime.Object, error) {
-		if action.(clientgotesting.GetAction).GetName() == endpointsObj.Name {
-			return true, &endpointsObj, nil
+
+	fakeClient.PrependReactor("get", "services", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+		if action.(clientgotesting.GetAction).GetName() == serviceObj.Name {
+			return true, &serviceObj, nil
 		}
 
 		return false, nil, nil
@@ -169,13 +170,13 @@ func prepFakeClient(t *testing.T, nowTime time.Time, scales ...autoscalingv1.Sca
 		return true, nil, errors.NewNotFound(action.GetResource().GroupResource(), patchAction.GetName())
 	})
 
-	fakeClient.AddReactor("*", "endpoints", func(action clientgotesting.Action) (bool, runtime.Object, error) {
-		obj := action.(clientgotesting.UpdateAction).GetObject().(*corev1.Endpoints)
-		if obj.Name != endpointsObj.Name {
+	fakeClient.AddReactor("*", "services", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+		obj := action.(clientgotesting.UpdateAction).GetObject().(*corev1.Service)
+		if obj.Name != serviceObj.Name {
 			return false, nil, nil
 		}
 
-		res.resEndpoints = obj
+		res.resService = obj
 
 		return true, obj, nil
 	})
@@ -224,11 +225,11 @@ func TestControllerHandlesStaleEvents(t *testing.T) {
 	nowTime := time.Now().Truncate(time.Second)
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, nowTime)
 	controller := &UnidlingController{
-		mapper:              mapper,
-		endpointsNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:        fakeClient.CoreV1(),
-		dcNamespacer:        fakeDeployClient.AppsV1(),
-		scaleNamespacer:     fakeScaleClient,
+		mapper:             mapper,
+		servicesNamespacer: fakeClient.CoreV1(),
+		rcNamespacer:       fakeClient.CoreV1(),
+		dcNamespacer:       fakeDeployClient.AppsV1(),
+		scaleNamespacer:    fakeScaleClient,
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -244,8 +245,8 @@ func TestControllerHandlesStaleEvents(t *testing.T) {
 		t.Errorf("Did not expect to have anything scaled, but got %v", res.resMap)
 	}
 
-	if res.resEndpoints != nil {
-		t.Errorf("Did not expect to have endpoints object updated, but got %v", res.resEndpoints)
+	if res.resService != nil {
+		t.Errorf("Did not expect to have service object updated, but got %v", res.resService)
 	}
 }
 
@@ -281,11 +282,11 @@ func TestControllerIgnoresAlreadyScaledObjects(t *testing.T) {
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, idledTime, baseScales...)
 
 	controller := &UnidlingController{
-		mapper:              mapper,
-		scaleNamespacer:     fakeScaleClient,
-		endpointsNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:        fakeClient.CoreV1(),
-		dcNamespacer:        fakeDeployClient.AppsV1(),
+		mapper:             mapper,
+		scaleNamespacer:    fakeScaleClient,
+		servicesNamespacer: fakeClient.CoreV1(),
+		rcNamespacer:       fakeClient.CoreV1(),
+		dcNamespacer:       fakeDeployClient.AppsV1(),
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -325,12 +326,12 @@ func TestControllerIgnoresAlreadyScaledObjects(t *testing.T) {
 		}
 	}
 
-	if res.resEndpoints == nil {
-		t.Fatalf("Expected endpoints object to be updated, but it was not")
+	if res.resService == nil {
+		t.Fatalf("Expected service object to be updated, but it was not")
 	}
 
-	resTargetsRaw, hadTargets := res.resEndpoints.Annotations[unidlingapi.UnidleTargetAnnotation]
-	resIdledTimeRaw, hadIdledTime := res.resEndpoints.Annotations[unidlingapi.IdledAtAnnotation]
+	resTargetsRaw, hadTargets := res.resService.Annotations[unidlingapi.UnidleTargetAnnotation]
+	resIdledTimeRaw, hadIdledTime := res.resService.Annotations[unidlingapi.IdledAtAnnotation]
 
 	if !hadTargets {
 		t.Errorf("Expected targets annotation to still be present, but it was not")
@@ -394,11 +395,11 @@ func TestControllerUnidlesProperly(t *testing.T) {
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, nowTime.Add(-10*time.Second), baseScales...)
 
 	controller := &UnidlingController{
-		mapper:              mapper,
-		endpointsNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:        fakeClient.CoreV1(),
-		dcNamespacer:        fakeDeployClient.AppsV1(),
-		scaleNamespacer:     fakeScaleClient,
+		mapper:             mapper,
+		servicesNamespacer: fakeClient.CoreV1(),
+		rcNamespacer:       fakeClient.CoreV1(),
+		dcNamespacer:       fakeDeployClient.AppsV1(),
+		scaleNamespacer:    fakeScaleClient,
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -430,12 +431,12 @@ func TestControllerUnidlesProperly(t *testing.T) {
 		}
 	}
 
-	if res.resEndpoints == nil {
-		t.Fatalf("Expected endpoints object to be updated, but it was not")
+	if res.resService == nil {
+		t.Fatalf("Expected service object to be updated, but it was not")
 	}
 
-	resTargets, hadTargets := res.resEndpoints.Annotations[unidlingapi.UnidleTargetAnnotation]
-	resIdledTime, hadIdledTime := res.resEndpoints.Annotations[unidlingapi.IdledAtAnnotation]
+	resTargets, hadTargets := res.resService.Annotations[unidlingapi.UnidleTargetAnnotation]
+	resIdledTime, hadIdledTime := res.resService.Annotations[unidlingapi.IdledAtAnnotation]
 
 	if hadTargets {
 		t.Errorf("Expected targets annotation to be removed, but it was %q", resTargets)
@@ -447,11 +448,11 @@ func TestControllerUnidlesProperly(t *testing.T) {
 }
 
 type failureTestInfo struct {
-	name                   string
-	endpointsGet           *corev1.Endpoints
-	scaleGets              []autoscalingv1.Scale
-	scaleUpdatesNotFound   []bool
-	preventEndpointsUpdate bool
+	name                  string
+	servicesGet           *corev1.Service
+	scaleGets             []autoscalingv1.Scale
+	scaleUpdatesNotFound  []bool
+	preventServicesUpdate bool
 
 	errorExpected       bool
 	retryExpected       bool
@@ -463,10 +464,10 @@ func prepareFakeClientForFailureTest(test failureTestInfo) (*kexternalfake.Clien
 	fakeDeployClient := &appsfake.Clientset{}
 	fakeScaleClient := &scalefake.FakeScaleClient{}
 
-	fakeClient.PrependReactor("get", "endpoints", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+	fakeClient.PrependReactor("get", "services", func(action clientgotesting.Action) (bool, runtime.Object, error) {
 		objName := action.(clientgotesting.GetAction).GetName()
-		if test.endpointsGet != nil && objName == test.endpointsGet.Name {
-			return true, test.endpointsGet, nil
+		if test.servicesGet != nil && objName == test.servicesGet.Name {
+			return true, test.servicesGet, nil
 		}
 
 		return true, nil, errors.NewNotFound(action.GetResource().GroupResource(), objName)
@@ -537,14 +538,14 @@ func prepareFakeClientForFailureTest(test failureTestInfo) (*kexternalfake.Clien
 		return true, nil, errors.NewNotFound(action.GetResource().GroupResource(), obj.Name)
 	})
 
-	fakeClient.PrependReactor("update", "endpoints", func(action clientgotesting.Action) (bool, runtime.Object, error) {
-		obj := action.(clientgotesting.UpdateAction).GetObject().(*corev1.Endpoints)
-		if obj.Name != test.endpointsGet.Name {
+	fakeClient.PrependReactor("update", "services", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+		obj := action.(clientgotesting.UpdateAction).GetObject().(*corev1.Service)
+		if obj.Name != test.servicesGet.Name {
 			return false, nil, nil
 		}
 
-		if test.preventEndpointsUpdate {
-			return true, nil, fmt.Errorf("some problem updating the endpoints")
+		if test.preventServicesUpdate {
+			return true, nil, fmt.Errorf("some problem updating the service")
 		}
 
 		return true, obj, nil
@@ -626,14 +627,14 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 
 	tests := []failureTestInfo{
 		{
-			name:          "retry on failed endpoints get",
-			endpointsGet:  nil,
+			name:          "retry on failed service get",
+			servicesGet:   nil,
 			errorExpected: true,
 			retryExpected: true,
 		},
 		{
 			name: "not retry on failure to parse time",
-			endpointsGet: &corev1.Endpoints{
+			servicesGet: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "somesvc",
 					Annotations: map[string]string{
@@ -646,7 +647,7 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 		},
 		{
 			name: "not retry on failure to unmarshal target scalables",
-			endpointsGet: &corev1.Endpoints{
+			servicesGet: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "somesvc",
 					Annotations: map[string]string{
@@ -660,7 +661,7 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 		},
 		{
 			name: "remove a scalable from the list if it cannot be found (while getting)",
-			endpointsGet: &corev1.Endpoints{
+			servicesGet: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "somesvc",
 					Annotations: map[string]string{
@@ -689,7 +690,7 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 		},
 		{
 			name: "should remove a scalable from the list if it cannot be found (while updating)",
-			endpointsGet: &corev1.Endpoints{
+			servicesGet: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "somesvc",
 					Annotations: map[string]string{
@@ -727,8 +728,8 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 			},
 		},
 		{
-			name: "retry on failed endpoints update",
-			endpointsGet: &corev1.Endpoints{
+			name: "retry on failed service update",
+			servicesGet: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "somesvc",
 					Annotations: map[string]string{
@@ -758,20 +759,20 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 					Spec: autoscalingv1.ScaleSpec{Replicas: 0},
 				},
 			},
-			preventEndpointsUpdate: true,
-			errorExpected:          true,
-			retryExpected:          true,
+			preventServicesUpdate: true,
+			errorExpected:         true,
+			retryExpected:         true,
 		},
 	}
 
 	for _, test := range tests {
 		fakeClient, fakeDeployClient, fakeScaleClient, mapper := prepareFakeClientForFailureTest(test)
 		controller := &UnidlingController{
-			mapper:              mapper,
-			endpointsNamespacer: fakeClient.CoreV1(),
-			rcNamespacer:        fakeClient.CoreV1(),
-			dcNamespacer:        fakeDeployClient.AppsV1(),
-			scaleNamespacer:     fakeScaleClient,
+			mapper:             mapper,
+			servicesNamespacer: fakeClient.CoreV1(),
+			rcNamespacer:       fakeClient.CoreV1(),
+			dcNamespacer:       fakeDeployClient.AppsV1(),
+			scaleNamespacer:    fakeScaleClient,
 		}
 
 		var retry bool

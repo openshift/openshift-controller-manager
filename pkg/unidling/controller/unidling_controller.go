@@ -66,19 +66,19 @@ func (c *lastFiredCache) AddIfNewer(info types.NamespacedName, newLastFired time
 }
 
 type UnidlingController struct {
-	controller          cache.Controller
-	scaleNamespacer     scale.ScalesGetter
-	mapper              meta.RESTMapper
-	endpointsNamespacer corev1client.EndpointsGetter
-	queue               workqueue.RateLimitingInterface
-	lastFiredCache      *lastFiredCache
+	controller         cache.Controller
+	scaleNamespacer    scale.ScalesGetter
+	mapper             meta.RESTMapper
+	servicesNamespacer corev1client.ServicesGetter
+	queue              workqueue.RateLimitingInterface
+	lastFiredCache     *lastFiredCache
 
 	// TODO: remove these once we get the scale-source functionality in the scale endpoints
 	dcNamespacer appstypedclient.DeploymentConfigsGetter
 	rcNamespacer corev1client.ReplicationControllersGetter
 }
 
-func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, endptsNS corev1client.EndpointsGetter, evtNS corev1client.EventsGetter,
+func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, servicesNS corev1client.ServicesGetter, evtNS corev1client.EventsGetter,
 	dcNamespacer appstypedclient.DeploymentConfigsGetter, rcNamespacer corev1client.ReplicationControllersGetter,
 	resyncPeriod time.Duration) *UnidlingController {
 	fieldSet := fields.Set{}
@@ -86,10 +86,10 @@ func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, e
 	fieldSelector := fieldSet.AsSelector()
 
 	unidlingController := &UnidlingController{
-		scaleNamespacer:     scaleNS,
-		mapper:              mapper,
-		endpointsNamespacer: endptsNS,
-		queue:               workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "unidling"),
+		scaleNamespacer:    scaleNS,
+		mapper:             mapper,
+		servicesNamespacer: servicesNS,
+		queue:              workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "unidling"),
 		lastFiredCache: &lastFiredCache{
 			items: make(map[types.NamespacedName]time.Time),
 		},
@@ -276,20 +276,20 @@ func (c *UnidlingController) awaitRequest() bool {
 }
 
 // handleRequest handles a single request to unidle.  After checking the validity of the request,
-// it will examine the endpoints in question to determine which scalables to scale, and will scale
-// them and remove them from the endpoints' list of idled scalables.  If it is unable to properly
+// it will examine the service in question to determine which scalables to scale, and will scale
+// them and remove them from the services' list of idled scalables.  If it is unable to properly
 // process the request, it will return a boolean indicating whether or not we should retry later,
 // as well as an error (e.g. if we're unable to parse an annotation, retrying later won't help,
 // so it will return false).
 func (c *UnidlingController) handleRequest(info types.NamespacedName, lastFired time.Time) (bool, error) {
-	// fetch the endpoints associated with the service in question
-	targetEndpoints, err := c.endpointsNamespacer.Endpoints(info.Namespace).Get(context.TODO(), info.Name, metav1.GetOptions{})
+	// fetch the service in question
+	targetService, err := c.servicesNamespacer.Services(info.Namespace).Get(context.TODO(), info.Name, metav1.GetOptions{})
 	if err != nil {
-		return true, fmt.Errorf("unable to retrieve endpoints: %v", err)
+		return true, fmt.Errorf("unable to retrieve service: %v", err)
 	}
 
 	// make sure we actually were idled...
-	idledTimeRaw, wasIdled := targetEndpoints.Annotations[unidlingapi.IdledAtAnnotation]
+	idledTimeRaw, wasIdled := targetService.Annotations[unidlingapi.IdledAtAnnotation]
 	if !wasIdled {
 		klog.V(5).Infof("UnidlingController received a NeedPods event for a service that was not idled, ignoring")
 		return false, nil
@@ -308,7 +308,7 @@ func (c *UnidlingController) handleRequest(info types.NamespacedName, lastFired 
 
 	// TODO: ew, this is metav1.  Such is life when working with annotations.
 	var targetScalables []unidlingapi.RecordedScaleReference
-	if targetScalablesStr, hasTargetScalables := targetEndpoints.Annotations[unidlingapi.UnidleTargetAnnotation]; hasTargetScalables {
+	if targetScalablesStr, hasTargetScalables := targetService.Annotations[unidlingapi.UnidleTargetAnnotation]; hasTargetScalables {
 		if err = json.Unmarshal([]byte(targetScalablesStr), &targetScalables); err != nil {
 			// retrying here won't help, we're just stuck as idled since we can't parse the idled scalables list
 			return false, fmt.Errorf("unable to unmarshal target scalable references: %v", err)
@@ -374,22 +374,22 @@ func (c *UnidlingController) handleRequest(info types.NamespacedName, lastFired 
 	}
 
 	if len(newAnnotationList) == 0 {
-		delete(targetEndpoints.Annotations, unidlingapi.UnidleTargetAnnotation)
-		delete(targetEndpoints.Annotations, unidlingapi.IdledAtAnnotation)
+		delete(targetService.Annotations, unidlingapi.UnidleTargetAnnotation)
+		delete(targetService.Annotations, unidlingapi.IdledAtAnnotation)
 	} else {
 		var newAnnotationBytes []byte
 		newAnnotationBytes, err = json.Marshal(newAnnotationList)
 		if err != nil {
 			utilruntime.HandleError(fmt.Errorf("unable to update/remove idle annotations from %s/%s: unable to marshal list of remaining scalables, removing list entirely: %v", info.Namespace, info.Name, err))
 
-			delete(targetEndpoints.Annotations, unidlingapi.UnidleTargetAnnotation)
-			delete(targetEndpoints.Annotations, unidlingapi.IdledAtAnnotation)
+			delete(targetService.Annotations, unidlingapi.UnidleTargetAnnotation)
+			delete(targetService.Annotations, unidlingapi.IdledAtAnnotation)
 		} else {
-			targetEndpoints.Annotations[unidlingapi.UnidleTargetAnnotation] = string(newAnnotationBytes)
+			targetService.Annotations[unidlingapi.UnidleTargetAnnotation] = string(newAnnotationBytes)
 		}
 	}
 
-	if _, err = c.endpointsNamespacer.Endpoints(info.Namespace).Update(context.TODO(), targetEndpoints, metav1.UpdateOptions{}); err != nil {
+	if _, err = c.servicesNamespacer.Services(info.Namespace).Update(context.TODO(), targetService, metav1.UpdateOptions{}); err != nil {
 		return true, fmt.Errorf("unable to update/remove idle annotations from %s/%s: %v", info.Namespace, info.Name, err)
 	}
 
