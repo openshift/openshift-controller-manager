@@ -225,11 +225,12 @@ func TestControllerHandlesStaleEvents(t *testing.T) {
 	nowTime := time.Now().Truncate(time.Second)
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, nowTime)
 	controller := &UnidlingController{
-		mapper:             mapper,
-		servicesNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:       fakeClient.CoreV1(),
-		dcNamespacer:       fakeDeployClient.AppsV1(),
-		scaleNamespacer:    fakeScaleClient,
+		mapper:              mapper,
+		endpointsNamespacer: fakeClient.CoreV1(),
+		servicesNamespacer:  fakeClient.CoreV1(),
+		rcNamespacer:        fakeClient.CoreV1(),
+		dcNamespacer:        fakeDeployClient.AppsV1(),
+		scaleNamespacer:     fakeScaleClient,
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -282,11 +283,12 @@ func TestControllerIgnoresAlreadyScaledObjects(t *testing.T) {
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, idledTime, baseScales...)
 
 	controller := &UnidlingController{
-		mapper:             mapper,
-		scaleNamespacer:    fakeScaleClient,
-		servicesNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:       fakeClient.CoreV1(),
-		dcNamespacer:       fakeDeployClient.AppsV1(),
+		mapper:              mapper,
+		endpointsNamespacer: fakeClient.CoreV1(),
+		scaleNamespacer:     fakeScaleClient,
+		servicesNamespacer:  fakeClient.CoreV1(),
+		rcNamespacer:        fakeClient.CoreV1(),
+		dcNamespacer:        fakeDeployClient.AppsV1(),
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -395,11 +397,12 @@ func TestControllerUnidlesProperly(t *testing.T) {
 	fakeClient, fakeDeployClient, fakeScaleClient, mapper, res := prepFakeClient(t, nowTime.Add(-10*time.Second), baseScales...)
 
 	controller := &UnidlingController{
-		mapper:             mapper,
-		servicesNamespacer: fakeClient.CoreV1(),
-		rcNamespacer:       fakeClient.CoreV1(),
-		dcNamespacer:       fakeDeployClient.AppsV1(),
-		scaleNamespacer:    fakeScaleClient,
+		mapper:              mapper,
+		endpointsNamespacer: fakeClient.CoreV1(),
+		servicesNamespacer:  fakeClient.CoreV1(),
+		rcNamespacer:        fakeClient.CoreV1(),
+		dcNamespacer:        fakeDeployClient.AppsV1(),
+		scaleNamespacer:     fakeScaleClient,
 	}
 
 	retry, err := controller.handleRequest(types.NamespacedName{
@@ -768,11 +771,12 @@ func TestControllerPerformsCorrectlyOnFailures(t *testing.T) {
 	for _, test := range tests {
 		fakeClient, fakeDeployClient, fakeScaleClient, mapper := prepareFakeClientForFailureTest(test)
 		controller := &UnidlingController{
-			mapper:             mapper,
-			servicesNamespacer: fakeClient.CoreV1(),
-			rcNamespacer:       fakeClient.CoreV1(),
-			dcNamespacer:       fakeDeployClient.AppsV1(),
-			scaleNamespacer:    fakeScaleClient,
+			mapper:              mapper,
+			endpointsNamespacer: fakeClient.CoreV1(),
+			servicesNamespacer:  fakeClient.CoreV1(),
+			rcNamespacer:        fakeClient.CoreV1(),
+			dcNamespacer:        fakeDeployClient.AppsV1(),
+			scaleNamespacer:     fakeScaleClient,
 		}
 
 		var retry bool
