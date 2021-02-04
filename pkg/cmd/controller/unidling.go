@@ -34,6 +34,7 @@ func RunUnidlingController(ctx *ControllerContext) (bool, error) {
 		ctx.RestMapper,
 		coreClient,
 		coreClient,
+		coreClient,
 		appsClient.AppsV1(),
 		coreClient,
 		resyncPeriod,
