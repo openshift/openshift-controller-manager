@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
-	networkingv1beta1 "k8s.io/api/networking/v1beta1"
+	networkingv1 "k8s.io/api/networking/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -16,7 +16,7 @@ import (
 	fake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	corelisters "k8s.io/client-go/listers/core/v1"
-	networkingv1beta1listers "k8s.io/client-go/listers/networking/v1beta1"
+	networkingv1listers "k8s.io/client-go/listers/networking/v1"
 	clientgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/util/workqueue"
 
@@ -56,13 +56,13 @@ func (r *nsRouteLister) Get(name string) (*routev1.Route, error) {
 
 type ingressLister struct {
 	Err   error
-	Items []*networkingv1beta1.Ingress
+	Items []*networkingv1.Ingress
 }
 
-func (r *ingressLister) List(selector labels.Selector) (ret []*networkingv1beta1.Ingress, err error) {
+func (r *ingressLister) List(selector labels.Selector) (ret []*networkingv1.Ingress, err error) {
 	return r.Items, r.Err
 }
-func (r *ingressLister) Ingresses(namespace string) networkingv1beta1listers.IngressNamespaceLister {
+func (r *ingressLister) Ingresses(namespace string) networkingv1listers.IngressNamespaceLister {
 	return &nsIngressLister{r: r, ns: namespace}
 }
 
@@ -71,12 +71,29 @@ type nsIngressLister struct {
 	ns string
 }
 
-func (r *nsIngressLister) List(selector labels.Selector) (ret []*networkingv1beta1.Ingress, err error) {
+func (r *nsIngressLister) List(selector labels.Selector) (ret []*networkingv1.Ingress, err error) {
 	return r.r.Items, r.r.Err
 }
-func (r *nsIngressLister) Get(name string) (*networkingv1beta1.Ingress, error) {
+func (r *nsIngressLister) Get(name string) (*networkingv1.Ingress, error) {
 	for _, s := range r.r.Items {
 		if s.Name == name && r.ns == s.Namespace {
+			return s, nil
+		}
+	}
+	return nil, kerrors.NewNotFound(schema.GroupResource{}, name)
+}
+
+type ingressclassLister struct {
+	Err   error
+	Items []*networkingv1.IngressClass
+}
+
+func (r *ingressclassLister) List(selector labels.Selector) (ret []*networkingv1.IngressClass, err error) {
+	return r.Items, r.Err
+}
+func (r *ingressclassLister) Get(name string) (*networkingv1.IngressClass, error) {
+	for _, s := range r.Items {
+		if s.Name == name {
 			return s, nil
 		}
 	}
@@ -146,7 +163,7 @@ func (r *nsSecretLister) Get(name string) (*v1.Secret, error) {
 }
 
 const complexIngress = `
-apiVersion: networking.k8s.io/v1beta1
+apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: test-1
@@ -158,26 +175,34 @@ spec:
       paths:
       - path: /test
         backend:
-          serviceName: ingress-endpoint-1
-          servicePort: 80
+          service:
+            name: ingress-endpoint-1
+            port:
+              number: 80
       - path: /other
         backend:
-          serviceName: ingress-endpoint-2
-          servicePort: 80
+          service:
+            name: ingress-endpoint-2
+            port:
+              number: 80
   - host: 2.ingress-test.com
     http:
       paths:
       - path: /
         backend:
-          serviceName: ingress-endpoint-1
-          servicePort: 80
+          service:
+            name: ingress-endpoint-1
+            port:
+              number: 80
   - host: 3.ingress-test.com
     http:
       paths:
       - path: /
         backend:
-          serviceName: ingress-endpoint-1
-          servicePort: 80
+          service:
+            name: ingress-endpoint-1
+            port:
+              number: 80
 `
 
 func TestController_stabilizeAfterCreate(t *testing.T) {
@@ -185,13 +210,14 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ingress := obj.(*networkingv1beta1.Ingress)
+	ingress := obj.(*networkingv1.Ingress)
 
 	i := &ingressLister{
-		Items: []*networkingv1beta1.Ingress{
+		Items: []*networkingv1.Ingress{
 			ingress,
 		},
 	}
+	ic := &ingressclassLister{Items: []*networkingv1.IngressClass{}}
 	r := &routeLister{}
 	s := &secretLister{}
 	svc := &serviceLister{Items: []*v1.Service{
@@ -262,14 +288,15 @@ func TestController_stabilizeAfterCreate(t *testing.T) {
 	})
 
 	c := &Controller{
-		queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route-test"),
-		routeClient:   routeClientset.RouteV1(),
-		ingressClient: kc.NetworkingV1beta1(),
-		ingressLister: i,
-		routeLister:   r,
-		secretLister:  s,
-		serviceLister: svc,
-		expectations:  newExpectations(),
+		queue:              workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route-test"),
+		routeClient:        routeClientset.RouteV1(),
+		ingressClient:      kc.NetworkingV1(),
+		ingressLister:      i,
+		ingressclassLister: ic,
+		routeLister:        r,
+		secretLister:       s,
+		serviceLister:      svc,
+		expectations:       newExpectations(),
 	}
 	defer c.queue.ShutDown()
 
@@ -365,6 +392,22 @@ func newTestExpectations(fn func(*expectations)) *expectations {
 }
 
 func TestController_sync(t *testing.T) {
+	operatorv1GroupVersion := "operator.openshift.io/v1"
+	ingressclasses := &ingressclassLister{Items: []*networkingv1.IngressClass{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "openshift-default",
+			},
+			Spec: networkingv1.IngressClassSpec{
+				Controller: "openshift.io/ingress-to-route",
+				Parameters: &v1.TypedLocalObjectReference{
+					APIGroup: &operatorv1GroupVersion,
+					Kind:     "IngressController",
+					Name:     "default",
+				},
+			},
+		},
+	}}
 	services := &serviceLister{Items: []*v1.Service{
 		{
 			ObjectMeta: metav1.ObjectMeta{
@@ -454,8 +497,15 @@ func TestController_sync(t *testing.T) {
 		},
 	}}
 	boolTrue := true
+	customIngressClassName := "custom"
+	openshiftCustomIngressClassName := "openshift-custom"
+	openshiftDefaultIngressClassName := "openshift-default"
+	pathTypeExact := networkingv1.PathTypeExact
+	pathTypePrefix := networkingv1.PathTypePrefix
+	pathTypeImplementationSpecific := networkingv1.PathTypeImplementationSpecific
 	type fields struct {
-		i   networkingv1beta1listers.IngressLister
+		i   networkingv1listers.IngressLister
+		ic  networkingv1listers.IngressClassLister
 		r   routelisters.RouteLister
 		s   corelisters.SecretLister
 		svc corelisters.ServiceLister
@@ -487,7 +537,7 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "sync namespace - two ingress",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
@@ -512,23 +562,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "ignores incomplete ingress - no host",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/deep", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/deep",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -546,23 +602,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "ignores incomplete ingress - no service",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/deep", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/deep",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -580,18 +642,110 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "ignores incomplete ingress - no paths",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{},
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "ignores ingress with third-party ingressclass",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1.IngressSpec{
+							IngressClassName: &customIngressClassName,
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/deep",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				ic: &ingressclassLister{Items: []*networkingv1.IngressClass{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "custom",
+						},
+						Spec: networkingv1.IngressClassSpec{
+							Controller: "acme.io/ingress-controller",
+						},
+					},
+				}},
+				r: &routeLister{},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "ignores ingress with unsupported path type",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path: "/deep",
+													// "Exact" is not implemented.
+													PathType: &pathTypeExact,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
 									},
 								},
 							},
@@ -605,23 +759,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "ignores incomplete ingress - service does not exist",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-3",
-														ServicePort: intstr.FromInt(80),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-3",
+															Port: networkingv1.ServiceBackendPort{
+																Number: int32(80),
+															},
+														},
 													},
 												},
 											},
@@ -639,29 +799,44 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "create route",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/deep", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path: "/deep",
+													// Behavior for empty PathType is undefined;
+													// treat it the same as "Prefix".
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path: "/",
+													// Implementations may treat "ImplementationSpecific"
+													// as "Exact" or "Prefix", so we treat it as "Prefix".
+													PathType: &pathTypeImplementationSpecific,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -681,7 +856,7 @@ func TestController_sync(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "<generated>",
 						Namespace:       "test",
-						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 					},
 					Spec: routev1.RouteSpec{
 						Host: "test.com",
@@ -698,7 +873,7 @@ func TestController_sync(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "<generated>",
 						Namespace:       "test",
-						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 					},
 					Spec: routev1.RouteSpec{
 						Host: "test.com",
@@ -716,23 +891,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "create route - targetPort string, service port with name",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-2",
-														ServicePort: intstr.FromInt(80),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-2",
+															Port: networkingv1.ServiceBackendPort{
+																Number: int32(80),
+															},
+														},
 													},
 												},
 											},
@@ -752,7 +933,7 @@ func TestController_sync(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:            "<generated>",
 						Namespace:       "test",
-						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 					},
 					Spec: routev1.RouteSpec{
 						Host: "test.com",
@@ -768,31 +949,189 @@ func TestController_sync(t *testing.T) {
 			},
 		},
 		{
-			name: "create route - blocked by expectation",
+			name: "create route - default ingresscontroller",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							IngressClassName: &openshiftDefaultIngressClassName,
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/deep", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				ic: &ingressclassLister{Items: []*networkingv1.IngressClass{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "openshift-default",
+						},
+						Spec: networkingv1.IngressClassSpec{
+							Controller: "openshift.io/ingress-to-route",
+							Parameters: &v1.TypedLocalObjectReference{
+								APIGroup: &operatorv1GroupVersion,
+								Kind:     "IngressController",
+								Name:     "default",
+							},
+						},
+					},
+				}},
+				r: &routeLister{},
+			},
+			args:        queueKey{namespace: "test", name: "1"},
+			wantExpects: []queueKey{{namespace: "test", name: "1"}},
+			wantRouteCreates: []*routev1.Route{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "<generated>",
+						Namespace:       "test",
+						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+					},
+					Spec: routev1.RouteSpec{
+						Host: "test.com",
+						To: routev1.RouteTargetReference{
+							Name: "service-1",
+						},
+						Port: &routev1.RoutePort{
+							TargetPort: intstr.FromString("http"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "create route - custom ingresscontroller",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1.IngressSpec{
+							IngressClassName: &openshiftCustomIngressClassName,
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				ic: &ingressclassLister{Items: []*networkingv1.IngressClass{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "openshift-custom",
+						},
+						Spec: networkingv1.IngressClassSpec{
+							Controller: "openshift.io/ingress-to-route",
+							Parameters: &v1.TypedLocalObjectReference{
+								APIGroup: &operatorv1GroupVersion,
+								Kind:     "IngressController",
+								Name:     "custom",
+							},
+						},
+					},
+				}},
+				r: &routeLister{},
+			},
+			args:        queueKey{namespace: "test", name: "1"},
+			wantExpects: []queueKey{{namespace: "test", name: "1"}},
+			wantRouteCreates: []*routev1.Route{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "<generated>",
+						Namespace:       "test",
+						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+					},
+					Spec: routev1.RouteSpec{
+						Host: "test.com",
+						To: routev1.RouteTargetReference{
+							Name: "service-1",
+						},
+						Port: &routev1.RoutePort{
+							TargetPort: intstr.FromString("http"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "create route - blocked by expectation",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/deep",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -818,23 +1157,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "update route",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -850,7 +1195,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -870,30 +1215,36 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},{"op":"replace","path":"/metadata/annotations","value":null},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
 			name: "no-op",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -909,7 +1260,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -930,23 +1281,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "no-op - ignore partially owned resource",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -963,7 +1320,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -982,7 +1339,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-empty",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1"}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1"}},
 						},
 						Spec: routev1.RouteSpec{},
 					},
@@ -991,7 +1348,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "2-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "2", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "2", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1010,28 +1367,32 @@ func TestController_sync(t *testing.T) {
 			args: queueKey{namespace: "test", name: "1"},
 		},
 		{
-			name: "update ingress with missing secret ref",
+			name: "no-op - ignore route created for an ingress with a third-party class",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
-								{Hosts: []string{"test.com"}, SecretName: "secret-4"},
-							},
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							IngressClassName: &customIngressClassName,
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/foo",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1047,7 +1408,69 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/bar",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "update ingress with missing secret ref",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
+								{Hosts: []string{"test.com"}, SecretName: "secret-4"},
+							},
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1073,26 +1496,32 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "update ingress to not reference secret",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com1"}, SecretName: "secret-1"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1108,7 +1537,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1134,33 +1563,36 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},{"op":"replace","path":"/metadata/annotations","value":null},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
-			name: "update route - tls config missing",
+			name: "update route with old owner reference",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
-								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
-							},
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1176,7 +1608,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "extensions.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1196,14 +1628,82 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},{"op":"replace","path":"/metadata/annotations","value":null},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
+				},
+			},
+		},
+		{
+			name: "update route - tls config missing",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
+								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
+							},
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
+				{
+					Name:  "1-abcdef",
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":null},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
 			name: "update route - termination policy changed to passthrough",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
@@ -1212,20 +1712,26 @@ func TestController_sync(t *testing.T) {
 								"route.openshift.io/termination": "passthrough",
 							},
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1241,7 +1747,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1267,14 +1773,14 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"passthrough"}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"passthrough"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
 			name: "update route - termination policy changed to reencrypt",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
@@ -1283,20 +1789,26 @@ func TestController_sync(t *testing.T) {
 								"route.openshift.io/termination": "reencrypt",
 							},
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1312,7 +1824,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1338,14 +1850,14 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"reencrypt"}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","certificate":"cert","key":"key","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"reencrypt"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
 			name: "update route - termination policy changed to reencrypt and no tls secret",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
@@ -1354,17 +1866,23 @@ func TestController_sync(t *testing.T) {
 								"route.openshift.io/termination": "reencrypt",
 							},
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1380,7 +1898,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1406,14 +1924,14 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"reencrypt"}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"reencrypt"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
 			name: "termination policy on ingress invalid, nothing happens",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
@@ -1422,20 +1940,26 @@ func TestController_sync(t *testing.T) {
 								"route.openshift.io/termination": "Passthrough",
 							},
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1451,7 +1975,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 							Annotations:     map[string]string{"route.openshift.io/termination": "Passthrough"},
 						},
 						Spec: routev1.RouteSpec{
@@ -1479,7 +2003,7 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "termination policy on ingress invalid, disables tls",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
@@ -1488,17 +2012,23 @@ func TestController_sync(t *testing.T) {
 								"route.openshift.io/termination": "Passthrough",
 							},
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1514,7 +2044,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1540,31 +2070,37 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"Passthrough"}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"Passthrough"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
 			name: "Empty tlsconfig enables edge termination without explicit cert",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{{Hosts: []string{"something-else"}}, {}},
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{{Hosts: []string{"something-else"}}, {}},
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1580,7 +2116,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1600,33 +2136,39 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":null},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
 			name: "update route - secret values changed",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-1a"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1642,7 +2184,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1667,33 +2209,39 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key2"}}},{"op":"replace","path":"/metadata/annotations","value":null}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","certificate":"cert","key":"key2"}}},{"op":"replace","path":"/metadata/annotations","value":null},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
 		{
 			name: "no-op - has TLS",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1709,7 +2257,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1736,26 +2284,32 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "no-op - has secret with empty keys",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-3"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1771,7 +2325,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1798,26 +2352,32 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "no-op - termination policy has been changed by the user",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1826,7 +2386,7 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{
 									{Hostname: "apps.foo.com"},
@@ -1840,7 +2400,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1877,23 +2437,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "update route - router admitted route",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1902,7 +2468,7 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
-						Status: networkingv1beta1.IngressStatus{},
+						Status: networkingv1.IngressStatus{},
 					},
 				}},
 				r: &routeLister{Items: []*routev1.Route{
@@ -1910,7 +2476,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -1946,12 +2512,12 @@ func TestController_sync(t *testing.T) {
 			},
 			wantIngressUpdates: []clientgotesting.UpdateActionImpl{
 				{
-					Object: &networkingv1beta1.Ingress{
+					Object: &networkingv1.Ingress{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{{
 									Hostname: "apps.foo.com",
@@ -1966,23 +2532,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "update route - second router admitted route",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -1991,7 +2563,7 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{
 									{Hostname: "apps.foo.com"},
@@ -2005,7 +2577,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -2041,12 +2613,12 @@ func TestController_sync(t *testing.T) {
 			},
 			wantIngressUpdates: []clientgotesting.UpdateActionImpl{
 				{
-					Object: &networkingv1beta1.Ingress{
+					Object: &networkingv1.Ingress{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{
 									{Hostname: "apps.bar.com"},
@@ -2062,23 +2634,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "no-op - ingress status already updated",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -2087,7 +2665,7 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{
 									{Hostname: "apps.foo.com"},
@@ -2102,7 +2680,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -2141,23 +2719,29 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "no-op - router rejected route",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							Rules: []networkingv1beta1.IngressRule{
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -2173,7 +2757,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -2203,26 +2787,32 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "delete route when referenced secret is not TLS",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-0"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -2231,7 +2821,7 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{
 									{Hostname: "apps.foo.com"},
@@ -2246,7 +2836,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -2285,12 +2875,12 @@ func TestController_sync(t *testing.T) {
 			},
 			wantIngressUpdates: []clientgotesting.UpdateActionImpl{
 				{
-					Object: &networkingv1beta1.Ingress{
+					Object: &networkingv1.Ingress{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{
 									{Hostname: "apps.bar.com"},
@@ -2304,26 +2894,32 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "delete route when referenced secret is not valid",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-2"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -2332,7 +2928,7 @@ func TestController_sync(t *testing.T) {
 								},
 							},
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{
 									{Hostname: "apps.foo.com"},
@@ -2346,7 +2942,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -2385,12 +2981,12 @@ func TestController_sync(t *testing.T) {
 			},
 			wantIngressUpdates: []clientgotesting.UpdateActionImpl{
 				{
-					Object: &networkingv1beta1.Ingress{
+					Object: &networkingv1.Ingress{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
 							Namespace: "test",
 						},
-						Status: networkingv1beta1.IngressStatus{
+						Status: networkingv1.IngressStatus{
 							LoadBalancer: v1.LoadBalancerStatus{
 								Ingress: []v1.LoadBalancerIngress{},
 							},
@@ -2408,7 +3004,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{},
 					},
@@ -2419,7 +3015,7 @@ func TestController_sync(t *testing.T) {
 		{
 			name: "update route - termination policy changed to passthrough and timeout set",
 			fields: fields{
-				i: &ingressLister{Items: []*networkingv1beta1.Ingress{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
 					{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      "1",
@@ -2429,20 +3025,26 @@ func TestController_sync(t *testing.T) {
 								"haproxy.router.openshift.io/timeout": "6m",
 							},
 						},
-						Spec: networkingv1beta1.IngressSpec{
-							TLS: []networkingv1beta1.IngressTLS{
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
 								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
 							},
-							Rules: []networkingv1beta1.IngressRule{
+							Rules: []networkingv1.IngressRule{
 								{
 									Host: "test.com",
-									IngressRuleValue: networkingv1beta1.IngressRuleValue{
-										HTTP: &networkingv1beta1.HTTPIngressRuleValue{
-											Paths: []networkingv1beta1.HTTPIngressPath{
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
 												{
-													Path: "/", Backend: networkingv1beta1.IngressBackend{
-														ServiceName: "service-1",
-														ServicePort: intstr.FromString("http"),
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
 													},
 												},
 											},
@@ -2458,7 +3060,7 @@ func TestController_sync(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:            "1-abcdef",
 							Namespace:       "test",
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1beta1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						},
 						Spec: routev1.RouteSpec{
 							Host: "test.com",
@@ -2484,7 +3086,7 @@ func TestController_sync(t *testing.T) {
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
 					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":{"haproxy.router.openshift.io/timeout":"6m","route.openshift.io/termination":"passthrough"}}]`),
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"passthrough","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":{"haproxy.router.openshift.io/timeout":"6m","route.openshift.io/termination":"passthrough"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
@@ -2512,18 +3114,22 @@ func TestController_sync(t *testing.T) {
 			})
 
 			c := &Controller{
-				queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route-test"),
-				routeClient:   routeClientset.RouteV1(),
-				ingressClient: kc.NetworkingV1beta1(),
-				ingressLister: tt.fields.i,
-				routeLister:   tt.fields.r,
-				secretLister:  tt.fields.s,
-				serviceLister: tt.fields.svc,
-				expectations:  tt.expects,
+				queue:              workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route-test"),
+				routeClient:        routeClientset.RouteV1(),
+				ingressClient:      kc.NetworkingV1(),
+				ingressLister:      tt.fields.i,
+				ingressclassLister: tt.fields.ic,
+				routeLister:        tt.fields.r,
+				secretLister:       tt.fields.s,
+				serviceLister:      tt.fields.svc,
+				expectations:       tt.expects,
 			}
 			// default these
 			if c.expectations == nil {
 				c.expectations = newExpectations()
+			}
+			if c.ingressclassLister == nil {
+				c.ingressclassLister = ingressclasses
 			}
 			if c.secretLister == nil {
 				c.secretLister = secrets
@@ -2631,11 +3237,11 @@ func TestController_sync(t *testing.T) {
 					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
 				}
 				action := ingressActions[i].(clientgotesting.UpdateAction)
-				ingress, ok := action.GetObject().(*networkingv1beta1.Ingress)
+				ingress, ok := action.GetObject().(*networkingv1.Ingress)
 				if !ok {
 					t.Fatalf("Controller.sync() unexpected actions: %#v", kc.Actions())
 				}
-				if ingress.Name != tt.wantIngressUpdates[i].Object.(*networkingv1beta1.Ingress).Name || ingress.Namespace != tt.args.namespace || !reflect.DeepEqual(ingress.Status, tt.wantIngressUpdates[i].Object.(*networkingv1beta1.Ingress).Status) {
+				if ingress.Name != tt.wantIngressUpdates[i].Object.(*networkingv1.Ingress).Name || ingress.Namespace != tt.args.namespace || !reflect.DeepEqual(ingress.Status, tt.wantIngressUpdates[i].Object.(*networkingv1.Ingress).Status) {
 					t.Errorf("unexpected ingress action[%d]: %#v", i, action)
 				}
 			}
