@@ -22,6 +22,7 @@ import (
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/pager"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 
@@ -101,10 +102,28 @@ func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, e
 
 	_, controller := cache.NewInformer(
 		&cache.ListWatch{
-			// No need to list -- we only care about new events
+			// https://bugzilla.redhat.com/show_bug.cgi?id=1887745 -- making sure the ListFunc is
+			// using chunking for bootstrap and resync periods, meaning resourceVersion=0 is replaced
+			// by empty string, in order to have limits respected. Consider:
+			//    https://github.com/kubernetes/apiserver/blob/0e46f0ea2bdc958827712205cf9a88140a28409d/pkg/storage/cacher/cacher.go#L655-L668
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				fn := func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
+					return evtNS.Events(metav1.NamespaceAll).List(ctx, opts)
+				}
+				p := pager.New(pager.ListPageFunc(fn))
+
 				options.FieldSelector = fieldSelector.String()
-				return evtNS.Events(metav1.NamespaceAll).List(context.TODO(), options)
+				options.Limit = 500
+
+				// replacing rv=0 with empty string to make sure chunking takes place, using it as
+				// zero makes the apiserver to return results from cache
+				if options.ResourceVersion == "0" {
+					options.ResourceVersion = ""
+				}
+
+				// TODO: wire a global context through the controller.
+				list, _, err := p.List(context.TODO(), options)
+				return list, err
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.FieldSelector = fieldSelector.String()
