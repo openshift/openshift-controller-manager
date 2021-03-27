@@ -74,6 +74,11 @@ const (
 	block_registries:
 	- all
 	`
+
+	defaultMountsConf = "/run/secrets:/run/secrets\n"
+	proxyMountsConf   = `/run/secrets:/run/secrets
+/etc/pki/ca-trust:/etc/pki/ca-trust
+`
 )
 
 // registryCAConfigMap is created by the openshift-controller-manager-operator, serving as a placeholder
@@ -1936,27 +1941,59 @@ func (e *errorConfigMapLister) ConfigMaps(namespace string) v1lister.ConfigMapNa
 	return e
 }
 
-func TestCreateBuildRegistryConfConfigMap(t *testing.T) {
-	bc := newFakeBuildController(nil, nil, nil, nil, nil)
-	bc.setRegistryConfTOML(dummyRegistryConf)
-	defer bc.stop()
-	build := dockerStrategy(mockBuild(buildv1.BuildPhaseNew, buildv1.BuildOutput{}))
-	pod := mockBuildPod(build)
-	caMap := bc.createBuildSystemConfigMapSpec(build, pod)
-	if caMap == nil {
-		t.Error("build system config configMap was not created")
+func TestCreateBuildSystemConfigMapSpec(t *testing.T) {
+	cases := []struct {
+		name                string
+		includeRegistryConf bool
+		mountProxyCA        bool
+	}{
+		{
+			name: "default",
+		},
+		{
+			name:                "override registries.conf",
+			includeRegistryConf: true,
+		},
+		{
+			name:         "mountProxyCA",
+			mountProxyCA: true,
+		},
 	}
-	if !hasBuildPodOwnerRef(pod, caMap) {
-		t.Error("build system config configMap is missing owner ref to the build pod")
-	}
-	if _, hasConf := caMap.Data[buildv1.RegistryConfKey]; !hasConf {
-		t.Errorf("expected build system config configMap to have key %s", buildv1.RegistryConfKey)
-	}
-	if caMap.Data[buildv1.RegistryConfKey] != dummyRegistryConf {
-		t.Errorf("expected build system config configMap.%s to contain\n%s\ngot:\n%s",
-			buildv1.RegistryConfKey,
-			dummyCA,
-			caMap.Data[buildv1.RegistryConfKey])
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bc := newFakeBuildController(nil, nil, nil, nil, nil)
+			if tc.includeRegistryConf {
+				bc.setRegistryConfTOML(dummyRegistryConf)
+			}
+			defer bc.stop()
+			build := dockerStrategy(mockBuild(buildv1.BuildPhaseNew, buildv1.BuildOutput{}))
+			if tc.mountProxyCA {
+				build.Spec.MountTrustedCA = &tc.mountProxyCA
+			}
+			pod := mockBuildPod(build)
+			caMap := bc.createBuildSystemConfigMapSpec(build, pod)
+			if caMap == nil {
+				t.Error("build system config configMap was not created")
+			}
+			if !hasBuildPodOwnerRef(pod, caMap) {
+				t.Error("build system config configMap is missing owner ref to the build pod")
+			}
+
+			registriesConfData, hasConf := caMap.Data[buildv1.RegistryConfKey]
+			if tc.includeRegistryConf {
+				if !hasConf {
+					t.Errorf("expected build system config configMap to have key %s", buildv1.RegistryConfKey)
+				}
+				if registriesConfData != dummyRegistryConf {
+					t.Errorf("expected build system config configMap.%s to contain\n%s\ngot:\n%s",
+						buildv1.RegistryConfKey,
+						dummyCA,
+						caMap.Data[buildv1.RegistryConfKey])
+				}
+			} else if len(registriesConfData) > 0 {
+				t.Errorf("expected no content for registries.conf, got %s", registriesConfData)
+			}
+		})
 	}
 }
 
