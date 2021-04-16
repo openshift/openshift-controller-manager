@@ -1,9 +1,9 @@
-FROM registry.svc.ci.openshift.org/openshift/release:golang-1.14 AS builder
+FROM registry.ci.openshift.org/openshift/release:golang-1.14 AS builder
 WORKDIR /go/src/github.com/openshift/openshift-controller-manager
 COPY . .
 RUN make build --warn-undefined-variables
 
-FROM registry.svc.ci.openshift.org/openshift/origin-v4.0:base
+FROM registry.ci.openshift.org/openshift/origin-v4.0:base
 COPY --from=builder /go/src/github.com/openshift/openshift-controller-manager/openshift-controller-manager /usr/bin/
 LABEL io.k8s.display-name="OpenShift Controller Manager Command" \
       io.k8s.description="OpenShift is a platform for developing, building, and deploying containerized applications." \
