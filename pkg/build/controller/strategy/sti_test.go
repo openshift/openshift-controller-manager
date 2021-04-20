@@ -200,7 +200,7 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 	buildJSON, _ := runtime.Encode(buildJSONCodec, build)
 	errorCases := map[int][]string{
 		0: {"BUILD", string(buildJSON)},
-		1: {"LANG", "en_US.utf8"},
+		1: {"LANG", "C.utf8"},
 	}
 	for index, exp := range errorCases {
 		if e := container.Env[index]; e.Name != exp[0] || e.Value != exp[1] {
