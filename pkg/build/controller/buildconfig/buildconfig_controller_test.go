@@ -282,6 +282,15 @@ func buildConfigWithImageChangeTriggers(triggers []tagTriggerID) *buildv1.BuildC
 			Type:        buildv1.ImageChangeBuildTriggerType,
 			ImageChange: imageChangeTrigger,
 		})
+		imageChangeTriggerStatus := buildv1.ImageChangeTriggerStatus{
+			LastTriggeredImageID: trigger.LastTriggeredId,
+		}
+		if len(trigger.ImageStreamTag) != 0 {
+			imageChangeTriggerStatus.From = buildv1.ImageStreamTagReference{
+				Name: trigger.ImageStreamTag,
+			}
+		}
+		bc.Status.ImageChangeTriggers = append(bc.Status.ImageChangeTriggers, imageChangeTriggerStatus)
 	}
 	return bc
 }
