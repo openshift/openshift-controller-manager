@@ -18,6 +18,8 @@ IMAGE_REGISTRY :=registry.svc.ci.openshift.org
 # $4 - context directory for image build# It will generate target "image-$(1)" for builing the image an binding it as a prerequisite to target "images".
 $(call build-image,ocp-openshift-controller-manager,$(IMAGE_REGISTRY)/ocp/4.5:openshift-controller-manager, ./Dockerfile,.)
 
+$(call verify-golang-versions,Dockerfile)
+
 clean:
 	$(RM) ./openshift-controller-manager
 .PHONY: clean
