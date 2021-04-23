@@ -17,7 +17,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/mtrmac/gpgme v0.1.2 // indirect
 	github.com/openshift/api v0.0.0-20210416130433-86964261530c
-	github.com/openshift/build-machinery-go v0.0.0-20210209125900-0da259a2c359
+	github.com/openshift/build-machinery-go v0.0.0-20210423112049-9415d7ebd33e
 	github.com/openshift/client-go v0.0.0-20200722173614-5a1b0aaeff15
 	github.com/openshift/library-go v0.0.0-20200731134909-dbf343342338
 	github.com/openshift/runtime-utils v0.0.0-20200415173359-c45d4ff3f912
