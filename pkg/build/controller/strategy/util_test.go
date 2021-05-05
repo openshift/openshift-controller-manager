@@ -513,3 +513,231 @@ func TestSetupBuildSystem(t *testing.T) {
 		}
 	}
 }
+
+func TestSetupBuildVolumes(t *testing.T) {
+	pod := corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					VolumeMounts: []corev1.VolumeMount{},
+				},
+			},
+			Volumes: []corev1.Volume{},
+		},
+	}
+
+	var defaultMode int32 = 0600
+	var UnSupportedBuildVolumeType buildv1.BuildVolumeSourceType = "UnSupportedBuildVolumeType"
+
+	tests := []struct {
+		Name                 string
+		ShouldFail           bool
+		ErrorMessage         string
+		StartingVolumes      []corev1.Volume
+		StartingVolumeMounts []corev1.VolumeMount
+		BuildVolumes         []buildv1.BuildVolume
+		WantVolumes          []corev1.Volume
+		WantVolumeMounts     []corev1.VolumeMount
+	}{
+		{
+			Name:         "Secret BuildVolume should succeed",
+			ShouldFail:   false,
+			ErrorMessage: "",
+			BuildVolumes: []buildv1.BuildVolume{
+				{
+					Name: "one",
+					Source: buildv1.BuildVolumeSource{
+						Type: buildv1.BuildVolumeSourceTypeSecret,
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "secret-one",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my-key",
+									Path: "my-path",
+								},
+							},
+							DefaultMode: &defaultMode,
+						},
+					},
+					Mounts: []buildv1.BuildVolumeMount{
+						{
+							DestinationPath: "my-path",
+						},
+					},
+				},
+			},
+
+			WantVolumes: []corev1.Volume{
+				{
+					Name: NameForBuildVolume("secret-one"),
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "secret-one",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my-key",
+									Path: "my-path",
+								},
+							},
+							DefaultMode: &defaultMode,
+						},
+					},
+				},
+			},
+			WantVolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      NameForBuildVolume("secret-one"),
+					ReadOnly:  true,
+					MountPath: PathForBuildVolume("secret-one"),
+				},
+			},
+		},
+		{
+			Name:         "ConfigMap BuildVolume should succeed",
+			ShouldFail:   false,
+			ErrorMessage: "",
+			BuildVolumes: []buildv1.BuildVolume{
+				{
+					Name: "one",
+					Source: buildv1.BuildVolumeSource{
+						Type: buildv1.BuildVolumeSourceTypeConfigMap,
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "configMap-one"},
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my-key",
+									Path: "my-path",
+								},
+							},
+							DefaultMode: &defaultMode,
+						},
+					},
+					Mounts: []buildv1.BuildVolumeMount{
+						{
+							DestinationPath: "my-path",
+						},
+					},
+				},
+			},
+
+			WantVolumes: []corev1.Volume{
+				{
+					Name: NameForBuildVolume("configMap-one"),
+					VolumeSource: corev1.VolumeSource{
+						ConfigMap: &corev1.ConfigMapVolumeSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "configMap-one"},
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my-key",
+									Path: "my-path",
+								},
+							},
+							DefaultMode: &defaultMode,
+						},
+					},
+				},
+			},
+			WantVolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      NameForBuildVolume("configMap-one"),
+					ReadOnly:  true,
+					MountPath: PathForBuildVolume("configMap-one"),
+				},
+			},
+		},
+		{
+			Name:         "Duplicate Secret BuildVolumeMount should fail",
+			ShouldFail:   true,
+			ErrorMessage: "user provided BuildVolumeMount path \"my-path\" collides with VolumeMount path created by the build controller",
+			StartingVolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "some-name",
+					MountPath: "my-path",
+				},
+			},
+			BuildVolumes: []buildv1.BuildVolume{
+				{
+					Name: "one",
+					Source: buildv1.BuildVolumeSource{
+						Type: buildv1.BuildVolumeSourceTypeSecret,
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "secret-one",
+							Items: []corev1.KeyToPath{
+								{
+									Key:  "my-key",
+									Path: "my-path",
+								},
+							},
+							DefaultMode: &defaultMode,
+						},
+					},
+					Mounts: []buildv1.BuildVolumeMount{
+						{
+							DestinationPath: "my-path",
+						},
+					},
+				},
+			},
+
+			WantVolumes: []corev1.Volume{},
+			WantVolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "some-name",
+					ReadOnly:  false,
+					MountPath: "my-path",
+				},
+			},
+		},
+		{
+			Name:         "UnSupported BuildVolumeSourceType should fail",
+			ShouldFail:   true,
+			ErrorMessage: "encountered unsupported build volume source type \"UnSupportedBuildVolumeType\"",
+			BuildVolumes: []buildv1.BuildVolume{
+				{
+					Name: "one",
+					Source: buildv1.BuildVolumeSource{
+						Type:   UnSupportedBuildVolumeType,
+						Secret: &corev1.SecretVolumeSource{},
+					},
+					Mounts: []buildv1.BuildVolumeMount{},
+				},
+			},
+			WantVolumes:      []corev1.Volume{},
+			WantVolumeMounts: []corev1.VolumeMount{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+			p := pod.DeepCopy()
+
+			if tt.StartingVolumes != nil {
+				p.Spec.Volumes = append(p.Spec.Volumes, tt.StartingVolumes...)
+			}
+
+			if tt.StartingVolumeMounts != nil {
+				p.Spec.Containers[0].VolumeMounts = append(p.Spec.Containers[0].VolumeMounts, tt.StartingVolumeMounts...)
+			}
+
+			err := setupBuildVolumes(p, tt.BuildVolumes)
+
+			if err == nil && tt.ShouldFail {
+				t.Errorf("test %q should have failed with error %q, but didn't", tt.Name, tt.ErrorMessage)
+			}
+
+			if err != nil && tt.ShouldFail {
+				if err.Error() != tt.ErrorMessage {
+					t.Errorf("test %q failed with incorrect error message, wanted: %q, got: %q", tt.Name, tt.ErrorMessage, err.Error())
+				}
+			}
+
+			if !reflect.DeepEqual(p.Spec.Volumes, tt.WantVolumes) {
+				t.Errorf("adding build volumes to pod failed, have: %#v, want: %#v", p.Spec.Volumes, tt.WantVolumes)
+			}
+
+			if !reflect.DeepEqual(p.Spec.Containers[0].VolumeMounts, tt.WantVolumeMounts) {
+				t.Errorf("adding build volume mounts to container failed, have: %#v, want: %#v", p.Spec.Containers[0].VolumeMounts, tt.WantVolumeMounts)
+			}
+		})
+	}
+}

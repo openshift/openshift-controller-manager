@@ -221,6 +221,9 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	setupContainersStorage(pod, &pod.Spec.Containers[0]) // for unprivileged builds
 	// setupContainersNodeStorage(pod, &pod.Spec.Containers[0]) // for privileged builds
 	setupBlobCache(pod)
+	if err := setupBuildVolumes(pod, build.Spec.Strategy.SourceStrategy.Volumes); err != nil {
+		return pod, err
+	}
 	return pod, nil
 }
 
