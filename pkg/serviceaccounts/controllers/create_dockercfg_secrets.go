@@ -448,6 +448,9 @@ func (e *DockercfgController) createTokenSecret(serviceAccount *v1.ServiceAccoun
 
 	klog.V(4).Infof("Creating token secret %q for service account %s/%s", tokenSecret.Name, serviceAccount.Namespace, serviceAccount.Name)
 	token, err := e.client.CoreV1().Secrets(tokenSecret.Namespace).Create(context.TODO(), tokenSecret, metav1.CreateOptions{})
+	if err != nil{
+		klog.Infof("Error creating: %v", err)
+	}
 	// Already exists but not in cache means we'll get an add watch event and resync
 	if kapierrors.IsAlreadyExists(err) {
 		return nil, false, nil
@@ -515,6 +518,9 @@ func (e *DockercfgController) createDockerPullSecret(serviceAccount *v1.ServiceA
 
 	// Save the secret
 	createdSecret, err := e.client.CoreV1().Secrets(tokenSecret.Namespace).Create(context.TODO(), dockercfgSecret, metav1.CreateOptions{})
+	if err != nil{
+		klog.Infof("Error creating: %v", err)
+	}
 	// If we cannot create this secret because the namespace it is being terminated isn't a thing we should fail and requeue a retry.
 	// Instead, we know that when a new namespace gets created, the serviceaccount will be recreated and we'll get a second shot at
 	// processing the serviceaccount.
