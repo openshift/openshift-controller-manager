@@ -10,7 +10,6 @@ import (
 	kappsv1beta2 "k8s.io/api/apps/v1beta2"
 	kbatchv1 "k8s.io/api/batch/v1"
 	kbatchv1beta1 "k8s.io/api/batch/v1beta1"
-	kbatchv2alpha1 "k8s.io/api/batch/v2alpha1"
 	kapiv1 "k8s.io/api/core/v1"
 	kmetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -130,9 +129,6 @@ func (u podSpecUpdater) Update(obj runtime.Object) error {
 		return err
 	case *kbatchv1beta1.CronJob:
 		_, err := u.kclient.BatchV1beta1().CronJobs(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
-		return err
-	case *kbatchv2alpha1.CronJob:
-		_, err := u.kclient.BatchV2alpha1().CronJobs(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kapiv1.Pod:
 		_, err := u.kclient.CoreV1().Pods(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
