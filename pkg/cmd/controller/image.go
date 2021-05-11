@@ -81,8 +81,8 @@ func RunImageTriggerController(ctx *ControllerContext) (bool, error) {
 	})
 	sources = append(sources, imagetriggercontroller.TriggerSource{
 		Resource:  schema.GroupResource{Group: "batch", Resource: "cronjobs"},
-		Informer:  ctx.KubernetesInformers.Batch().V1beta1().CronJobs().Informer(),
-		Store:     ctx.KubernetesInformers.Batch().V1beta1().CronJobs().Informer().GetIndexer(),
+		Informer:  ctx.KubernetesInformers.Batch().V1().CronJobs().Informer(),
+		Store:     ctx.KubernetesInformers.Batch().V1().CronJobs().Informer().GetIndexer(),
 		TriggerFn: triggerannotations.NewAnnotationTriggerIndexer,
 		Reactor:   &triggerutil.AnnotationReactor{Updater: updater},
 	})
@@ -126,6 +126,9 @@ func (u podSpecUpdater) Update(obj runtime.Object) error {
 		return err
 	case *kbatchv1.Job:
 		_, err := u.kclient.BatchV1().Jobs(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
+		return err
+	case *kbatchv1.CronJob:
+		_, err := u.kclient.BatchV1().CronJobs(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
 		return err
 	case *kbatchv1beta1.CronJob:
 		_, err := u.kclient.BatchV1beta1().CronJobs(t.Namespace).Update(context.TODO(), t, kmetav1.UpdateOptions{})
