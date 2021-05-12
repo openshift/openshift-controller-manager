@@ -91,17 +91,21 @@ func (s *scheduler) next() (interface{}, interface{}, bool) {
 	return nil, nil, true
 }
 
-// Add places the key in the bucket with the least entries (except the current bucket). The key is used to
-// determine uniqueness, while value can be used to associate additional data for later retrieval. An Add
-// removes the previous key and value and will place the item in a new bucket. This allows callers to ensure
-// that Add'ing a new item to the queue purges old versions of the item, while Remove can be conditional on
-// removing only the known old version.
+// Add places the key in the bucket with the least entries (except the current bucket). The key
+// is used to determine uniqueness, while value can be used to associate additional data for
+// later retrieval. An Add for key X overwrites any previous value for key X, mantaining the
+// entry inside the original bucket.
 func (s *scheduler) Add(key, value interface{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, bucket := range s.buckets {
-		delete(bucket, key)
+	// if an entry for the provided key already exists in one of our buckets then we just
+	// overwrite its value without moving it to a different bucket.
+	for i := range s.buckets {
+		if _, ok := s.buckets[i][key]; ok {
+			s.buckets[i][key] = value
+			return
+		}
 	}
 
 	// Pick the bucket with the least entries that is furthest from the current position
