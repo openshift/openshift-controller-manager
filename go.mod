@@ -16,9 +16,9 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/mtrmac/gpgme v0.1.2 // indirect
-	github.com/openshift/api v0.0.0-20210416130433-86964261530c
-	github.com/openshift/build-machinery-go v0.0.0-20210209125900-0da259a2c359
-	github.com/openshift/client-go v0.0.0-20210331195552-cf6c2669e01f
+	github.com/openshift/api v0.0.0-20210624153211-ae79113891b0
+	github.com/openshift/build-machinery-go v0.0.0-20210423112049-9415d7ebd33e
+	github.com/openshift/client-go v0.0.0-20210521082421-73d9475a9142
 	github.com/openshift/library-go v0.0.0-20210511143654-b9c317a319e0
 	github.com/openshift/runtime-utils v0.0.0-20200415173359-c45d4ff3f912
 	github.com/prometheus/client_golang v1.7.1
@@ -27,11 +27,11 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
-	k8s.io/api v0.21.0
-	k8s.io/apimachinery v0.21.0
-	k8s.io/apiserver v0.21.0
-	k8s.io/client-go v0.21.0
-	k8s.io/component-base v0.21.0
+	k8s.io/api v0.21.1
+	k8s.io/apimachinery v0.21.1
+	k8s.io/apiserver v0.21.1
+	k8s.io/client-go v0.21.1
+	k8s.io/component-base v0.21.1
 	k8s.io/controller-manager v0.21.0
 	k8s.io/klog/v2 v2.8.0
 	k8s.io/kubectl v0.21.0
