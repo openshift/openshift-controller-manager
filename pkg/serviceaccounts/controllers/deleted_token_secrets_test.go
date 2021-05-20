@@ -14,7 +14,6 @@ import (
 	externalfake "k8s.io/client-go/kubernetes/fake"
 	clientgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
-	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/controller"
 )
 
@@ -165,7 +164,10 @@ func serviceAccountTokenSecretWithoutTokenData() *v1.Secret {
 }
 
 func TestTokenDeletion(t *testing.T) {
-	dockercfgSecretFieldSelector := fields.OneTermEqualSelector(api.SecretTypeField, string(v1.SecretTypeDockercfg))
+	// Field constants were removed in the v1.21 API with no immediate replacement.
+	// Moving to the external API was marked a TODO, but never implemented.
+	// See https://github.com/kubernetes/kubernetes/pull/90105
+	dockercfgSecretFieldSelector := fields.OneTermEqualSelector("type", string(v1.SecretTypeDockercfg))
 
 	testcases := map[string]struct {
 		ClientObjects []runtime.Object

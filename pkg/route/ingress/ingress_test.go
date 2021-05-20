@@ -400,7 +400,7 @@ func TestController_sync(t *testing.T) {
 			},
 			Spec: networkingv1.IngressClassSpec{
 				Controller: "openshift.io/ingress-to-route",
-				Parameters: &v1.TypedLocalObjectReference{
+				Parameters: &networkingv1.IngressClassParametersReference{
 					APIGroup: &operatorv1GroupVersion,
 					Kind:     "IngressController",
 					Name:     "default",
@@ -990,7 +990,7 @@ func TestController_sync(t *testing.T) {
 						},
 						Spec: networkingv1.IngressClassSpec{
 							Controller: "openshift.io/ingress-to-route",
-							Parameters: &v1.TypedLocalObjectReference{
+							Parameters: &networkingv1.IngressClassParametersReference{
 								APIGroup: &operatorv1GroupVersion,
 								Kind:     "IngressController",
 								Name:     "default",
@@ -1063,7 +1063,7 @@ func TestController_sync(t *testing.T) {
 						},
 						Spec: networkingv1.IngressClassSpec{
 							Controller: "openshift.io/ingress-to-route",
-							Parameters: &v1.TypedLocalObjectReference{
+							Parameters: &networkingv1.IngressClassParametersReference{
 								APIGroup: &operatorv1GroupVersion,
 								Kind:     "IngressController",
 								Name:     "custom",
