@@ -423,6 +423,14 @@ func (c *Controller) sync(key queueKey) error {
 			continue
 		}
 		for _, path := range rule.HTTP.Paths {
+			pathValue := path.Path
+			if ingress.Annotations[terminationPolicyAnnotationKey] == string(routev1.TLSTerminationPassthrough) && len(path.Path) != 0 {
+				//Ignore the ingress and don't create a route
+				continue
+			}
+			if ingress.Annotations[terminationPolicyAnnotationKey] == string(routev1.TLSTerminationPassthrough) {
+				pathValue = ""
+			}
 			if path.Backend.Service == nil {
 				// Non-Service backends are not implemented.
 				continue
@@ -436,20 +444,20 @@ func (c *Controller) sync(key queueKey) error {
 			}
 
 			var existing *routev1.Route
-			old, existing = splitForPathAndHost(old, rule.Host, path.Path)
+			old, existing = splitForPathAndHost(old, rule.Host, pathValue)
 			if existing == nil {
-				if r := newRouteForIngress(ingress, &rule, &path, c.secretLister, c.serviceLister); r != nil {
+				if r := newRouteForIngress(ingress, &rule, &path, pathValue, c.secretLister, c.serviceLister); r != nil {
 					creates = append(creates, r)
 				}
 				continue
 			}
 
-			if routeMatchesIngress(existing, ingress, &rule, &path, c.secretLister, c.serviceLister) {
+			if routeMatchesIngress(existing, ingress, &rule, &path, pathValue, c.secretLister, c.serviceLister) {
 				matches = append(matches, existing)
 				continue
 			}
 
-			if r := newRouteForIngress(ingress, &rule, &path, c.secretLister, c.serviceLister); r != nil {
+			if r := newRouteForIngress(ingress, &rule, &path, pathValue, c.secretLister, c.serviceLister); r != nil {
 				// merge the relevant spec pieces
 				preserveRouteAttributesFromExisting(r, existing)
 				updates = append(updates, r)
@@ -574,6 +582,7 @@ func newRouteForIngress(
 	ingress *networkingv1.Ingress,
 	rule *networkingv1.IngressRule,
 	path *networkingv1.HTTPIngressPath,
+	pathValue string,
 	secretLister corelisters.SecretLister,
 	serviceLister corelisters.ServiceLister,
 ) *routev1.Route {
@@ -606,7 +615,7 @@ func newRouteForIngress(
 		},
 		Spec: routev1.RouteSpec{
 			Host: rule.Host,
-			Path: path.Path,
+			Path: pathValue,
 			To: routev1.RouteTargetReference{
 				Name: path.Backend.Service.Name,
 			},
@@ -632,11 +641,12 @@ func routeMatchesIngress(
 	ingress *networkingv1.Ingress,
 	rule *networkingv1.IngressRule,
 	path *networkingv1.HTTPIngressPath,
+	pathValue string,
 	secretLister corelisters.SecretLister,
 	serviceLister corelisters.ServiceLister,
 ) bool {
 	match := route.Spec.Host == rule.Host &&
-		route.Spec.Path == path.Path &&
+		route.Spec.Path == pathValue &&
 		route.Spec.To.Name == path.Backend.Service.Name &&
 		route.Spec.WildcardPolicy == routev1.WildcardPolicyNone &&
 		len(route.Spec.AlternateBackends) == 0 &&
