@@ -165,7 +165,7 @@ func RunImageImportController(ctx *ControllerContext) (bool, error) {
 		ctx.ClientBuilder.OpenshiftImageClientOrDie(infraImageImportControllerServiceAccountName),
 		informer,
 	)
-	go controller.Run(5, ctx.Stop)
+	go controller.Run(50, ctx.Stop)
 
 	// TODO control this using enabled and disabled controllers
 	if ctx.OpenshiftControllerConfig.ImageImport.DisableScheduledImport {
