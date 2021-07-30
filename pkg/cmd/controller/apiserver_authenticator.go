@@ -22,7 +22,9 @@ func newRemoteAuthenticator(tokenReview authenticationclient.TokenReviewInterfac
 	authenticators := []authenticator.Request{}
 
 	// TODO audiences
-	tokenAuthenticator, err := webhooktoken.NewFromInterface(tokenReview, nil, *webhooktoken.DefaultRetryBackoff())
+	// Upstream k8s.io introduced a configurable timeout for the token request - it previously defaulted to 10 seconds.
+	// See https://github.com/kubernetes/kubernetes/pull/100959
+	tokenAuthenticator, err := webhooktoken.NewFromInterface(tokenReview, nil, *webhooktoken.DefaultRetryBackoff(), 10*time.Second)
 	if err != nil {
 		return nil, err
 	}
