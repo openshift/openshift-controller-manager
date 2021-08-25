@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"k8s.io/apiserver/pkg/authentication/authenticator"
+	"k8s.io/apiserver/pkg/authentication/authenticatorfactory"
 	"k8s.io/apiserver/pkg/authentication/group"
 	"k8s.io/apiserver/pkg/authentication/request/anonymous"
 	"k8s.io/apiserver/pkg/authentication/request/bearertoken"
@@ -24,8 +25,8 @@ func newRemoteAuthenticator(tokenReview authenticationv1client.AuthenticationV1I
 	// TODO audiences
 	TokenAccessReviewTimeout := 10 * time.Second
 	tokenAuthenticator, err := webhooktoken.NewFromInterface(tokenReview, nil, *webhooktoken.DefaultRetryBackoff(), TokenAccessReviewTimeout, webhooktoken.AuthenticatorMetrics{
-		RecordRequestTotal:   noopMetrics{}.RequestTotal,
-		RecordRequestLatency: noopMetrics{}.RequestLatency,
+		RecordRequestTotal:   authenticatorfactory.RecordRequestTotal,
+		RecordRequestLatency: authenticatorfactory.RecordRequestLatency,
 	})
 	if err != nil {
 		return nil, err
