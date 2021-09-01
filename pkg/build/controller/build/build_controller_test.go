@@ -2159,6 +2159,7 @@ func newFakeBuildController(buildClient buildv1client.Interface, imageClient ima
 		ImageContentSourcePolicyInformer:   operatorInformers.Operator().V1alpha1().ImageContentSourcePolicies(),
 		PodInformer:                        kubeExternalInformers.Core().V1().Pods(),
 		SecretInformer:                     kubeExternalInformers.Core().V1().Secrets(),
+		ConfigMapInformer:                  kubeExternalInformers.Core().V1().ConfigMaps(),
 		ServiceAccountInformer:             kubeExternalInformers.Core().V1().ServiceAccounts(),
 		OpenshiftConfigConfigMapInformer:   kubeExternalInformers.Core().V1().ConfigMaps(),
 		ControllerManagerConfigMapInformer: kubeExternalInformers.Core().V1().ConfigMaps(),
