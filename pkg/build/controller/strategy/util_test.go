@@ -719,7 +719,8 @@ func TestSetupBuildVolumes(t *testing.T) {
 				p.Spec.Containers[0].VolumeMounts = append(p.Spec.Containers[0].VolumeMounts, tt.StartingVolumeMounts...)
 			}
 
-			err := setupBuildVolumes(p, tt.BuildVolumes)
+			//TODO for BUILD-275, add tests with buildCSIVolumes == true when we pull in csi volumes to leverage SharedConfigMaps and SharedSecrets
+			err := setupBuildVolumes(p, tt.BuildVolumes, false)
 
 			if err == nil && tt.ShouldFail {
 				t.Errorf("test %q should have failed with error %q, but didn't", tt.Name, tt.ErrorMessage)

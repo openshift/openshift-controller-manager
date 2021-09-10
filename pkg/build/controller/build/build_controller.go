@@ -190,6 +190,7 @@ type BuildController struct {
 	buildDefaults            builddefaults.BuildDefaults
 	buildOverrides           buildoverrides.BuildOverrides
 	internalRegistryHostname string
+	buildCSIVolumesEnabled   bool
 
 	recorder                record.EventRecorder
 	registryConfData        string

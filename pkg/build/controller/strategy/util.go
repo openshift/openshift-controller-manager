@@ -668,7 +668,9 @@ func setupBlobCache(pod *corev1.Pod) {
 }
 
 // setupBuildVolumes sets up user defined BuildVolumes
-func setupBuildVolumes(pod *corev1.Pod, buildVolumes []buildv1.BuildVolume) error {
+func setupBuildVolumes(pod *corev1.Pod, buildVolumes []buildv1.BuildVolume, csiVolumesEnabled bool) error {
+	//TODO for BUILD-275, if csiVolumesEnabled, then we can honor req's to mount CSI volumes to leverage SharedConfigMaps and SharedSecrets
+
 	// if there are no BuildVolumes or the pod is nil,
 	// there is no processing needed, so just return quickly
 	if len(buildVolumes) == 0 || pod == nil {
