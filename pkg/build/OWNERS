@@ -1,0 +1,11 @@
+reviewers:
+  - bparees
+  - gabemontero
+  - adambkaplan
+  - coreydaley
+approvers:
+  - bparees
+  - adambkaplan
+  - gabemontero
+  - coreydaley
+component: openshift-controller-manager
