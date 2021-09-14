@@ -279,6 +279,26 @@ func TestTriggerControllerSyncBuildConfigResource(t *testing.T) {
 			},
 		},
 		{
+			name:    "NewImageIDPre48",
+			is:      scenario_1_imageStream_single("test", "stream", "10"),
+			bc:      scenario_1_buildConfig_imageSource_lastTriggeredImageID_upToDate_pre48Cluster(),
+			tagResp: []fakeTagResponse{{Namespace: "other", Name: "stream:2", Ref: "image/result:1"}},
+			req: &buildv1.BuildRequest{
+				ObjectMeta:       metav1.ObjectMeta{Name: "build2", Namespace: "test2"},
+				From:             &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:2", Namespace: "other"},
+				TriggeredByImage: &corev1.ObjectReference{Kind: "DockerImage", Name: "image/result:1"},
+				TriggeredBy: []buildv1.BuildTriggerCause{
+					{
+						Message: "Image change",
+						ImageChangeBuild: &buildv1.ImageChangeCause{
+							ImageID: "image/result:1",
+							FromRef: &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:2", Namespace: "other"},
+						},
+					},
+				},
+			},
+		},
+		{
 			name:    "NewImageIDDefaultTag",
 			is:      scenario_1_imageStream_single_defaultImageTag("test", "stream", "10"),
 			bc:      scenario_1_buildConfig_imageSource_defaultImageTag(),
@@ -379,6 +399,11 @@ func TestTriggerControllerSyncBuildConfigResourceErrorHandling(t *testing.T) {
 		{
 			name:    "NoImageIDChange",
 			bc:      scenario_1_buildConfig_imageSource_noImageIDChange(),
+			tagResp: []fakeTagResponse{{Namespace: "other", Name: "stream:2", Ref: "image/result:1"}},
+		},
+		{
+			name:    "NoImageIDChangePre48Cluster",
+			bc:      scenario_1_buildConfig_imageSource_lastTriggeredImageID_outOfDate_pre48Cluster(),
 			tagResp: []fakeTagResponse{{Namespace: "other", Name: "stream:2", Ref: "image/result:1"}},
 		},
 		{
@@ -773,6 +798,35 @@ func scenario_1_buildConfig_imageSource() *buildv1.BuildConfig {
 	}
 }
 
+// scenario_1_buildConfig_imageSource_lastTriggeredImageID_upToDate_pre48Cluster is intended to handle the case where 1) a build config with an
+// image change trigger was created on a cluster at a version older than 4.8, 2) that image change trigger fired at
+// least once prior to upgrading to 4.8, so the old / deprecated last triggered image ID in the image change trigger
+// definitions in the build config's spec has been updated, and 3) the last image trigger ID is NOT up to date with the instanstiate request image ref coming in,
+// and retriggering is needed.  The method tested will not return an error and an instantiate build will occur.
+func scenario_1_buildConfig_imageSource_lastTriggeredImageID_upToDate_pre48Cluster() *buildv1.BuildConfig {
+	return &buildv1.BuildConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "build2", Namespace: "test2"},
+		Spec: buildv1.BuildConfigSpec{
+			Triggers: []buildv1.BuildTriggerPolicy{
+				{ImageChange: &buildv1.ImageChangeTrigger{}},
+				{ImageChange: &buildv1.ImageChangeTrigger{
+					// REMINDER, this From is not the request image ref.  That is defined in the test case.  Historically,
+					// these have been made the same in the other scenario methods in this file to fully vet we are checking the right thing.
+					From:                 &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:2", Namespace: "other"},
+					LastTriggeredImageID: "image/result:2",
+				}},
+			},
+			CommonSpec: buildv1.CommonSpec{
+				Strategy: buildv1.BuildStrategy{
+					DockerStrategy: &buildv1.DockerBuildStrategy{
+						From: &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:1"},
+					},
+				},
+			},
+		},
+	}
+}
+
 func scenario_1_buildConfig_imageSource_previousBuildForTag() *buildv1.BuildConfig {
 	return &buildv1.BuildConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: "build2", Namespace: "test2"},
@@ -830,6 +884,35 @@ func scenario_1_buildConfig_imageSource_noImageIDChange() *buildv1.BuildConfig {
 				{
 					From:                 buildv1.ImageStreamTagReference{Name: "stream:2", Namespace: "other"},
 					LastTriggeredImageID: "image/result:1",
+				},
+			},
+		},
+	}
+}
+
+// scenario_1_buildConfig_imageSource_lastTriggeredImageID_outOfDate_pre48Cluster is intended to handle the case where 1) a build config with an
+// image change trigger was created on a cluster at a version older than 4.8, 2) that image change trigger fired at
+// least once prior to upgrading to 4.8, so the old / deprecated last triggered image ID in the image change trigger
+// definitions in the build config's spec has been updated, and 3) the last image trigger ID is up to date with the instanstiate request image ref coming in,
+// and no retriggering is needed.  The method tested will return an error saying no need to retrigger.
+func scenario_1_buildConfig_imageSource_lastTriggeredImageID_outOfDate_pre48Cluster() *buildv1.BuildConfig {
+	return &buildv1.BuildConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: "build2", Namespace: "test2"},
+		Spec: buildv1.BuildConfigSpec{
+			Triggers: []buildv1.BuildTriggerPolicy{
+				{ImageChange: &buildv1.ImageChangeTrigger{}},
+				{ImageChange: &buildv1.ImageChangeTrigger{
+					// REMINDER, this From is not the request image ref.  That is defined in the test case.  Historically,
+					// these have been made different in the other scenario methods in this file to fully vet we are checking the right thing.
+					From:                 &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:2", Namespace: "other"},
+					LastTriggeredImageID: "image/result:1",
+				}},
+			},
+			CommonSpec: buildv1.CommonSpec{
+				Strategy: buildv1.BuildStrategy{
+					DockerStrategy: &buildv1.DockerBuildStrategy{
+						From: &corev1.ObjectReference{Kind: "ImageStreamTag", Name: "stream:1"},
+					},
 				},
 			},
 		},
