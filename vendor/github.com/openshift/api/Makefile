@@ -16,7 +16,7 @@ GO_BUILD_PACKAGES :=$(GO_PACKAGES)
 GO_BUILD_PACKAGES_EXPANDED :=$(GO_BUILD_PACKAGES)
 # LDFLAGS are not needed for dummy builds (saving time on calling git commands)
 GO_LD_FLAGS:=
-CONTROLLER_GEN_VERSION :=v0.6.0
+CONTROLLER_GEN_VERSION :=v0.7.0
 
 # $1 - target name
 # $2 - apis
@@ -40,6 +40,7 @@ $(call add-crd-gen,cloudnetwork,./cloudnetwork/v1,./cloudnetwork/v1,./cloudnetwo
 $(call add-crd-gen,network,./network/v1,./network/v1,./network/v1)
 $(call add-crd-gen,networkoperator,./networkoperator/v1,./networkoperator/v1,./networkoperator/v1)
 $(call add-crd-gen,operatorcontrolplane,./operatorcontrolplane/v1alpha1,./operatorcontrolplane/v1alpha1,./operatorcontrolplane/v1alpha1)
+$(call add-crd-gen,machine,./machine/v1beta1,./machine/v1beta1,./machine/v1beta1)
 
 RUNTIME ?= podman
 RUNTIME_IMAGE_NAME ?= openshift-api-generator
