@@ -15,10 +15,10 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/mtrmac/gpgme v0.1.2 // indirect
-	github.com/openshift/api v0.0.0-20210831091943-07e756545ac1
+	github.com/openshift/api v0.0.0-20210927171657-636513e97fda
 	github.com/openshift/build-machinery-go v0.0.0-20210806203541-4ea9b6da3a37
-	github.com/openshift/client-go v0.0.0-20210831095141-e19a065e79f7
-	github.com/openshift/library-go v0.0.0-20210909124717-1c18e732a117
+	github.com/openshift/client-go v0.0.0-20210916133943-9acee1a0fb83
+	github.com/openshift/library-go v0.0.0-20210929123655-f91754363286
 	github.com/openshift/runtime-utils v0.0.0-20200415173359-c45d4ff3f912
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/client_model v0.2.0
