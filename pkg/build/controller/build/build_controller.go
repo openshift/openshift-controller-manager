@@ -2153,9 +2153,8 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 	}
 
 	configObj := sysregistriesv2.V2RegistriesConf{}
-	// docker.io must be the only entry in the registry search list
-	// See https://github.com/openshift/builder/pull/40
-	configObj.UnqualifiedSearchRegistries = []string{"docker.io"}
+	// line up with the search list in the default registries.conf in openshift/builder, see PR #266 there
+	configObj.UnqualifiedSearchRegistries = []string{"registry.redhat.io", "registry.access.redhat.com", "quay.io", "docker.io"}
 	err := rutil.EditRegistriesConfig(&configObj, insecureRegs, blockedRegs, policies)
 	if err != nil {
 		klog.V(0).Infof("MCO library had problem building registries config: %s", err.Error())

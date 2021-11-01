@@ -1804,7 +1804,7 @@ func TestHandleControllerConfig(t *testing.T) {
 			expectedSearchRegistries := []string{}
 			// If only insecure registries are specified, default search should be docker.io
 			if !isRegistryConfigEmpty(buildRegistriesConfig) {
-				expectedSearchRegistries = []string{"docker.io"}
+				expectedSearchRegistries = []string{"registry.redhat.io", "registry.access.redhat.com", "quay.io", "docker.io"}
 			}
 			if !equality.Semantic.DeepEqual(registriesConfig.UnqualifiedSearchRegistries,
 				expectedSearchRegistries) {
