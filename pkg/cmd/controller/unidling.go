@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"k8s.io/client-go/dynamic"
+	eventsv1client "k8s.io/client-go/kubernetes/typed/events/v1"
 	"k8s.io/client-go/scale"
 
 	appsclient "github.com/openshift/client-go/apps/clientset/versioned"
@@ -27,6 +28,10 @@ func RunUnidlingController(ctx *ControllerContext) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	eventClient, err := eventsv1client.NewForConfig(clientConfig)
+	if err != nil {
+		return false, err
+	}
 
 	coreClient := ctx.ClientBuilder.ClientOrDie(infraUnidlingControllerServiceAccountName).CoreV1()
 	controller := unidlingcontroller.NewUnidlingController(
@@ -34,7 +39,7 @@ func RunUnidlingController(ctx *ControllerContext) (bool, error) {
 		ctx.RestMapper,
 		coreClient,
 		coreClient,
-		coreClient,
+		eventClient,
 		appsClient.AppsV1(),
 		coreClient,
 		resyncPeriod,

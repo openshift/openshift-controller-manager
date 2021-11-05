@@ -8,7 +8,7 @@ import (
 	"time"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
-	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	eventsv1client "k8s.io/client-go/kubernetes/typed/events/v1"
 	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/pager"
@@ -55,9 +56,24 @@ func (c *lastFiredCache) Clear(info types.NamespacedName) {
 	delete(c.items, info)
 }
 
-func (c *lastFiredCache) AddIfNewer(info types.NamespacedName, newLastFired time.Time) bool {
+func (c *lastFiredCache) AddIfNewer(info types.NamespacedName, event *eventsv1.Event) bool {
 	c.Lock()
 	defer c.Unlock()
+
+	var newLastFired time.Time
+	// if DeprecatedLastTimestamp is not zero, we assume clients are using core Events API. This may occur during upgrade.
+	// TODO: Remove in OCP 4.13 when all clients (SDN/OVN-K) have moved to events API
+	if !event.DeprecatedLastTimestamp.IsZero() {
+		newLastFired = event.DeprecatedLastTimestamp.Time
+	} else {
+		if event.Series != nil {
+			// Event is either at the beginning or at the end
+			newLastFired = event.Series.LastObservedTime.Time
+		} else {
+			// Event is a singleton
+			newLastFired = event.EventTime.Time
+		}
+	}
 
 	if lastFired, hasLastFired := c.items[info]; !hasLastFired || lastFired.Before(newLastFired) {
 		c.items[info] = newLastFired
@@ -82,7 +98,7 @@ type UnidlingController struct {
 	rcNamespacer corev1client.ReplicationControllersGetter
 }
 
-func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, endptsNS corev1client.EndpointsGetter, servicesNS corev1client.ServicesGetter, evtNS corev1client.EventsGetter,
+func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, endptsNS corev1client.EndpointsGetter, servicesNS corev1client.ServicesGetter, evtNS eventsv1client.EventsGetter,
 	dcNamespacer appstypedclient.DeploymentConfigsGetter, rcNamespacer corev1client.ReplicationControllersGetter,
 	resyncPeriod time.Duration) *UnidlingController {
 	fieldSet := fields.Set{}
@@ -134,7 +150,7 @@ func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, e
 				return evtNS.Events(metav1.NamespaceAll).Watch(context.TODO(), options)
 			},
 		},
-		&corev1.Event{},
+		&eventsv1.Event{},
 		resyncPeriod,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc:    unidlingController.addEvent,
@@ -150,7 +166,7 @@ func NewUnidlingController(scaleNS scale.ScalesGetter, mapper meta.RESTMapper, e
 }
 
 func (c *UnidlingController) addEvent(obj interface{}) {
-	evt, ok := obj.(*corev1.Event)
+	evt, ok := obj.(*eventsv1.Event)
 	if !ok {
 		utilruntime.HandleError(fmt.Errorf("got non-Event object in event action: %v", obj))
 		return
@@ -160,7 +176,7 @@ func (c *UnidlingController) addEvent(obj interface{}) {
 }
 
 func (c *UnidlingController) updateEvent(oldObj, newObj interface{}) {
-	evt, ok := newObj.(*corev1.Event)
+	evt, ok := newObj.(*eventsv1.Event)
 	if !ok {
 		utilruntime.HandleError(fmt.Errorf("got non-Event object in event action: %v", newObj))
 		return
@@ -170,7 +186,7 @@ func (c *UnidlingController) updateEvent(oldObj, newObj interface{}) {
 }
 
 func (c *UnidlingController) checkAndClearFromCache(obj interface{}) {
-	evt, objIsEvent := obj.(*corev1.Event)
+	evt, objIsEvent := obj.(*eventsv1.Event)
 	if !objIsEvent {
 		tombstone, objIsTombstone := obj.(cache.DeletedFinalStateUnknown)
 		if !objIsTombstone {
@@ -178,7 +194,7 @@ func (c *UnidlingController) checkAndClearFromCache(obj interface{}) {
 			return
 		}
 
-		evt, objIsEvent = tombstone.Obj.(*corev1.Event)
+		evt, objIsEvent = tombstone.Obj.(*eventsv1.Event)
 		if !objIsEvent {
 			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not an Event in event action: %v", obj))
 			return
@@ -189,14 +205,14 @@ func (c *UnidlingController) checkAndClearFromCache(obj interface{}) {
 }
 
 // clearEventFromCache removes the entry for the given event from the lastFiredCache.
-func (c *UnidlingController) clearEventFromCache(event *corev1.Event) {
+func (c *UnidlingController) clearEventFromCache(event *eventsv1.Event) {
 	if event.Reason != unidlingapi.NeedPodsReason {
 		return
 	}
 
 	info := types.NamespacedName{
-		Namespace: event.InvolvedObject.Namespace,
-		Name:      event.InvolvedObject.Name,
+		Namespace: event.Regarding.Namespace,
+		Name:      event.Regarding.Name,
 	}
 	c.lastFiredCache.Clear(info)
 }
@@ -204,18 +220,18 @@ func (c *UnidlingController) clearEventFromCache(event *corev1.Event) {
 // equeueEvent checks if the given event is relevant (i.e. if it's a NeedPods event),
 // and, if so, extracts relevant information, and enqueues that information in the
 // processing queue.
-func (c *UnidlingController) enqueueEvent(event *corev1.Event) {
+func (c *UnidlingController) enqueueEvent(event *eventsv1.Event) {
 	if event.Reason != unidlingapi.NeedPodsReason {
 		return
 	}
 
 	info := types.NamespacedName{
-		Namespace: event.InvolvedObject.Namespace,
-		Name:      event.InvolvedObject.Name,
+		Namespace: event.Regarding.Namespace,
+		Name:      event.Regarding.Name,
 	}
 
 	// only add things to the queue if they're newer than what we already have
-	if c.lastFiredCache.AddIfNewer(info, event.LastTimestamp.Time) {
+	if c.lastFiredCache.AddIfNewer(info, event) {
 		c.eventsTotal.Inc()
 		c.queue.Add(info)
 	}
