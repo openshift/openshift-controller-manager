@@ -123,6 +123,12 @@ func mountSecretVolume(pod *corev1.Pod, container *corev1.Container, secretName,
 	mountVolume(pod, container, secretName, mountPath, volumeSuffix, policy.Secret, volumeSource)
 }
 
+// mountCSIVolume is a helper method responsible for actual mounting csi
+// volumes into a pod.
+func mountCSIVolume(pod *corev1.Pod, container *corev1.Container, volumeName, mountPath, volumeSuffix string, volumeSource *corev1.VolumeSource) {
+	mountVolume(pod, container, volumeName, mountPath, volumeSuffix, policy.CSI, volumeSource)
+}
+
 // mountVolume is a helper method responsible for mounting volumes into a pod.
 // The following file system types for the volume are supported:
 //
@@ -188,6 +194,12 @@ func makeVolume(volumeName, refName string, mode int32, fsType policy.FSType, vo
 				SecretName:  refName,
 				DefaultMode: &mode,
 			}
+		}
+	case policy.CSI:
+		if volumeSource != nil && volumeSource.CSI != nil {
+			vol.VolumeSource.CSI = volumeSource.CSI.DeepCopy()
+		} else {
+			vol.VolumeSource.CSI = &corev1.CSIVolumeSource{}
 		}
 	default:
 		klog.V(3).Infof("File system %s is not supported for volumes. Using empty directory instead.", fsType)
@@ -669,8 +681,6 @@ func setupBlobCache(pod *corev1.Pod) {
 
 // setupBuildVolumes sets up user defined BuildVolumes
 func setupBuildVolumes(pod *corev1.Pod, buildVolumes []buildv1.BuildVolume, csiVolumesEnabled bool) error {
-	//TODO for BUILD-275, if csiVolumesEnabled, then we can honor req's to mount CSI volumes to leverage SharedConfigMaps and SharedSecrets
-
 	// if there are no BuildVolumes or the pod is nil,
 	// there is no processing needed, so just return quickly
 	if len(buildVolumes) == 0 || pod == nil {
@@ -705,6 +715,13 @@ func setupBuildVolumes(pod *corev1.Pod, buildVolumes []buildv1.BuildVolume, csiV
 		case buildv1.BuildVolumeSourceTypeConfigMap:
 			volumeSource.ConfigMap = buildVolume.Source.ConfigMap
 			mountConfigMapVolume(pod, &pod.Spec.Containers[0], strings.ToLower(buildVolume.Source.ConfigMap.Name), PathForBuildVolume(buildVolume.Source.ConfigMap.Name), buildVolumeSuffix, &volumeSource)
+		case buildv1.BuildVolumeSourceTypeCSI:
+			if !csiVolumesEnabled {
+				return fmt.Errorf("csi volume request cannot be fullfilled without enabling csivolume feature on the cluster")
+			}
+			volumeSource.CSI = buildVolume.Source.CSI
+			mountCSIVolume(pod, &pod.Spec.Containers[0], strings.ToLower(buildVolume.Name), PathForBuildVolume(buildVolume.Name), buildVolumeSuffix, &volumeSource)
+
 		default:
 			return fmt.Errorf("encountered unsupported build volume source type %q", buildVolume.Source.Type)
 		}
