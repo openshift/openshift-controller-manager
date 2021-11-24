@@ -30,3 +30,8 @@ OCM exposes the following metrics to Prometheus for monitoring and analysis:
 | ---- | ---- | ------ | ----------- |
 | `openshift_template_instance_completed_total` | Counter | `condition` | Counts completed TemplateInstance objects by condition |
 | `openshift_template_instance_active_age_seconds` | Histogram | No labels | Shows the instantaneous age distribution of active TemplateInstance objects |
+
+## Unidling
+| Name | Type | Labels | Description |
+| ---- | ---- | ------ | ----------- |
+| `openshift_unidle_events_total` | Counter | No labels | Total count of unidling events observed by the unidling controller |
