@@ -10,13 +10,15 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
 	github.com/davecgh/go-spew v1.1.1
 	github.com/docker/docker-credential-helpers v0.0.0-20190720063934-f78081d1f7fe // indirect
-	github.com/google/go-cmp v0.5.5
-	github.com/google/gofuzz v1.1.0
+	github.com/go-logr/logr v1.2.2 // indirect
+	github.com/google/go-cmp v0.5.6
+	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.1.2
 	github.com/hashicorp/golang-lru v0.5.1
+	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mtrmac/gpgme v0.1.2 // indirect
-	github.com/openshift/api v0.0.0-20210927171657-636513e97fda
-	github.com/openshift/build-machinery-go v0.0.0-20210806203541-4ea9b6da3a37
+	github.com/openshift/api v0.0.0-20211215120111-7c47a5f63470
+	github.com/openshift/build-machinery-go v0.0.0-20211213093930-7e33a7eb4ce3
 	github.com/openshift/client-go v0.0.0-20210916133943-9acee1a0fb83
 	github.com/openshift/library-go v0.0.0-20210929123655-f91754363286
 	github.com/openshift/runtime-utils v0.0.0-20200415173359-c45d4ff3f912
