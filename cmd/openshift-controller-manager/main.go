@@ -1,19 +1,13 @@
 package main
 
 import (
-	goflag "flag"
-	"fmt"
-	"math/rand"
 	"os"
 	"runtime"
-	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	genericapiserver "k8s.io/apiserver/pkg/server"
-	utilflag "k8s.io/component-base/cli/flag"
-	"k8s.io/component-base/logs"
+	"k8s.io/component-base/cli"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	"github.com/openshift/library-go/pkg/serviceability"
@@ -47,13 +41,6 @@ func init() {
 func main() {
 	stopCh := genericapiserver.SetupSignalHandler()
 
-	rand.Seed(time.Now().UTC().UnixNano())
-
-	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
-	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
-
-	logs.InitLogs()
-	defer logs.FlushLogs()
 	defer serviceability.BehaviorOnPanic(os.Getenv("OPENSHIFT_ON_PANIC"), version.Get())()
 	defer serviceability.Profile(os.Getenv("OPENSHIFT_PROFILE")).Stop()
 
@@ -62,10 +49,8 @@ func main() {
 	}
 
 	command := NewOpenShiftControllerManagerCommand(stopCh)
-	if err := command.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
+	code := cli.Run(command)
+	os.Exit(code)
 }
 
 func NewOpenShiftControllerManagerCommand(stopCh <-chan struct{}) *cobra.Command {

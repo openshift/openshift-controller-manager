@@ -85,6 +85,7 @@ func (q *mockOperationQueue) Len() int {
 	return len(q.queued)
 }
 func (q *mockOperationQueue) ShutDown()          {}
+func (q *mockOperationQueue) ShutDownWithDrain() {}
 func (q *mockOperationQueue) ShuttingDown() bool { return false }
 
 type streamTagResults struct {

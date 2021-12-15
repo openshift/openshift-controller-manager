@@ -146,8 +146,9 @@ type wallClock struct{}
 
 var _ flowcontrol.Clock = &wallClock{}
 
-func (c wallClock) Now() time.Time        { return time.Now() }
-func (c wallClock) Sleep(d time.Duration) { time.Sleep(d) }
+func (c wallClock) Now() time.Time                  { return time.Now() }
+func (c wallClock) Since(t time.Time) time.Duration { return time.Since(t) }
+func (c wallClock) Sleep(d time.Duration)           { time.Sleep(d) }
 
 // fakeClock implements flowcontrol.Clock.  Its time starts at the UNIX epoch.
 // When all known threads are in Sleep(), its time advances just enough to wake
@@ -169,6 +170,12 @@ func (c *fakeClock) Now() time.Time {
 	c.c.L.Lock()
 	defer c.c.L.Unlock()
 	return time.Unix(0, c.now)
+}
+
+func (c *fakeClock) Since(t time.Time) time.Duration {
+	c.c.L.Lock()
+	defer c.c.L.Unlock()
+	return time.Unix(0, c.now).Sub(t)
 }
 
 func (c *fakeClock) Sleep(d time.Duration) {
