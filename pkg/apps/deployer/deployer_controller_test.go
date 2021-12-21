@@ -1189,6 +1189,8 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.TopologySpreadConstraints = nil
 				// k8s 1.19
 				p.Spec.SetHostnameAsFQDN = nil
+				// k8s 1.23 - this is enabled by the IdentifyPodOS feature
+				p.Spec.OS = nil
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}
