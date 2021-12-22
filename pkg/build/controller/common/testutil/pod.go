@@ -33,10 +33,10 @@ func (p *TestPod) WithTolerations(tolerations []corev1.Toleration) *TestPod {
 
 func (p *TestPod) WithEnvVar(name, value string) *TestPod {
 	if len(p.Spec.InitContainers) == 0 {
-		p.Spec.InitContainers = append(p.Spec.InitContainers, corev1.Container{})
+		p.Spec.InitContainers = append(p.Spec.InitContainers, corev1.Container{Name: "git-init"})
 	}
 	if len(p.Spec.Containers) == 0 {
-		p.Spec.Containers = append(p.Spec.Containers, corev1.Container{})
+		p.Spec.Containers = append(p.Spec.Containers, corev1.Container{Name: "image-build"})
 	}
 	p.Spec.InitContainers[0].Env = append(p.Spec.InitContainers[0].Env, corev1.EnvVar{Name: name, Value: value})
 	p.Spec.Containers[0].Env = append(p.Spec.Containers[0].Env, corev1.EnvVar{Name: name, Value: value})

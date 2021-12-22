@@ -835,8 +835,14 @@ func TestSetBuildLogLevel(t *testing.T) {
 		t.Errorf("Builds pod loglevel was not set")
 	}
 
-	if pod.Spec.Containers[0].Args[0] != "--loglevel=0" {
+	if pod.Spec.Containers[0].Args[0] != "--v=0" {
 		t.Errorf("Default build pod loglevel was not set to 0")
+	}
+
+	for _, initContainer := range pod.Spec.InitContainers {
+		if initContainer.Args[0] != "--v=0" {
+			t.Errorf("Default build pod log level for init container %s was not set to 0", initContainer.Name)
+		}
 	}
 
 	build = testutil.Build().WithSourceStrategy()
@@ -844,8 +850,14 @@ func TestSetBuildLogLevel(t *testing.T) {
 	build.Spec.Strategy.SourceStrategy.Env = []corev1.EnvVar{{Name: "BUILD_LOGLEVEL", Value: "7", ValueFrom: nil}}
 	setPodLogLevelFromBuild((*corev1.Pod)(pod), build.AsBuild())
 
-	if pod.Spec.Containers[0].Args[0] != "--loglevel=7" {
+	if pod.Spec.Containers[0].Args[0] != "--v=7" {
 		t.Errorf("Build pod loglevel was not transferred from BUILD_LOGLEVEL environment variable: %#v", pod)
+	}
+
+	for _, initContainer := range pod.Spec.InitContainers {
+		if initContainer.Args[0] != "--v=7" {
+			t.Errorf("Build pod loglevel was not transferred to init container %s from BUILD_LOGLEVEL environment variable: %#v", initContainer.Name, pod)
+		}
 	}
 
 }
