@@ -20,8 +20,6 @@ type FeatureGateExpansion interface{}
 
 type ImageExpansion interface{}
 
-type ImageContentPolicyExpansion interface{}
-
 type InfrastructureExpansion interface{}
 
 type IngressExpansion interface{}

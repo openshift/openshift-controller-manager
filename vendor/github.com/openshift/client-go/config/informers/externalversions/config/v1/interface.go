@@ -26,8 +26,6 @@ type Interface interface {
 	FeatureGates() FeatureGateInformer
 	// Images returns a ImageInformer.
 	Images() ImageInformer
-	// ImageContentPolicies returns a ImageContentPolicyInformer.
-	ImageContentPolicies() ImageContentPolicyInformer
 	// Infrastructures returns a InfrastructureInformer.
 	Infrastructures() InfrastructureInformer
 	// Ingresses returns a IngressInformer.
@@ -100,11 +98,6 @@ func (v *version) FeatureGates() FeatureGateInformer {
 // Images returns a ImageInformer.
 func (v *version) Images() ImageInformer {
 	return &imageInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
-}
-
-// ImageContentPolicies returns a ImageContentPolicyInformer.
-func (v *version) ImageContentPolicies() ImageContentPolicyInformer {
-	return &imageContentPolicyInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Infrastructures returns a InfrastructureInformer.
