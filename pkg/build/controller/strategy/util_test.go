@@ -531,6 +531,7 @@ func TestSetupBuildVolumes(t *testing.T) {
 
 	tests := []struct {
 		Name                 string
+		CSIVolumeEnabled     bool
 		ShouldFail           bool
 		ErrorMessage         string
 		StartingVolumes      []corev1.Volume
@@ -540,9 +541,10 @@ func TestSetupBuildVolumes(t *testing.T) {
 		WantVolumeMounts     []corev1.VolumeMount
 	}{
 		{
-			Name:         "Secret BuildVolume should succeed",
-			ShouldFail:   false,
-			ErrorMessage: "",
+			Name:             "Secret BuildVolume should succeed",
+			CSIVolumeEnabled: false,
+			ShouldFail:       false,
+			ErrorMessage:     "",
 			BuildVolumes: []buildv1.BuildVolume{
 				{
 					Name: "one",
@@ -593,9 +595,10 @@ func TestSetupBuildVolumes(t *testing.T) {
 			},
 		},
 		{
-			Name:         "ConfigMap BuildVolume should succeed",
-			ShouldFail:   false,
-			ErrorMessage: "",
+			Name:             "ConfigMap BuildVolume should succeed",
+			CSIVolumeEnabled: false,
+			ShouldFail:       false,
+			ErrorMessage:     "",
 			BuildVolumes: []buildv1.BuildVolume{
 				{
 					Name: "one",
@@ -646,9 +649,52 @@ func TestSetupBuildVolumes(t *testing.T) {
 			},
 		},
 		{
-			Name:         "Duplicate Secret BuildVolumeMount should fail",
-			ShouldFail:   true,
-			ErrorMessage: "user provided BuildVolumeMount path \"my-path\" collides with VolumeMount path created by the build controller",
+			Name:             "CSI BuildVolume should succeed",
+			CSIVolumeEnabled: true,
+			ShouldFail:       false,
+			ErrorMessage:     "",
+			BuildVolumes: []buildv1.BuildVolume{
+				{
+					Name: "csi-one",
+					Source: buildv1.BuildVolumeSource{
+						Type: buildv1.BuildVolumeSourceTypeCSI,
+						CSI: &corev1.CSIVolumeSource{
+							Driver:           "inline.storage.kubernetes.io",
+							VolumeAttributes: map[string]string{"foo": "bar"},
+						},
+					},
+					Mounts: []buildv1.BuildVolumeMount{
+						{
+							DestinationPath: "my-path",
+						},
+					},
+				},
+			},
+
+			WantVolumes: []corev1.Volume{
+				{
+					Name: NameForBuildVolume("csi-one"),
+					VolumeSource: corev1.VolumeSource{
+						CSI: &corev1.CSIVolumeSource{
+							Driver:           "inline.storage.kubernetes.io",
+							VolumeAttributes: map[string]string{"foo": "bar"},
+						},
+					},
+				},
+			},
+			WantVolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      NameForBuildVolume("csi-one"),
+					ReadOnly:  true,
+					MountPath: PathForBuildVolume("csi-one"),
+				},
+			},
+		},
+		{
+			Name:             "Duplicate Secret BuildVolumeMount should fail",
+			CSIVolumeEnabled: false,
+			ShouldFail:       true,
+			ErrorMessage:     "user provided BuildVolumeMount path \"my-path\" collides with VolumeMount path created by the build controller",
 			StartingVolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      "some-name",
@@ -689,9 +735,10 @@ func TestSetupBuildVolumes(t *testing.T) {
 			},
 		},
 		{
-			Name:         "UnSupported BuildVolumeSourceType should fail",
-			ShouldFail:   true,
-			ErrorMessage: "encountered unsupported build volume source type \"UnSupportedBuildVolumeType\"",
+			Name:             "UnSupported BuildVolumeSourceType should fail",
+			CSIVolumeEnabled: false,
+			ShouldFail:       true,
+			ErrorMessage:     "encountered unsupported build volume source type \"UnSupportedBuildVolumeType\"",
 			BuildVolumes: []buildv1.BuildVolume{
 				{
 					Name: "one",
@@ -700,6 +747,31 @@ func TestSetupBuildVolumes(t *testing.T) {
 						Secret: &corev1.SecretVolumeSource{},
 					},
 					Mounts: []buildv1.BuildVolumeMount{},
+				},
+			},
+			WantVolumes:      []corev1.Volume{},
+			WantVolumeMounts: []corev1.VolumeMount{},
+		},
+		{
+			Name:             "CSI volume request without csivolumeEnabled should fail",
+			CSIVolumeEnabled: false,
+			ShouldFail:       true,
+			ErrorMessage:     "csi volumes require the BuildCSIVolumes feature gate to be enabled",
+			BuildVolumes: []buildv1.BuildVolume{
+				{
+					Name: "csi-one",
+					Source: buildv1.BuildVolumeSource{
+						Type: buildv1.BuildVolumeSourceTypeCSI,
+						CSI: &corev1.CSIVolumeSource{
+							Driver:           "inline.storage.kubernetes.io",
+							VolumeAttributes: map[string]string{"foo": "bar"},
+						},
+					},
+					Mounts: []buildv1.BuildVolumeMount{
+						{
+							DestinationPath: "my-path",
+						},
+					},
 				},
 			},
 			WantVolumes:      []corev1.Volume{},
@@ -719,8 +791,7 @@ func TestSetupBuildVolumes(t *testing.T) {
 				p.Spec.Containers[0].VolumeMounts = append(p.Spec.Containers[0].VolumeMounts, tt.StartingVolumeMounts...)
 			}
 
-			//TODO for BUILD-275, add tests with buildCSIVolumes == true when we pull in csi volumes to leverage SharedConfigMaps and SharedSecrets
-			err := setupBuildVolumes(p, tt.BuildVolumes, false)
+			err := setupBuildVolumes(p, tt.BuildVolumes, tt.CSIVolumeEnabled)
 
 			if err == nil && tt.ShouldFail {
 				t.Errorf("test %q should have failed with error %q, but didn't", tt.Name, tt.ErrorMessage)
