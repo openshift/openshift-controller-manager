@@ -831,9 +831,10 @@ func tlsConfigForIngress(
 	// Re-Encrypt: May have cert
 	// Passthrough: Must not have cert
 	terminationPolicy := terminationPolicyForIngress(ingress)
+	insecureEdgeTerminationPolicy := insecureEdgeTerminationPolicyForIngress(ingress)
 	tlsConfig := &routev1.TLSConfig{
 		Termination:                   terminationPolicy,
-		InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+		InsecureEdgeTerminationPolicy: insecureEdgeTerminationPolicy,
 	}
 	if terminationPolicy != routev1.TLSTerminationPassthrough && potentiallyNilTLSSecret != nil {
 		tlsConfig.Certificate = string(potentiallyNilTLSSecret.Data[corev1.TLSCertKey])
@@ -920,4 +921,16 @@ func destinationCACertificateForIngress(ingress *networkingv1.Ingress, secretLis
 		return &value
 	}
 	return nil
+
+var insecureEdgeTerminationPolicyAnnotationKey = routev1.GroupName + "/insecureEdgeTerminationPolicy"
+
+func insecureEdgeTerminationPolicyForIngress(ingress *networkingv1.Ingress) routev1.InsecureEdgeTerminationPolicyType {
+	switch {
+	case ingress.Annotations[insecureEdgeTerminationPolicyAnnotationKey] == string(routev1.InsecureEdgeTerminationPolicyNone):
+		return routev1.InsecureEdgeTerminationPolicyNone
+	case ingress.Annotations[insecureEdgeTerminationPolicyAnnotationKey] == string(routev1.InsecureEdgeTerminationPolicyAllow):
+		return routev1.InsecureEdgeTerminationPolicyAllow
+	default:
+		return routev1.InsecureEdgeTerminationPolicyRedirect
+	}
 }
