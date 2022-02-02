@@ -62,7 +62,7 @@ func NewOpenShiftControllerManagerCommand(stopCh <-chan struct{}) *cobra.Command
 			os.Exit(1)
 		},
 	}
-	start := openshift_controller_manager.NewOpenShiftControllerManagerCommand("start", os.Stdout, os.Stderr)
+	start := openshift_controller_manager.NewOpenShiftControllerManagerCommand("start", os.Stdout, os.Stderr, stopCh)
 	cmd.AddCommand(start)
 
 	return cmd
