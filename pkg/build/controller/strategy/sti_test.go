@@ -101,7 +101,6 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 		"BUILD_REGISTRIES_DIR_PATH":   "",
 		"BUILD_SIGNATURE_POLICY_PATH": "",
 		"BUILD_STORAGE_CONF_PATH":     "",
-		"BUILD_STORAGE_DRIVER":        "",
 		"BUILD_BLOBCACHE_DIR":         "",
 		"BUILD_MOUNT_ETC_PKI_CATRUST": "",
 	}
@@ -128,10 +127,11 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 	// build-system-configmap
 	// certificate authorities
 	// container storage
+	// container run
 	// blobs content cache
 	// global CA injection configmap
-	if len(container.VolumeMounts) != 12 {
-		t.Fatalf("Expected 12 volumes in container, got %d %v", len(container.VolumeMounts), container.VolumeMounts)
+	if len(container.VolumeMounts) != 13 {
+		t.Fatalf("Expected 13 volumes in container, got %d %v", len(container.VolumeMounts), container.VolumeMounts)
 	}
 	expectedMounts := []string{buildutil.NodePullSecretsPath,
 		buildutil.BuildWorkDirMount,
@@ -143,7 +143,8 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 		ConfigMapBuildSystemConfigsMountPath,
 		ConfigMapCertsMountPath,
 		ConfigMapBuildGlobalCAMountPath,
-		"/var/lib/containers/storage",
+		"/var/lib/containers",
+		"/var/run/containers",
 		buildutil.BuildBlobsContentCache,
 	}
 	for i, expected := range expectedMounts {
@@ -152,8 +153,8 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 		}
 	}
 	// build pod has an extra volume: the git clone source secret
-	if len(actual.Spec.Volumes) != 13 {
-		t.Fatalf("Expected 13 volumes in Build pod, got %d", len(actual.Spec.Volumes))
+	if len(actual.Spec.Volumes) != 14 {
+		t.Fatalf("Expected 14 volumes in Build pod, got %d", len(actual.Spec.Volumes))
 	}
 	if *actual.Spec.ActiveDeadlineSeconds != 60 {
 		t.Errorf("Expected ActiveDeadlineSeconds 60, got %d", *actual.Spec.ActiveDeadlineSeconds)
@@ -302,4 +303,19 @@ func mockSTIBuild() *buildv1.Build {
 			Phase: buildv1.BuildPhaseNew,
 		},
 	}
+}
+
+func TestS2ICreateBuildPodAutonsUser(t *testing.T) {
+	strategy := SourceBuildStrategy{
+		Image:          "sti-test-image",
+		SecurityClient: newFakeSecurityClient(true),
+	}
+
+	build := mockSTIBuild()
+
+	testCreateBuildPodAutonsUser(t, build, &strategy,
+		func(build *buildv1.Build, env corev1.EnvVar) {
+			build.Spec.Strategy.SourceStrategy.Env = append(build.Spec.Strategy.SourceStrategy.Env, env)
+		},
+	)
 }

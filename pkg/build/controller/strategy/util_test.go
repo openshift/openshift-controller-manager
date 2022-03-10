@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"unsafe"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	buildv1 "github.com/openshift/api/build/v1"
 )
@@ -809,6 +811,109 @@ func TestSetupBuildVolumes(t *testing.T) {
 
 			if !reflect.DeepEqual(p.Spec.Containers[0].VolumeMounts, tt.WantVolumeMounts) {
 				t.Errorf("adding build volume mounts to container failed, have: %#v, want: %#v", p.Spec.Containers[0].VolumeMounts, tt.WantVolumeMounts)
+			}
+		})
+	}
+}
+
+type buildPodCreator interface {
+	CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost string) (*corev1.Pod, error)
+}
+
+func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy buildPodCreator, addEnv func(build *buildv1.Build, env corev1.EnvVar)) {
+	for _, testCase := range []struct {
+		env           string
+		expectError   bool
+		privileged    bool
+		annotations   map[string]string
+		noAnnotations []string
+	}{
+		{
+			env:        "",
+			privileged: true,
+			noAnnotations: []string{
+				"io.openshift.builder",
+				"io.kubernetes.cri-o.Devices",
+				"io.kubernetes.cri-o.userns-mode",
+			},
+		},
+		{
+			env:        "BUILD_PRIVILEGED=0",
+			privileged: false,
+			annotations: map[string]string{
+				"io.openshift.builder":            "",
+				"io.kubernetes.cri-o.Devices":     "/dev/fuse:rwm",
+				"io.kubernetes.cri-o.userns-mode": "auto:size=65536",
+			},
+		},
+		{
+			env:        "BUILD_PRIVILEGED=42",
+			privileged: true,
+			noAnnotations: []string{
+				"io.openshift.builder",
+				"io.kubernetes.cri-o.Devices",
+				"io.kubernetes.cri-o.userns-mode",
+			},
+		},
+		{
+			env:        "BUILD_PRIVILEGED=false",
+			privileged: false,
+			annotations: map[string]string{
+				"io.openshift.builder":            "",
+				"io.kubernetes.cri-o.Devices":     "/dev/fuse:rwm",
+				"io.kubernetes.cri-o.userns-mode": "auto:size=65536",
+			},
+		},
+		{
+			env:        "BUILD_PRIVILEGED=true",
+			privileged: true,
+			noAnnotations: []string{
+				"io.openshift.builder",
+				"io.kubernetes.cri-o.Devices",
+				"io.kubernetes.cri-o.userns-mode",
+			},
+		},
+	} {
+		t.Run(testCase.env, func(t *testing.T) {
+			build := build.DeepCopy()
+			for _, envVar := range strings.Split(testCase.env, ":") {
+				if env := strings.SplitN(envVar, "=", 2); len(env) > 1 {
+					addEnv(build, corev1.EnvVar{Name: env[0], Value: env[1]})
+				}
+			}
+			actual, err := strategy.CreateBuildPod(build, nil, testInternalRegistryHost)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			for ctrIndex, ctr := range append(actual.Spec.Containers, actual.Spec.InitContainers...) {
+				sc := ctr.SecurityContext
+				if sc == nil {
+					t.Errorf("Container %d in pod spec has no SecurityContext", ctrIndex)
+					continue
+				}
+				if sc.Privileged == nil {
+					t.Errorf("Container %d in pod spec has no privileged field", ctrIndex)
+					continue
+				}
+				if *sc.Privileged != testCase.privileged {
+					t.Errorf("Expected privileged: %q to produce privileged=%v, got %v", testCase.env, testCase.privileged, *sc.Privileged)
+				}
+			}
+			for annotation, value := range testCase.annotations {
+				if !metav1.HasAnnotation(actual.ObjectMeta, annotation) {
+					t.Errorf("Expected a %q annotation, but don't see one", annotation)
+					continue
+				}
+				annotations := actual.ObjectMeta.GetAnnotations()
+				if val := annotations[annotation]; val != value {
+					t.Errorf("Annotation %q was expected to be %q, but was actually %q", annotation, value, val)
+				}
+			}
+			for _, annotation := range testCase.noAnnotations {
+				if metav1.HasAnnotation(actual.ObjectMeta, annotation) {
+					t.Errorf("Expected no %q annotation, but got one", annotation)
+				}
 			}
 		})
 	}
