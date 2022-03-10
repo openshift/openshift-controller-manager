@@ -623,7 +623,7 @@ func newRouteForIngress(
 				Name: path.Backend.Service.Name,
 			},
 			Port:           port,
-			TLS:            tlsConfigForIngress(ingress, rule, tlsSecret),
+			TLS:            tlsConfigForIngress(ingress, rule, tlsSecret, secretLister),
 			WildcardPolicy: wildcardPolicy,
 		},
 	}
@@ -683,7 +683,8 @@ func routeMatchesIngress(
 	if hasInvalidTLSSecret {
 		return false
 	}
-	tlsConfig := tlsConfigForIngress(ingress, rule, tlsSecret)
+
+	tlsConfig := tlsConfigForIngress(ingress, rule, tlsSecret, secretLister)
 	if route.Spec.TLS != nil && tlsConfig != nil {
 		tlsConfig.InsecureEdgeTerminationPolicy = route.Spec.TLS.InsecureEdgeTerminationPolicy
 	}
@@ -810,6 +811,7 @@ func tlsConfigForIngress(
 	ingress *networkingv1.Ingress,
 	rule *networkingv1.IngressRule,
 	potentiallyNilTLSSecret *corev1.Secret,
+	secretLister corelisters.SecretLister,
 ) *routev1.TLSConfig {
 	if !tlsEnabled(ingress, rule, potentiallyNilTLSSecret) {
 		return nil
@@ -826,6 +828,12 @@ func tlsConfigForIngress(
 		tlsConfig.Certificate = string(potentiallyNilTLSSecret.Data[corev1.TLSCertKey])
 		tlsConfig.Key = string(potentiallyNilTLSSecret.Data[corev1.TLSPrivateKeyKey])
 	}
+
+	destinationCACertificate := destinationCACertificateForIngress(ingress, secretLister)
+	if terminationPolicy == routev1.TLSTerminationReencrypt && destinationCACertificate != nil {
+		tlsConfig.DestinationCACertificate = *destinationCACertificate
+	}
+
 	return tlsConfig
 }
 
@@ -871,6 +879,7 @@ func tlsSecretIfValid(ingress *networkingv1.Ingress, rule *networkingv1.IngressR
 }
 
 var terminationPolicyAnnotationKey = routev1.GroupName + "/termination"
+var destinationCACertificateAnnotationKey = routev1.GroupName + "/destinationCACertificate"
 
 func terminationPolicyForIngress(ingress *networkingv1.Ingress) routev1.TLSTerminationType {
 	switch {
@@ -881,4 +890,20 @@ func terminationPolicyForIngress(ingress *networkingv1.Ingress) routev1.TLSTermi
 	default:
 		return routev1.TLSTerminationEdge
 	}
+}
+func destinationCACertificateForIngress(ingress *networkingv1.Ingress, secretLister corelisters.SecretLister) *string {
+	name := ingress.Annotations[destinationCACertificateAnnotationKey]
+	secretDataKey := "destinationCACertificate"
+	secret, err := secretLister.Secrets(ingress.Namespace).Get(name)
+	if err != nil {
+		return nil
+	}
+	if secret.Type != corev1.SecretTypeOpaque {
+		return nil
+	}
+	if v, ok := secret.Data[secretDataKey]; ok {
+		value := string(v)
+		return &value
+	}
+	return nil
 }
