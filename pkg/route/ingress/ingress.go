@@ -878,7 +878,6 @@ func tlsSecretIfValid(ingress *networkingv1.Ingress, rule *networkingv1.IngressR
 }
 
 var terminationPolicyAnnotationKey = routev1.GroupName + "/termination"
-var destinationCACertificateAnnotationKey = routev1.GroupName + "/destinationCACertificate"
 
 func terminationPolicyForIngress(ingress *networkingv1.Ingress) routev1.TLSTerminationType {
 	switch {
@@ -890,9 +889,12 @@ func terminationPolicyForIngress(ingress *networkingv1.Ingress) routev1.TLSTermi
 		return routev1.TLSTerminationEdge
 	}
 }
+
+var destinationCACertificateSecretKeyName = "destinationCACertificate"
+var destinationCACertificateAnnotationKey = routev1.GroupName + "/destinationCACertificateSecret"
+
 func destinationCACertificateForIngress(ingress *networkingv1.Ingress, secretLister corelisters.SecretLister) *string {
 	name := ingress.Annotations[destinationCACertificateAnnotationKey]
-	secretDataKey := "destinationCACertificate"
 	secret, err := secretLister.Secrets(ingress.Namespace).Get(name)
 	if err != nil {
 		return nil
@@ -900,7 +902,7 @@ func destinationCACertificateForIngress(ingress *networkingv1.Ingress, secretLis
 	if secret.Type != corev1.SecretTypeOpaque {
 		return nil
 	}
-	if v, ok := secret.Data[secretDataKey]; ok {
+	if v, ok := secret.Data[destinationCACertificateSecretKeyName]; ok {
 		value := string(v)
 		return &value
 	}
