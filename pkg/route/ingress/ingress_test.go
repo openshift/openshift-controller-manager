@@ -495,6 +495,16 @@ func TestController_sync(t *testing.T) {
 				v1.TLSPrivateKeyKey: []byte(``),
 			},
 		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "secret-ca-cert",
+				Namespace: "test",
+			},
+			Type: v1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				"destinationCACertificate": []byte(`CAcert`),
+			},
+		},
 	}}
 	boolTrue := true
 	customIngressClassName := "custom"
@@ -883,6 +893,85 @@ func TestController_sync(t *testing.T) {
 						},
 						Port: &routev1.RoutePort{
 							TargetPort: intstr.FromString("http"),
+						},
+					},
+				},
+			},
+		},
+
+		{
+			name: "create route - with termination reencypt and destinationCaCert",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination":                    "reencrypt",
+								"route.openshift.io/destinationCACertificateSecret": "secret-ca-cert",
+							},
+						},
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
+								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
+							},
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{},
+			},
+			args:        queueKey{namespace: "test", name: "1"},
+			wantExpects: []queueKey{{namespace: "test", name: "1"}},
+			wantRouteCreates: []*routev1.Route{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "<generated>",
+						Namespace:       "test",
+						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						Annotations: map[string]string{
+							"route.openshift.io/termination":                    "reencrypt",
+							"route.openshift.io/destinationCACertificateSecret": "secret-ca-cert",
+						},
+					},
+					Spec: routev1.RouteSpec{
+						Host: "test.com",
+						Path: "/",
+						To: routev1.RouteTargetReference{
+							Name: "service-1",
+						},
+						Port: &routev1.RoutePort{
+							TargetPort: intstr.FromString("http"),
+						},
+						TLS: &routev1.TLSConfig{
+							Termination:                   routev1.TLSTerminationReencrypt,
+							Key:                           "key",
+							Certificate:                   "cert",
+							DestinationCACertificate:      "CAcert",
+							InsecureEdgeTerminationPolicy: "Redirect",
 						},
 					},
 				},
@@ -1925,6 +2014,81 @@ func TestController_sync(t *testing.T) {
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"reencrypt"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
+				},
+			},
+		},
+		{
+			name: "update route - termination policy changed to reencrypt with destCaCertCertificate",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination":                    "reencrypt",
+								"route.openshift.io/destinationCACertificateSecret": "secret-ca-cert",
+							},
+						},
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							TLS: &routev1.TLSConfig{
+								Termination:                   routev1.TLSTerminationEdge,
+								Certificate:                   "cert",
+								Key:                           "key",
+								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+							},
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
+				{
+					Name:  "1-abcdef",
+					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","destinationCACertificate":"CAcert","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/destinationCACertificateSecret":"secret-ca-cert","route.openshift.io/termination":"reencrypt"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
 				},
 			},
 		},
@@ -3395,7 +3559,7 @@ func TestController_sync(t *testing.T) {
 					t.Errorf("unexpected action[%d]: %#v", i, action)
 				}
 				if !reflect.DeepEqual(string(action.GetPatch()), string(tt.wantRoutePatches[i].Patch)) {
-					t.Errorf("unexpected action[%d]: %s", i, string(action.GetPatch()))
+					t.Errorf("unexpected action[%d]: %s -- %s", i, string(action.GetPatch()), string(tt.wantRoutePatches[i].Patch))
 				}
 			}
 			routeActions = routeActions[len(tt.wantRoutePatches):]
