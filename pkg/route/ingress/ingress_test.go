@@ -3559,7 +3559,7 @@ func TestController_sync(t *testing.T) {
 					t.Errorf("unexpected action[%d]: %#v", i, action)
 				}
 				if !reflect.DeepEqual(string(action.GetPatch()), string(tt.wantRoutePatches[i].Patch)) {
-					t.Errorf("unexpected action[%d]: %s -- %s", i, string(action.GetPatch()), string(tt.wantRoutePatches[i].Patch))
+					t.Errorf("unexpected action[%d]: %s", i, string(action.GetPatch()))
 				}
 			}
 			routeActions = routeActions[len(tt.wantRoutePatches):]
