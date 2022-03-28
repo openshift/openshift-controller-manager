@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -898,7 +899,6 @@ func TestController_sync(t *testing.T) {
 				},
 			},
 		},
-
 		{
 			name: "create route - with termination reencypt and destinationCaCert",
 			fields: fields{
@@ -908,8 +908,8 @@ func TestController_sync(t *testing.T) {
 							Name:      "1",
 							Namespace: "test",
 							Annotations: map[string]string{
-								"route.openshift.io/termination":                    "reencrypt",
-								"route.openshift.io/destinationCACertificateSecret": "secret-ca-cert",
+								"route.openshift.io/termination":                       "reencrypt",
+								"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert",
 							},
 						},
 						Spec: networkingv1.IngressSpec{
@@ -953,8 +953,8 @@ func TestController_sync(t *testing.T) {
 						Namespace:       "test",
 						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
 						Annotations: map[string]string{
-							"route.openshift.io/termination":                    "reencrypt",
-							"route.openshift.io/destinationCACertificateSecret": "secret-ca-cert",
+							"route.openshift.io/termination":                       "reencrypt",
+							"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert",
 						},
 					},
 					Spec: routev1.RouteSpec{
@@ -2118,8 +2118,8 @@ func TestController_sync(t *testing.T) {
 							Name:      "1",
 							Namespace: "test",
 							Annotations: map[string]string{
-								"route.openshift.io/termination":                    "reencrypt",
-								"route.openshift.io/destinationCACertificateSecret": "secret-ca-cert",
+								"route.openshift.io/termination":                       "reencrypt",
+								"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert",
 							},
 						},
 						Spec: networkingv1.IngressSpec{
@@ -2179,8 +2179,17 @@ func TestController_sync(t *testing.T) {
 			args: queueKey{namespace: "test", name: "1"},
 			wantRoutePatches: []clientgotesting.PatchActionImpl{
 				{
-					Name:  "1-abcdef",
-					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","destinationCACertificate":"CAcert","insecureEdgeTerminationPolicy":"Redirect"}}},{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/destinationCACertificateSecret":"secret-ca-cert","route.openshift.io/termination":"reencrypt"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
+					Name: "1-abcdef",
+					Patch: []byte(
+						strings.Join(
+							[]string{
+								`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","destinationCACertificate":"CAcert","insecureEdgeTerminationPolicy":"Redirect"}}}`,
+								`{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/destination-ca-certificate-secret":"secret-ca-cert","route.openshift.io/termination":"reencrypt"}}`,
+								`{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`,
+							},
+							",",
+						),
+					),
 				},
 			},
 		},
