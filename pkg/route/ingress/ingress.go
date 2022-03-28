@@ -592,8 +592,8 @@ func newRouteForIngress(
 		return nil
 	}
 
-	tlsSecret, hasInvalidTLSSecret := tlsSecretIfValid(ingress, rule, secretLister)
-	if hasInvalidTLSSecret {
+	tlsConfig, hasInvalidSecret := tlsConfigForIngress(ingress, rule, secretLister)
+	if hasInvalidSecret {
 		return nil
 	}
 
@@ -623,7 +623,7 @@ func newRouteForIngress(
 				Name: path.Backend.Service.Name,
 			},
 			Port:           port,
-			TLS:            tlsConfigForIngress(ingress, rule, tlsSecret, secretLister),
+			TLS:            tlsConfig,
 			WildcardPolicy: wildcardPolicy,
 		},
 	}
@@ -681,12 +681,11 @@ func routeMatchesIngress(
 		return false
 	}
 
-	tlsSecret, hasInvalidTLSSecret := tlsSecretIfValid(ingress, rule, secretLister)
-	if hasInvalidTLSSecret {
+	tlsConfig, hasInvalidSecret := tlsConfigForIngress(ingress, rule, secretLister)
+	if hasInvalidSecret {
 		return false
 	}
 
-	tlsConfig := tlsConfigForIngress(ingress, rule, tlsSecret, secretLister)
 	if route.Spec.TLS != nil && tlsConfig != nil {
 		tlsConfig.InsecureEdgeTerminationPolicy = route.Spec.TLS.InsecureEdgeTerminationPolicy
 		if _, ok := ingress.Annotations[destinationCACertificateAnnotationKey]; !ok {
@@ -815,11 +814,16 @@ func generateRouteName(base string) string {
 func tlsConfigForIngress(
 	ingress *networkingv1.Ingress,
 	rule *networkingv1.IngressRule,
-	potentiallyNilTLSSecret *corev1.Secret,
 	secretLister corelisters.SecretLister,
-) *routev1.TLSConfig {
+) (*routev1.TLSConfig, bool) {
+
+	potentiallyNilTLSSecret, hasInvalidTLSSecret := tlsSecretIfValid(ingress, rule, secretLister)
+	if hasInvalidTLSSecret {
+		return nil, true
+	}
+
 	if !tlsEnabled(ingress, rule, potentiallyNilTLSSecret) {
-		return nil
+		return nil, false
 	}
 	// Edge: May have cert
 	// Re-Encrypt: May have cert
@@ -839,7 +843,7 @@ func tlsConfigForIngress(
 		tlsConfig.DestinationCACertificate = *destinationCACertificate
 	}
 
-	return tlsConfig
+	return tlsConfig, false
 }
 
 var emptyTLS = networkingv1.IngressTLS{}
