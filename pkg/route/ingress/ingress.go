@@ -899,10 +899,12 @@ func destinationCACertificateForIngress(ingress *networkingv1.Ingress, secretLis
 	if err != nil {
 		return nil
 	}
-	if secret.Type != corev1.SecretTypeOpaque {
+	switch secret.Type {
+	case corev1.SecretTypeTLS, corev1.SecretTypeOpaque:
+	default:
 		return nil
 	}
-	if v, ok := secret.Data[destinationCACertificateSecretKeyName]; ok {
+	if v, ok := secret.Data[corev1.TLSCertKey]; ok {
 		value := string(v)
 		return &value
 	}
