@@ -900,7 +900,6 @@ func terminationPolicyForIngress(ingress *networkingv1.Ingress) routev1.TLSTermi
 	}
 }
 
-var destinationCACertificateSecretKeyName = "destinationCACertificate"
 var destinationCACertificateAnnotationKey = routev1.GroupName + "/destination-ca-certificate-secret"
 
 func destinationCACertificateForIngress(ingress *networkingv1.Ingress, secretLister corelisters.SecretLister) *string {
