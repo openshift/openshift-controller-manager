@@ -503,7 +503,7 @@ func TestController_sync(t *testing.T) {
 			},
 			Type: v1.SecretTypeOpaque,
 			Data: map[string][]byte{
-				"destinationCACertificate": []byte(`CAcert`),
+				v1.TLSCertKey: []byte(`CAcert`),
 			},
 		},
 	}}
