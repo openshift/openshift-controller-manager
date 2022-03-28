@@ -635,6 +635,9 @@ func preserveRouteAttributesFromExisting(r, existing *routev1.Route) {
 	r.Spec.To.Weight = existing.Spec.To.Weight
 	if r.Spec.TLS != nil && existing.Spec.TLS != nil {
 		r.Spec.TLS.CACertificate = existing.Spec.TLS.CACertificate
+		if _, ok := r.Annotations[destinationCACertificateAnnotationKey]; !ok {
+			r.Spec.TLS.DestinationCACertificate = existing.Spec.TLS.DestinationCACertificate
+		}
 		r.Spec.TLS.InsecureEdgeTerminationPolicy = existing.Spec.TLS.InsecureEdgeTerminationPolicy
 	}
 }
@@ -686,6 +689,9 @@ func routeMatchesIngress(
 	tlsConfig := tlsConfigForIngress(ingress, rule, tlsSecret, secretLister)
 	if route.Spec.TLS != nil && tlsConfig != nil {
 		tlsConfig.InsecureEdgeTerminationPolicy = route.Spec.TLS.InsecureEdgeTerminationPolicy
+		if _, ok := ingress.Annotations[destinationCACertificateAnnotationKey]; !ok {
+			tlsConfig.DestinationCACertificate = route.Spec.TLS.DestinationCACertificate
+		}
 	}
 	return reflect.DeepEqual(tlsConfig, route.Spec.TLS)
 }
