@@ -1516,6 +1516,98 @@ func TestController_sync(t *testing.T) {
 			args: queueKey{namespace: "test", name: "1"},
 		},
 		{
+			name: "no-op - destination CA certificate has been changed by the user",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination": "reencrypt",
+							},
+						},
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
+								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
+							},
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Status: networkingv1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.foo.com"},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							Annotations: map[string]string{
+								"route.openshift.io/termination": "reencrypt",
+							},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+							TLS: &routev1.TLSConfig{
+								Termination:              routev1.TLSTerminationReencrypt,
+								Key:                      "key",
+								Certificate:              "cert",
+								DestinationCACertificate: "cert",
+							},
+						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{
+								{
+									RouterCanonicalHostname: "apps.foo.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionTrue,
+									}},
+								},
+							},
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
 			name: "update ingress with missing secret ref",
 			fields: fields{
 				i: &ingressLister{Items: []*networkingv1.Ingress{
