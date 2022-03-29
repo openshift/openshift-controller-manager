@@ -201,7 +201,7 @@ func NewController(eventsClient kv1core.EventsGetter, routeClient routeclient.Ro
 		FilterFunc: func(obj interface{}) bool {
 			switch t := obj.(type) {
 			case *corev1.Secret:
-				return t.Type == corev1.SecretTypeTLS
+				return t.Type == corev1.SecretTypeTLS || t.Type == corev1.SecretTypeOpaque
 			}
 			return true
 		},
