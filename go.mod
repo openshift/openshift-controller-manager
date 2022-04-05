@@ -21,7 +21,7 @@ require (
 	github.com/openshift/client-go v0.0.0-20210916133943-9acee1a0fb83
 	github.com/openshift/library-go v0.0.0-20210929123655-f91754363286
 	github.com/openshift/runtime-utils v0.0.0-20200415173359-c45d4ff3f912
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/spf13/cobra v1.2.1
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
