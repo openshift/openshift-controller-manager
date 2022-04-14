@@ -700,7 +700,7 @@ func TestCreateBuildPodWithPodSpecCreationError(t *testing.T) {
 	}
 	expected := &buildUpdate{}
 	expected.setReason(buildv1.StatusReasonCannotCreateBuildPodSpec)
-	expected.setMessage("Failed to create pod spec.")
+	expected.setMessage("Failed to create pod spec: failed to create a build pod spec for build namespace/data-build: error")
 	validateUpdate(t, "create build pod with pod spec creation error", expected, update)
 }
 
@@ -1023,7 +1023,7 @@ func TestCreateBuildPodWithPodCreationError(t *testing.T) {
 
 	expected := &buildUpdate{}
 	expected.setReason(buildv1.StatusReasonCannotCreateBuildPod)
-	expected.setMessage("Failed creating build pod.")
+	expected.setMessage("Failed creating build pod: error")
 	validateUpdate(t, "create build pod with pod creation error", expected, update)
 }
 
