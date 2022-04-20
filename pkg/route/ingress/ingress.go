@@ -635,10 +635,12 @@ func preserveRouteAttributesFromExisting(r, existing *routev1.Route) {
 	r.Spec.To.Weight = existing.Spec.To.Weight
 	if r.Spec.TLS != nil && existing.Spec.TLS != nil {
 		r.Spec.TLS.CACertificate = existing.Spec.TLS.CACertificate
-		if _, ok := r.Annotations[destinationCACertificateAnnotationKey]; !ok {
-			r.Spec.TLS.DestinationCACertificate = existing.Spec.TLS.DestinationCACertificate
-		}
 		r.Spec.TLS.InsecureEdgeTerminationPolicy = existing.Spec.TLS.InsecureEdgeTerminationPolicy
+		if r.Spec.TLS.Termination == routev1.TLSTerminationReencrypt {
+			if _, ok := r.Annotations[destinationCACertificateAnnotationKey]; !ok {
+				r.Spec.TLS.DestinationCACertificate = existing.Spec.TLS.DestinationCACertificate
+			}
+		}
 	}
 }
 
