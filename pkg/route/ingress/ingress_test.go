@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -495,6 +496,26 @@ func TestController_sync(t *testing.T) {
 				v1.TLSPrivateKeyKey: []byte(``),
 			},
 		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "secret-ca-cert",
+				Namespace: "test",
+			},
+			Type: v1.SecretTypeTLS,
+			Data: map[string][]byte{
+				v1.TLSCertKey: []byte(`CAcert`),
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "secret-ca-cert-opaque",
+				Namespace: "test",
+			},
+			Type: v1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				v1.TLSCertKey: []byte(`CAcert-from-opaque`),
+			},
+		},
 	}}
 	boolTrue := true
 	customIngressClassName := "custom"
@@ -883,6 +904,84 @@ func TestController_sync(t *testing.T) {
 						},
 						Port: &routev1.RoutePort{
 							TargetPort: intstr.FromString("http"),
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "create route - with termination reencypt and destinationCaCert",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination":                       "reencrypt",
+								"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert",
+							},
+						},
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
+								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
+							},
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{},
+			},
+			args:        queueKey{namespace: "test", name: "1"},
+			wantExpects: []queueKey{{namespace: "test", name: "1"}},
+			wantRouteCreates: []*routev1.Route{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            "<generated>",
+						Namespace:       "test",
+						OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						Annotations: map[string]string{
+							"route.openshift.io/termination":                       "reencrypt",
+							"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert",
+						},
+					},
+					Spec: routev1.RouteSpec{
+						Host: "test.com",
+						Path: "/",
+						To: routev1.RouteTargetReference{
+							Name: "service-1",
+						},
+						Port: &routev1.RoutePort{
+							TargetPort: intstr.FromString("http"),
+						},
+						TLS: &routev1.TLSConfig{
+							Termination:                   routev1.TLSTerminationReencrypt,
+							Key:                           "key",
+							Certificate:                   "cert",
+							DestinationCACertificate:      "CAcert",
+							InsecureEdgeTerminationPolicy: "Redirect",
 						},
 					},
 				},
@@ -1427,6 +1526,165 @@ func TestController_sync(t *testing.T) {
 			args: queueKey{namespace: "test", name: "1"},
 		},
 		{
+			name: "no-op - destination CA certificate has been changed by the user",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination": "reencrypt",
+							},
+						},
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
+								{Hosts: []string{"test.com"}, SecretName: "secret-1"},
+							},
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Status: networkingv1.IngressStatus{
+							LoadBalancer: v1.LoadBalancerStatus{
+								Ingress: []v1.LoadBalancerIngress{
+									{Hostname: "apps.foo.com"},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							Annotations: map[string]string{
+								"route.openshift.io/termination": "reencrypt",
+							},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+							TLS: &routev1.TLSConfig{
+								Termination:              routev1.TLSTerminationReencrypt,
+								Key:                      "key",
+								Certificate:              "cert",
+								DestinationCACertificate: "cert",
+							},
+						},
+						Status: routev1.RouteStatus{
+							Ingress: []routev1.RouteIngress{
+								{
+									RouterCanonicalHostname: "apps.foo.com",
+									Conditions: []routev1.RouteIngressCondition{{
+										Type:   routev1.RouteAdmitted,
+										Status: v1.ConditionTrue,
+									}},
+								},
+							},
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+		},
+		{
+			name: "update ingress with missing secret ref",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+						},
+						Spec: networkingv1.IngressSpec{
+							TLS: []networkingv1.IngressTLS{
+								{Hosts: []string{"test.com"}, SecretName: "secret-4"},
+							},
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantRouteDeletes: []clientgotesting.DeleteActionImpl{
+				{
+					Name: "1-abcdef",
+				},
+			},
+		},
+		{
 			name: "update ingress with missing secret ref",
 			fields: fields{
 				i: &ingressLister{Items: []*networkingv1.Ingress{
@@ -1925,6 +2183,267 @@ func TestController_sync(t *testing.T) {
 				{
 					Name:  "1-abcdef",
 					Patch: []byte(`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","insecureEdgeTerminationPolicy":"Redirect"}}},` + `{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"reencrypt"}},{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`),
+				},
+			},
+		},
+		{
+			name: "update route - termination policy changed to reencrypt with destCaCertCertificate",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination":                       "reencrypt",
+								"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert",
+							},
+						},
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							TLS: &routev1.TLSConfig{
+								Termination:                   routev1.TLSTerminationEdge,
+								Certificate:                   "cert",
+								Key:                           "key",
+								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+							},
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
+				{
+					Name: "1-abcdef",
+					Patch: []byte(
+						strings.Join(
+							[]string{
+								`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","destinationCACertificate":"CAcert","insecureEdgeTerminationPolicy":"Redirect"}}}`,
+								`{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/destination-ca-certificate-secret":"secret-ca-cert","route.openshift.io/termination":"reencrypt"}}`,
+								`{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`,
+							},
+							",",
+						),
+					),
+				},
+			},
+		},
+		{
+			name: "update route - termination policy changed from reencrypt to to edge - Must clear destinationCaCertificate",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination": "edge",
+							},
+						},
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1-abcdef",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination":                       "reencrypt",
+								"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert",
+							},
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							TLS: &routev1.TLSConfig{
+								Termination:                   routev1.TLSTerminationReencrypt,
+								Certificate:                   "cert",
+								Key:                           "key",
+								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+								DestinationCACertificate:      "CACert",
+							},
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
+				{
+					Name: "1-abcdef",
+					Patch: []byte(
+						strings.Join(
+							[]string{
+								`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Redirect"}}}`,
+								`{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/termination":"edge"}}`,
+								`{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`,
+							},
+							",",
+						),
+					),
+				},
+			},
+		},
+		{
+			name: "update route - destination-ca-certificate-secret type changed",
+			fields: fields{
+				i: &ingressLister{Items: []*networkingv1.Ingress{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"route.openshift.io/termination":                       "reencrypt",
+								"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert-opaque",
+							},
+						},
+						Spec: networkingv1.IngressSpec{
+							Rules: []networkingv1.IngressRule{
+								{
+									Host: "test.com",
+									IngressRuleValue: networkingv1.IngressRuleValue{
+										HTTP: &networkingv1.HTTPIngressRuleValue{
+											Paths: []networkingv1.HTTPIngressPath{
+												{
+													Path:     "/",
+													PathType: &pathTypePrefix,
+													Backend: networkingv1.IngressBackend{
+														Service: &networkingv1.IngressServiceBackend{
+															Name: "service-1",
+															Port: networkingv1.ServiceBackendPort{
+																Name: "http",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}},
+				r: &routeLister{Items: []*routev1.Route{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:            "1-abcdef",
+							Namespace:       "test",
+							OwnerReferences: []metav1.OwnerReference{{APIVersion: "networking.k8s.io/v1", Kind: "Ingress", Name: "1", Controller: &boolTrue}},
+							Annotations: map[string]string{
+								"route.openshift.io/termination":                       "reencrypt",
+								"route.openshift.io/destination-ca-certificate-secret": "secret-ca-cert",
+							},
+						},
+						Spec: routev1.RouteSpec{
+							Host: "test.com",
+							Path: "/",
+							TLS: &routev1.TLSConfig{
+								Termination:                   routev1.TLSTerminationEdge,
+								Certificate:                   "cert",
+								DestinationCACertificate:      "CACert",
+								Key:                           "key",
+								InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+							},
+							To: routev1.RouteTargetReference{
+								Name: "service-1",
+							},
+							Port: &routev1.RoutePort{
+								TargetPort: intstr.FromString("http"),
+							},
+							WildcardPolicy: routev1.WildcardPolicyNone,
+						},
+					},
+				}},
+			},
+			args: queueKey{namespace: "test", name: "1"},
+			wantRoutePatches: []clientgotesting.PatchActionImpl{
+				{
+					Name: "1-abcdef",
+					Patch: []byte(
+						strings.Join(
+							[]string{
+								`[{"op":"replace","path":"/spec","value":{"host":"test.com","path":"/","to":{"kind":"","name":"service-1","weight":null},"port":{"targetPort":"http"},"tls":{"termination":"reencrypt","destinationCACertificate":"CAcert-from-opaque","insecureEdgeTerminationPolicy":"Redirect"}}}`,
+								`{"op":"replace","path":"/metadata/annotations","value":{"route.openshift.io/destination-ca-certificate-secret":"secret-ca-cert-opaque","route.openshift.io/termination":"reencrypt"}}`,
+								`{"op":"replace","path":"/metadata/ownerReferences","value":[{"apiVersion":"networking.k8s.io/v1","kind":"Ingress","name":"1","uid":"","controller":true}]}]`,
+							},
+							",",
+						),
+					),
 				},
 			},
 		},
