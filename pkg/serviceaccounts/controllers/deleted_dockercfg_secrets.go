@@ -84,7 +84,9 @@ func (e *DockercfgDeletedController) secretDeleted(obj interface{}) {
 	if !ok {
 		return
 	}
-	if _, exists := dockercfgSecret.Annotations[ServiceAccountTokenSecretNameKey]; !exists {
+
+	saName, saUID := dockercfgSecret.Annotations[v1.ServiceAccountNameKey], dockercfgSecret.Annotations[v1.ServiceAccountUIDKey]
+	if len(saName) == 0 || len(saUID) == 0 {
 		return
 	}
 
@@ -102,10 +104,6 @@ func (e *DockercfgDeletedController) secretDeleted(obj interface{}) {
 		break
 	}
 
-	// remove the reference token secret
-	if err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(context.TODO(), dockercfgSecret.Annotations[ServiceAccountTokenSecretNameKey], metav1.DeleteOptions{}); (err != nil) && !kapierrors.IsNotFound(err) {
-		utilruntime.HandleError(err)
-	}
 }
 
 // removeDockercfgSecretReference updates the given ServiceAccount to remove ImagePullSecret and Secret references

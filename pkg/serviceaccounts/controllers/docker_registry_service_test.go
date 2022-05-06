@@ -148,7 +148,6 @@ func TestUpdateNewStyleSecretAndDNSSuffixAndAdditionalURLs(t *testing.T) {
 			Name: "secret-name", Namespace: registryNamespace,
 			Annotations: map[string]string{
 				ServiceAccountTokenValueAnnotation: "the-token",
-				ServiceAccountTokenSecretNameKey:   "sa-token-secret",
 			},
 		},
 		Type: v1.SecretTypeDockercfg,
@@ -240,12 +239,13 @@ func TestUpdateOldStyleSecretWithKey(t *testing.T) {
 	defer close(stopChannel)
 	received := make(chan bool)
 	updatedSecret := make(chan bool)
+	const saTokenString = "token-value"
 
 	existingDockercfgMap := credentialprovider.DockerConfig{}
 	for _, key := range []string{"somekey"} {
 		existingDockercfgMap[key] = credentialprovider.DockerConfigEntry{
 			Username: "serviceaccount",
-			Password: "token-value",
+			Password: saTokenString,
 			Email:    "serviceaccount@example.org",
 		}
 	}
@@ -257,7 +257,7 @@ func TestUpdateOldStyleSecretWithKey(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "secret-name", Namespace: registryNamespace,
 			Annotations: map[string]string{
-				ServiceAccountTokenSecretNameKey: "sa-token-secret",
+				ServiceAccountTokenValueAnnotation: saTokenString,
 			},
 		},
 		Type: v1.SecretTypeDockercfg,
@@ -300,7 +300,7 @@ func TestUpdateOldStyleSecretWithKey(t *testing.T) {
 	for _, key := range expectedLocations {
 		expectedDockercfgMap[key] = credentialprovider.DockerConfigEntry{
 			Username: "serviceaccount",
-			Password: "token-value",
+			Password: saTokenString,
 			Email:    "serviceaccount@example.org",
 		}
 	}
@@ -334,32 +334,21 @@ func TestUpdateOldStyleSecretWithoutKey(t *testing.T) {
 	defer close(stopChannel)
 	received := make(chan bool)
 	updatedSecret := make(chan bool)
+	const saTokenString = "token-value"
 
 	oldStyleDockercfgSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "secret-name", Namespace: registryNamespace,
 			Annotations: map[string]string{
-				ServiceAccountTokenSecretNameKey: "sa-token-secret",
+				ServiceAccountTokenValueAnnotation: saTokenString,
 			},
 		},
 		Type: v1.SecretTypeDockercfg,
 		Data: map[string][]byte{v1.DockerConfigKey: []byte("{}")},
 	}
-	tokenSecret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "sa-token-secret", Namespace: registryNamespace,
-			Annotations: map[string]string{
-				ServiceAccountTokenSecretNameKey: "sa-token-secret",
-			},
-		},
-		Type: v1.SecretTypeServiceAccountToken,
-		Data: map[string][]byte{v1.ServiceAccountTokenKey: []byte("the-sa-bearer-token")},
-	}
 
-	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{tokenSecret, oldStyleDockercfgSecret}, t, stopChannel)
-	kubeclient.PrependReactor("get", "secrets", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
-		return true, tokenSecret, nil
-	})
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{oldStyleDockercfgSecret}, t, stopChannel)
+
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
 	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
 	informerFactory.Start(stopChannel)
@@ -396,7 +385,7 @@ func TestUpdateOldStyleSecretWithoutKey(t *testing.T) {
 	for _, key := range expectedLocations {
 		expectedDockercfgMap[key] = credentialprovider.DockerConfigEntry{
 			Username: "serviceaccount",
-			Password: "the-sa-bearer-token",
+			Password: saTokenString,
 			Email:    "serviceaccount@example.org",
 		}
 	}
@@ -430,12 +419,13 @@ func TestClearSecretAndRecreate(t *testing.T) {
 	defer close(stopChannel)
 	received := make(chan bool)
 	updatedSecret := make(chan bool)
+	const saTokenString = "token-value"
 
 	existingDockercfgMap := credentialprovider.DockerConfig{}
 	for _, key := range []string{"somekey"} {
 		existingDockercfgMap[key] = credentialprovider.DockerConfigEntry{
 			Username: "serviceaccount",
-			Password: "token-value",
+			Password: saTokenString,
 			Email:    "serviceaccount@example.org",
 		}
 	}
@@ -447,8 +437,7 @@ func TestClearSecretAndRecreate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "secret-name", Namespace: registryNamespace,
 			Annotations: map[string]string{
-				ServiceAccountTokenValueAnnotation: "the-token",
-				ServiceAccountTokenSecretNameKey:   "sa-token-secret",
+				ServiceAccountTokenValueAnnotation: saTokenString,
 			},
 		},
 		Type: v1.SecretTypeDockercfg,
@@ -535,7 +524,7 @@ func TestClearSecretAndRecreate(t *testing.T) {
 	for _, key := range expectedLocations {
 		expectedDockercfgMap[key] = credentialprovider.DockerConfigEntry{
 			Username: "serviceaccount",
-			Password: "the-token",
+			Password: saTokenString,
 			Email:    "serviceaccount@example.org",
 		}
 	}
@@ -575,7 +564,6 @@ func TestUpdateNewStyleSecretIPv6(t *testing.T) {
 			Name: "secret-name", Namespace: registryNamespace,
 			Annotations: map[string]string{
 				ServiceAccountTokenValueAnnotation: "the-token",
-				ServiceAccountTokenSecretNameKey:   "sa-token-secret",
 			},
 		},
 		Type: v1.SecretTypeDockercfg,

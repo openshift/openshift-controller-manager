@@ -314,7 +314,7 @@ func (e *DockerRegistryServiceController) syncRegistryLocationChange() error {
 				continue
 			}
 			// Do not manage dockercfg secrets we haven't created (eg. secrets created by user for private repositories).
-			if _, hasTokenSecret := t.Annotations[ServiceAccountTokenSecretNameKey]; !hasTokenSecret {
+			if _, hasToken := t.Annotations[ServiceAccountTokenValueAnnotation]; !hasToken {
 				continue
 			}
 		default:
@@ -396,17 +396,12 @@ func (e *DockerRegistryServiceController) syncSecretUpdate(key string) error {
 		dockerCredentials = dockercfgMap[existingDockercfgSecretLocations.List()[0]].Password
 	}
 	if len(dockerCredentials) == 0 {
-		tokenSecretKey := dockercfgSecret.Namespace + "/" + dockercfgSecret.Annotations[ServiceAccountTokenSecretNameKey]
-		tokenSecret, exists, err := e.secretCache.GetByKey(tokenSecretKey)
+		saToken, exists := dockercfgSecret.Annotations[ServiceAccountTokenValueAnnotation]
 		if !exists {
-			utilruntime.HandleError(fmt.Errorf("cannot determine SA token due to missing secret: %v", tokenSecretKey))
+			utilruntime.HandleError(fmt.Errorf("cannot determine SA token, it was likely not yet requested: %v", saToken))
 			return nil
 		}
-		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("cannot determine SA token: %v", err))
-			return nil
-		}
-		dockerCredentials = string(tokenSecret.(*v1.Secret).Data[v1.ServiceAccountTokenKey])
+		dockerCredentials = saToken
 	}
 
 	newDockercfgMap := credentialprovider.DockerConfig{}

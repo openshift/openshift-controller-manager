@@ -48,18 +48,6 @@ func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error
 	// upstream token secret controller.
 	kc := ctx.HighRateLimitClientBuilder.ClientOrDie(iInfraServiceAccountPullSecretsControllerServiceAccountName)
 
-	go serviceaccountcontrollers.NewDockercfgDeletedController(
-		ctx.KubernetesInformers.Core().V1().Secrets(),
-		kc,
-		serviceaccountcontrollers.DockercfgDeletedControllerOptions{},
-	).Run(ctx.Stop)
-
-	go serviceaccountcontrollers.NewDockercfgTokenDeletedController(
-		ctx.KubernetesInformers.Core().V1().Secrets(),
-		kc,
-		serviceaccountcontrollers.DockercfgTokenDeletedControllerOptions{},
-	).Run(ctx.Stop)
-
 	dockerURLsInitialized := make(chan struct{})
 	dockercfgController := serviceaccountcontrollers.NewDockercfgController(
 		ctx.KubernetesInformers.Core().V1().ServiceAccounts(),
