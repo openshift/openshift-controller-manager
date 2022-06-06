@@ -16,7 +16,7 @@ IMAGE_REGISTRY :=registry.svc.ci.openshift.org
 # $2 - image ref
 # $3 - Dockerfile path
 # $4 - context directory for image build# It will generate target "image-$(1)" for builing the image an binding it as a prerequisite to target "images".
-$(call build-image,ocp-openshift-controller-manager,$(IMAGE_REGISTRY)/ocp/4.5:openshift-controller-manager, ./Dockerfile,.)
+$(call build-image,ocp-openshift-controller-manager,$(IMAGE_REGISTRY)/ocp/4.5:openshift-controller-manager, ./Dockerfile.rhel,.)
 
 clean:
 	$(RM) ./openshift-controller-manager
