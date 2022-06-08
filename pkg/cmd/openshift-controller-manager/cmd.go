@@ -56,7 +56,7 @@ func NewOpenShiftControllerManagerCommand(name string, out, errout io.Writer, st
 						os.Exit(255)
 					}
 				}
-				klog.Fatal(err)
+				klog.Fatal(fmt.Sprintf("fatal error occurred: %v", err))
 			}
 		},
 	}

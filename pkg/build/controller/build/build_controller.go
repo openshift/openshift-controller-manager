@@ -35,7 +35,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
-	"github.com/containers/image/pkg/sysregistriesv2"
+	sysregistriesv2 "github.com/containers/image/v5/pkg/sysregistriesv2"
 	rutil "github.com/openshift/runtime-utils/pkg/registries"
 
 	buildv1 "github.com/openshift/api/build/v1"
