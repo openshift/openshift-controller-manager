@@ -4,8 +4,9 @@ go 1.14
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/blang/semver v3.5.1+incompatible
+	github.com/blang/semver/v4 v4.0.0
 	github.com/containers/image v3.0.2+incompatible
+	github.com/containers/image/v5 v5.11.0
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-logr/logr v1.2.2 // indirect
@@ -56,6 +57,7 @@ replace (
 	k8s.io/kube-scheduler => k8s.io/kube-scheduler v0.24.0
 	k8s.io/kubectl => k8s.io/kubectl v0.24.0
 	k8s.io/kubelet => k8s.io/kubelet v0.24.0
+	k8s.io/kubernetes => k8s.io/kubernetes v1.24.0
 	k8s.io/legacy-cloud-providers => k8s.io/legacy-cloud-providers v0.24.0
 	k8s.io/metrics => k8s.io/metrics v0.24.0
 	k8s.io/mount-utils => k8s.io/mount-utils v0.24.0
