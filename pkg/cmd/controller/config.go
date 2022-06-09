@@ -1,27 +1,6 @@
 package controller
 
 var ControllerInitializers = map[string]InitFunc{
-	"openshift.io/serviceaccount": RunServiceAccountController,
-
-	"openshift.io/default-rolebindings": RunDefaultRoleBindingController,
-
-	"openshift.io/serviceaccount-pull-secrets": RunServiceAccountPullSecretsController,
-	"openshift.io/origin-namespace":            RunOriginNamespaceController,
-
-	"openshift.io/build":               RunBuildController,
-	"openshift.io/build-config-change": RunBuildConfigChangeController,
-
-	"openshift.io/deployer":         RunDeployerController,
-	"openshift.io/deploymentconfig": RunDeploymentConfigController,
-
-	"openshift.io/image-trigger":          RunImageTriggerController,
-	"openshift.io/image-import":           RunImageImportController,
-	"openshift.io/image-signature-import": RunImageSignatureImportController,
-
-	"openshift.io/templateinstance":          RunTemplateInstanceController,
-	"openshift.io/templateinstancefinalizer": RunTemplateInstanceFinalizerController,
-
-	"openshift.io/unidling":         RunUnidlingController,
 	"openshift.io/ingress-ip":       RunIngressIPController,
 	"openshift.io/ingress-to-route": RunIngressToRouteController,
 }
