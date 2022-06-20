@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -47,7 +48,7 @@ var (
 	}
 )
 
-func controllerSetup(startingObjects []runtime.Object, t *testing.T, stopCh <-chan struct{}) (*fake.Clientset, *watch.FakeWatcher, *DockerRegistryServiceController, informers.SharedInformerFactory) {
+func controllerSetup(startingObjects []runtime.Object, t *testing.T) (*fake.Clientset, *watch.FakeWatcher, *DockerRegistryServiceController, informers.SharedInformerFactory) {
 	kubeclient := fake.NewSimpleClientset(startingObjects...)
 	fakeWatch := watch.NewFake()
 	kubeclient.PrependReactor("create", "*", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
@@ -91,11 +92,11 @@ func wrapHandler(indicator chan bool, handler func() error, t *testing.T) func()
 	}
 }
 
-func wrapStringHandler(indicator chan bool, handler func(string) error, t *testing.T) func(string) error {
-	return func(key string) error {
+func wrapStringHandler(indicator chan bool, handler func(context.Context, string) error, t *testing.T) func(context.Context, string) error {
+	return func(ctx context.Context, key string) error {
 		defer func() { indicator <- true }()
 
-		err := handler(key)
+		err := handler(ctx, key)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -105,11 +106,11 @@ func wrapStringHandler(indicator chan bool, handler func(string) error, t *testi
 }
 
 func TestNoChangeNoOp(t *testing.T) {
-	stopChannel := make(chan struct{})
-	defer close(stopChannel)
+	testCtx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 	received := make(chan bool)
 
-	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4}, t, stopChannel)
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4}, t)
 	kubeclient.PrependReactor("update", "secrets", func(action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, &v1.Secret{}, fmt.Errorf("%v unexpected", action)
 	})
@@ -117,8 +118,8 @@ func TestNoChangeNoOp(t *testing.T) {
 		return true, &v1.Secret{}, fmt.Errorf("%v unexpected", action)
 	})
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
-	informerFactory.Start(stopChannel)
-	go controller.Run(5, stopChannel)
+	informerFactory.Start(testCtx.Done())
+	go controller.Run(testCtx, 5)
 
 	t.Log("Waiting for ready")
 	select {
@@ -138,8 +139,9 @@ func TestNoChangeNoOp(t *testing.T) {
 }
 
 func TestUpdateNewStyleSecretAndDNSSuffixAndAdditionalURLs(t *testing.T) {
-	stopChannel := make(chan struct{})
-	defer close(stopChannel)
+	testCtx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
 	received := make(chan bool)
 	updatedSecret := make(chan bool)
 
@@ -154,15 +156,15 @@ func TestUpdateNewStyleSecretAndDNSSuffixAndAdditionalURLs(t *testing.T) {
 		Data: map[string][]byte{v1.DockerConfigKey: []byte("{}")},
 	}
 
-	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{newStyleDockercfgSecret}, t, stopChannel)
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{newStyleDockercfgSecret}, t)
 	controller.clusterDNSSuffix = "something.else"
 	// this bit also tests the additional registryURL options
 	controller.additionalRegistryURLs = []string{"foo.bar.com"}
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
 	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
 	controller.initialSecretsCheckDone = false
-	informerFactory.Start(stopChannel)
-	go controller.Run(5, stopChannel)
+	informerFactory.Start(testCtx.Done())
+	go controller.Run(testCtx, 5)
 
 	t.Log("Waiting for ready")
 	select {
@@ -235,8 +237,9 @@ func TestUpdateNewStyleSecretAndDNSSuffixAndAdditionalURLs(t *testing.T) {
 }
 
 func TestUpdateOldStyleSecretWithKey(t *testing.T) {
-	stopChannel := make(chan struct{})
-	defer close(stopChannel)
+	testCtx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
 	received := make(chan bool)
 	updatedSecret := make(chan bool)
 	const saTokenString = "token-value"
@@ -264,12 +267,12 @@ func TestUpdateOldStyleSecretWithKey(t *testing.T) {
 		Data: map[string][]byte{v1.DockerConfigKey: dockercfgContent},
 	}
 
-	kubeclient, _, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4, oldStyleDockercfgSecret}, t, stopChannel)
+	kubeclient, _, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4, oldStyleDockercfgSecret}, t)
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
 	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
 	controller.initialSecretsCheckDone = false
-	informerFactory.Start(stopChannel)
-	go controller.Run(5, stopChannel)
+	informerFactory.Start(testCtx.Done())
+	go controller.Run(testCtx, 5)
 
 	t.Log("Waiting for ready")
 	select {
@@ -330,8 +333,9 @@ func TestUpdateOldStyleSecretWithKey(t *testing.T) {
 }
 
 func TestUpdateOldStyleSecretWithoutKey(t *testing.T) {
-	stopChannel := make(chan struct{})
-	defer close(stopChannel)
+	testCtx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
 	received := make(chan bool)
 	updatedSecret := make(chan bool)
 	const saTokenString = "token-value"
@@ -347,12 +351,12 @@ func TestUpdateOldStyleSecretWithoutKey(t *testing.T) {
 		Data: map[string][]byte{v1.DockerConfigKey: []byte("{}")},
 	}
 
-	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{oldStyleDockercfgSecret}, t, stopChannel)
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{oldStyleDockercfgSecret}, t)
 
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
 	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
-	informerFactory.Start(stopChannel)
-	go controller.Run(5, stopChannel)
+	informerFactory.Start(testCtx.Done())
+	go controller.Run(testCtx, 5)
 
 	t.Log("Waiting for ready")
 	select {
@@ -415,8 +419,9 @@ func TestUpdateOldStyleSecretWithoutKey(t *testing.T) {
 }
 
 func TestClearSecretAndRecreate(t *testing.T) {
-	stopChannel := make(chan struct{})
-	defer close(stopChannel)
+	testCtx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
 	received := make(chan bool)
 	updatedSecret := make(chan bool)
 	const saTokenString = "token-value"
@@ -444,11 +449,11 @@ func TestClearSecretAndRecreate(t *testing.T) {
 		Data: map[string][]byte{v1.DockerConfigKey: dockercfgContent},
 	}
 
-	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4, oldStyleDockercfgSecret}, t, stopChannel)
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{registryServiceIPV4, oldStyleDockercfgSecret}, t)
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
 	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
-	informerFactory.Start(stopChannel)
-	go controller.Run(5, stopChannel)
+	informerFactory.Start(testCtx.Done())
+	go controller.Run(testCtx, 5)
 
 	t.Log("Waiting for ready")
 	select {
@@ -554,8 +559,9 @@ func TestClearSecretAndRecreate(t *testing.T) {
 }
 
 func TestUpdateNewStyleSecretIPv6(t *testing.T) {
-	stopChannel := make(chan struct{})
-	defer close(stopChannel)
+	testCtx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
 	received := make(chan bool)
 	updatedSecret := make(chan bool)
 
@@ -570,15 +576,15 @@ func TestUpdateNewStyleSecretIPv6(t *testing.T) {
 		Data: map[string][]byte{v1.DockerConfigKey: []byte("{}")},
 	}
 
-	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{newStyleDockercfgSecret}, t, stopChannel)
+	kubeclient, fakeWatch, controller, informerFactory := controllerSetup([]runtime.Object{newStyleDockercfgSecret}, t)
 	controller.clusterDNSSuffix = "something.else"
 	// this bit also tests the additional registryURL options
 	controller.additionalRegistryURLs = []string{"foo.bar.com"}
 	controller.syncRegistryLocationHandler = wrapHandler(received, controller.syncRegistryLocationChange, t)
 	controller.syncSecretHandler = wrapStringHandler(updatedSecret, controller.syncSecretUpdate, t)
 	controller.initialSecretsCheckDone = false
-	informerFactory.Start(stopChannel)
-	go controller.Run(5, stopChannel)
+	informerFactory.Start(testCtx.Done())
+	go controller.Run(testCtx, 5)
 
 	t.Log("Waiting for ready")
 	select {

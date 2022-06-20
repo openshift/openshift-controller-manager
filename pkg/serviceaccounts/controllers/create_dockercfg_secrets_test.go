@@ -80,7 +80,7 @@ func TestDockercfgController_secretExpirationsChecker(t *testing.T) {
 				secretCache: secretCache,
 				secretQueue: secretQueue,
 			}
-			e.secretExpirationsChecker()
+			e.secretExpirationsChecker(context.Background())
 
 			require.Equal(t, tt.expectedQueueLen, secretQueue.Len())
 		})
@@ -203,7 +203,7 @@ func TestDockercfgController_syncSecret(t *testing.T) {
 			}()
 
 			go func() {
-				if err := e.syncSecret(key); (err != nil) != tt.wantErr {
+				if err := e.syncSecret(context.Background(), key); (err != nil) != tt.wantErr {
 					t.Errorf("DockercfgController.syncSecret() error = %v, wantErr %v", err, tt.wantErr)
 				}
 
@@ -435,7 +435,7 @@ func TestDockercfgController_syncServiceAccount(t *testing.T) {
 			}()
 
 			go func() {
-				if err := e.syncServiceAccount(key); (err != nil) != tt.wantErr {
+				if err := e.syncServiceAccount(context.Background(), key); (err != nil) != tt.wantErr {
 					t.Errorf("DockercfgController.syncServiceAccount() error = %v, wantErr %v", err, tt.wantErr)
 				}
 

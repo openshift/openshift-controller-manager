@@ -55,7 +55,7 @@ func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error
 		kc,
 		serviceaccountcontrollers.DockercfgControllerOptions{DockerURLsInitialized: dockerURLsInitialized},
 	)
-	go dockercfgController.Run(5, ctx.Stop)
+	go dockercfgController.Run(ctx.Context, 5)
 
 	dockerRegistryControllerOptions := serviceaccountcontrollers.DockerRegistryServiceControllerOptions{
 		DockercfgController:    dockercfgController,
@@ -68,7 +68,7 @@ func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error
 		ctx.KubernetesInformers.Core().V1().Services(),
 		kc,
 		dockerRegistryControllerOptions,
-	).Run(10, ctx.Stop)
+	).Run(ctx.Context, 10)
 
 	return true, nil
 }

@@ -122,7 +122,7 @@ type DockerRegistryServiceController struct {
 
 	secretCache       cache.Store
 	secretsSynced     func() bool
-	syncSecretHandler func(key string) error
+	syncSecretHandler func(ctx context.Context, key string) error
 
 	registryURLs          sets.String
 	registryURLLock       sync.RWMutex
@@ -138,7 +138,7 @@ type DockerRegistryServiceController struct {
 }
 
 // Runs controller loops and returns immediately
-func (e *DockerRegistryServiceController) Run(workers int, stopCh <-chan struct{}) {
+func (e *DockerRegistryServiceController) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 	defer e.registryLocationQueue.ShutDown()
 
@@ -147,19 +147,19 @@ func (e *DockerRegistryServiceController) Run(workers int, stopCh <-chan struct{
 
 	// Wait for the store to sync before starting any work in this controller.
 	ready := make(chan struct{})
-	go e.waitForDockerURLs(ready, stopCh)
+	go e.waitForDockerURLs(ctx, ready)
 	select {
 	case <-ready:
-	case <-stopCh:
+	case <-ctx.Done():
 		return
 	}
 	klog.V(1).Infof("caches synced")
 
-	go wait.Until(e.watchForDockerURLChanges, time.Second, stopCh)
+	go wait.UntilWithContext(ctx, e.watchForDockerURLChanges, time.Second)
 	for i := 0; i < workers; i++ {
-		go wait.Until(e.watchForDockercfgSecretUpdates, time.Second, stopCh)
+		go wait.UntilWithContext(ctx, e.watchForDockercfgSecretUpdates, time.Second)
 	}
-	<-stopCh
+	<-ctx.Done()
 }
 
 // enqueue adds to our queue.  We only have one entry, but we never have to check it since we already know the things
@@ -171,11 +171,11 @@ func (e *DockerRegistryServiceController) enqueueRegistryLocationQueue() {
 // waitForDockerURLs waits until all information required for fully determining the set of the internal container image registry
 // hostnames and IPs are complete before continuing
 // Once that work is done, the dockerconfig controller will be released to do work.
-func (e *DockerRegistryServiceController) waitForDockerURLs(ready chan<- struct{}, stopCh <-chan struct{}) {
+func (e *DockerRegistryServiceController) waitForDockerURLs(ctx context.Context, ready chan<- struct{}) {
 	defer utilruntime.HandleCrash()
 
 	// Wait for the stores to fill
-	if !cache.WaitForCacheSync(stopCh, e.servicesSynced, e.secretsSynced) {
+	if !cache.WaitForCacheSync(ctx.Done(), e.servicesSynced, e.secretsSynced) {
 		return
 	}
 
@@ -204,7 +204,7 @@ func (e *DockerRegistryServiceController) getRegistryURLs() sets.String {
 }
 
 // watchForDockerURLChanges runs a worker thread that just dequeues and processes items related to a docker URL change
-func (e *DockerRegistryServiceController) watchForDockerURLChanges() {
+func (e *DockerRegistryServiceController) watchForDockerURLChanges(_ context.Context) {
 	workFn := func() bool {
 		key, quit := e.registryLocationQueue.Get()
 		if quit {
@@ -335,7 +335,7 @@ func (e *DockerRegistryServiceController) syncRegistryLocationChange() error {
 
 // watchForDockercfgSecretUpdates watches the work queue for entries that indicate that it should modify dockercfg secrets with new
 // container image registry URLs
-func (e *DockerRegistryServiceController) watchForDockercfgSecretUpdates() {
+func (e *DockerRegistryServiceController) watchForDockercfgSecretUpdates(ctx context.Context) {
 	workFn := func() bool {
 		key, quit := e.secretsToUpdate.Get()
 		if quit {
@@ -343,7 +343,7 @@ func (e *DockerRegistryServiceController) watchForDockercfgSecretUpdates() {
 		}
 		defer e.secretsToUpdate.Done(key)
 
-		if err := e.syncSecretHandler(key.(string)); err == nil {
+		if err := e.syncSecretHandler(ctx, key.(string)); err == nil {
 			// this means the request was successfully handled.  We should "forget" the item so that any retry
 			// later on is reset
 			e.secretsToUpdate.Forget(key)
@@ -364,7 +364,7 @@ func (e *DockerRegistryServiceController) watchForDockercfgSecretUpdates() {
 	}
 }
 
-func (e *DockerRegistryServiceController) syncSecretUpdate(key string) error {
+func (e *DockerRegistryServiceController) syncSecretUpdate(ctx context.Context, key string) error {
 	obj, exists, err := e.secretCache.GetByKey(key)
 	if err != nil {
 		utilruntime.HandleError(fmt.Errorf("Unable to retrieve secret %v from store: %v", key, err))
@@ -420,7 +420,7 @@ func (e *DockerRegistryServiceController) syncSecretUpdate(key string) error {
 	}
 	dockercfgSecret.Data[v1.DockerConfigKey] = dockercfgContent
 
-	if _, err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Update(context.TODO(), dockercfgSecret, metav1.UpdateOptions{}); err != nil {
+	if _, err := e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Update(ctx, dockercfgSecret, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 

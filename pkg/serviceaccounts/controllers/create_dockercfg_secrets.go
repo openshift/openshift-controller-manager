@@ -180,7 +180,7 @@ func (e *DockercfgController) enqueueServiceAccountForToken(dockerCfgSecret *v1.
 	e.saQueue.Add(key)
 }
 
-func (e *DockercfgController) Run(workers int, stopCh <-chan struct{}) {
+func (e *DockercfgController) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 	defer e.saQueue.ShutDown()
 	defer e.secretQueue.ShutDown()
@@ -190,35 +190,35 @@ func (e *DockercfgController) Run(workers int, stopCh <-chan struct{}) {
 
 	// Wait for the store to sync before starting any work in this controller.
 	ready := make(chan struct{})
-	go e.waitForDockerURLs(ready, stopCh)
+	go e.waitForDockerURLs(ctx, ready)
 	select {
 	case <-ready:
-	case <-stopCh:
+	case <-ctx.Done():
 		return
 	}
 	klog.V(1).Infof("urls found")
 
 	// Wait for the stores to fill
-	if !cache.WaitForCacheSync(stopCh, e.serviceAccountController.HasSynced, e.secretController.HasSynced) {
+	if !cache.WaitForCacheSync(ctx.Done(), e.serviceAccountController.HasSynced, e.secretController.HasSynced) {
 		return
 	}
 	klog.V(1).Infof("caches synced")
 
 	for i := 0; i < workers; i++ {
-		go wait.Until(e.serviceAccountWorker, time.Second, stopCh)
-		go wait.Until(e.secretWorker, time.Second, stopCh)
-		go wait.Until(e.secretExpirationsChecker, ExpirationCheckPeriod, stopCh)
+		go wait.UntilWithContext(ctx, e.serviceAccountWorker, time.Second)
+		go wait.UntilWithContext(ctx, e.secretWorker, time.Second)
+		go wait.UntilWithContext(ctx, e.secretExpirationsChecker, ExpirationCheckPeriod)
 	}
-	<-stopCh
+	<-ctx.Done()
 }
 
-func (c *DockercfgController) waitForDockerURLs(ready chan<- struct{}, stopCh <-chan struct{}) {
+func (c *DockercfgController) waitForDockerURLs(ctx context.Context, ready chan<- struct{}) {
 	defer utilruntime.HandleCrash()
 
 	// wait for the initialization to complete to be informed of a stop
 	select {
 	case <-c.dockerURLsInitialized:
-	case <-stopCh:
+	case <-ctx.Done():
 		return
 	}
 
@@ -241,14 +241,14 @@ func (e *DockercfgController) enqueueServiceAccount(serviceAccount *v1.ServiceAc
 
 // serviceAccountWorker runs a worker thread that just dequeues items, processes them, and marks them done.
 // It enforces that the syncHandler is never invoked concurrently with the same key.
-func (e *DockercfgController) serviceAccountWorker() {
+func (e *DockercfgController) serviceAccountWorker(ctx context.Context) {
 	key, quit := e.saQueue.Get()
 	if quit {
 		return
 	}
 	defer e.saQueue.Done(key)
 
-	if err := e.syncServiceAccount(key.(string)); err == nil {
+	if err := e.syncServiceAccount(ctx, key.(string)); err == nil {
 		// this means the request was successfully handled.  We should "forget" the item so that any retry
 		// later on is reset
 		e.saQueue.Forget(key)
@@ -268,14 +268,14 @@ func (e *DockercfgController) serviceAccountWorker() {
 
 // secretWorker runs a worker thread that just dequeues items, processes them, and marks them done.
 // It enforces that the syncHandler is never invoked concurrently with the same key.
-func (e *DockercfgController) secretWorker() {
+func (e *DockercfgController) secretWorker(ctx context.Context) {
 	key, quit := e.secretQueue.Get()
 	if quit {
 		return
 	}
 	defer e.secretQueue.Done(key)
 
-	if err := e.syncSecret(key.(string)); err == nil {
+	if err := e.syncSecret(ctx, key.(string)); err == nil {
 		// this means the request was successfully handled.  We should "forget" the item so that any retry
 		// later on is reset
 		e.secretQueue.Forget(key)
@@ -292,7 +292,7 @@ func (e *DockercfgController) secretWorker() {
 	}
 }
 
-func (e *DockercfgController) secretExpirationsChecker() {
+func (e *DockercfgController) secretExpirationsChecker(_ context.Context) {
 	for _, s := range e.secretCache.List() {
 		secretObj := s.(*v1.Secret)
 		if secretObj.Type != v1.SecretTypeDockercfg {
@@ -348,7 +348,7 @@ func needsDockercfgSecret(serviceAccount *v1.ServiceAccount) bool {
 	return true
 }
 
-func (e *DockercfgController) syncServiceAccount(key string) error {
+func (e *DockercfgController) syncServiceAccount(ctx context.Context, key string) error {
 	obj, exists, err := e.serviceAccountCache.GetByKey(key)
 	if err != nil {
 		klog.V(4).Infof("Unable to retrieve service account %v from store: %v", key, err)
@@ -381,14 +381,14 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 		// Clear the pending token annotation when updating
 		delete(serviceAccount.Annotations, PendingTokenAnnotation)
 
-		updatedSA, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(context.TODO(), serviceAccount, metav1.UpdateOptions{})
+		updatedSA, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(ctx, serviceAccount, metav1.UpdateOptions{})
 		if err == nil {
 			e.serviceAccountCache.Mutation(updatedSA)
 		}
 		return err
 	}
 
-	dockercfgSecret, created, err := e.createDockerPullSecret(serviceAccount)
+	dockercfgSecret, created, err := e.createDockerPullSecret(ctx, serviceAccount)
 	if err != nil {
 		return err
 	}
@@ -407,7 +407,7 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 			if !exists || !needsDockercfgSecret(obj.(*v1.ServiceAccount)) || serviceAccount.UID != obj.(*v1.ServiceAccount).UID {
 				// somehow a dockercfg secret appeared or the SA disappeared.  cleanup the secret we made and return
 				klog.V(2).Infof("Deleting secret because the work is already done %s/%s", dockercfgSecret.Namespace, dockercfgSecret.Name)
-				e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(context.TODO(), dockercfgSecret.Name, metav1.DeleteOptions{})
+				e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(ctx, dockercfgSecret.Name, metav1.DeleteOptions{})
 				return nil
 			}
 
@@ -420,7 +420,7 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 		// Clear the pending token annotation when updating
 		delete(serviceAccount.Annotations, PendingTokenAnnotation)
 
-		updatedSA, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(context.TODO(), serviceAccount, metav1.UpdateOptions{})
+		updatedSA, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(ctx, serviceAccount, metav1.UpdateOptions{})
 		if err == nil {
 			e.serviceAccountCache.Mutation(updatedSA)
 		}
@@ -431,12 +431,12 @@ func (e *DockercfgController) syncServiceAccount(key string) error {
 		// nothing to do.  Our choice was stale or we got a conflict.  Either way that means that the service account was updated.  We simply need to return because we'll get an update notification later
 		// we do need to clean up our dockercfgSecret.  token secrets are cleaned up by the controller handling service account dockercfg secret deletes
 		klog.V(2).Infof("Deleting secret %s/%s (err=%v)", dockercfgSecret.Namespace, dockercfgSecret.Name, err)
-		e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(context.TODO(), dockercfgSecret.Name, metav1.DeleteOptions{})
+		e.client.CoreV1().Secrets(dockercfgSecret.Namespace).Delete(ctx, dockercfgSecret.Name, metav1.DeleteOptions{})
 	}
 	return err
 }
 
-func (e *DockercfgController) syncSecret(key string) error {
+func (e *DockercfgController) syncSecret(ctx context.Context, key string) error {
 	secret, exists, err := e.secretCache.GetByKey(key)
 	if err != nil {
 		klog.V(4).Infof("Unable to retrieve secret %v from store: %v", key, err)
@@ -465,12 +465,12 @@ func (e *DockercfgController) syncSecret(key string) error {
 		return nil
 	}
 
-	_, err = e.renewSecretToken(saName, secretObj)
+	_, err = e.renewSecretToken(ctx, saName, secretObj)
 	return err
 }
 
-func (e *DockercfgController) renewSecretToken(saName string, dockercfgSecret *v1.Secret) (*v1.Secret, error) {
-	saToken, saTokenExpiry, err := e.requestToken(dockercfgSecret.Namespace, saName, dockercfgSecret)
+func (e *DockercfgController) renewSecretToken(ctx context.Context, saName string, dockercfgSecret *v1.Secret) (*v1.Secret, error) {
+	saToken, saTokenExpiry, err := e.requestToken(ctx, dockercfgSecret.Namespace, saName, dockercfgSecret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to request SA token: %w", err)
 	}
@@ -490,15 +490,15 @@ func (e *DockercfgController) renewSecretToken(saName string, dockercfgSecret *v
 	dockercfgSecretCopy.Annotations[DockercfgExpirationAnnotationKey] = strconv.FormatInt(saTokenExpiry.Unix(), 10)
 	dockercfgSecretCopy.Data[v1.DockerConfigKey] = dockercfgContent
 
-	return e.client.CoreV1().Secrets(dockercfgSecretCopy.Namespace).Update(context.TODO(), dockercfgSecretCopy, metav1.UpdateOptions{})
+	return e.client.CoreV1().Secrets(dockercfgSecretCopy.Namespace).Update(ctx, dockercfgSecretCopy, metav1.UpdateOptions{})
 }
 
-func (e *DockercfgController) requestToken(saNamespace, saName string, dockercfgSecret *v1.Secret) (string, *metav1.Time, error) {
+func (e *DockercfgController) requestToken(ctx context.Context, saNamespace, saName string, dockercfgSecret *v1.Secret) (string, *metav1.Time, error) {
 	dockercfgSecretRef := metav1.NewControllerRef(dockercfgSecret, v1.SchemeGroupVersion.WithKind("Secret"))
 
 	tokenResp, err := e.client.CoreV1().ServiceAccounts(saNamespace).
 		CreateToken(
-			context.TODO(),
+			ctx,
 			saName,
 			&authenticationv1.TokenRequest{
 				Spec: authenticationv1.TokenRequestSpec{
@@ -526,7 +526,7 @@ func (e *DockercfgController) requestToken(saNamespace, saName string, dockercfg
 }
 
 // createDockerPullSecret creates a dockercfg secret based on the token secret
-func (e *DockercfgController) createDockerPullSecret(serviceAccount *v1.ServiceAccount) (*v1.Secret, bool, error) {
+func (e *DockercfgController) createDockerPullSecret(ctx context.Context, serviceAccount *v1.ServiceAccount) (*v1.Secret, bool, error) {
 	pendingTokenName := serviceAccount.Annotations[PendingTokenAnnotation]
 
 	// If this service account has no record of a pending token name, record one
@@ -536,7 +536,7 @@ func (e *DockercfgController) createDockerPullSecret(serviceAccount *v1.ServiceA
 			serviceAccount.Annotations = map[string]string{}
 		}
 		serviceAccount.Annotations[PendingTokenAnnotation] = pendingTokenName
-		updatedServiceAccount, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(context.TODO(), serviceAccount, metav1.UpdateOptions{})
+		updatedServiceAccount, err := e.client.CoreV1().ServiceAccounts(serviceAccount.Namespace).Update(ctx, serviceAccount, metav1.UpdateOptions{})
 		// Conflicts mean we'll get called to sync this service account again
 		if kapierrors.IsConflict(err) {
 			return nil, false, nil
@@ -546,7 +546,7 @@ func (e *DockercfgController) createDockerPullSecret(serviceAccount *v1.ServiceA
 		}
 		serviceAccount = updatedServiceAccount
 	}
-	currentSecret, err := e.client.CoreV1().Secrets(serviceAccount.Namespace).Get(context.TODO(), pendingTokenName, metav1.GetOptions{})
+	currentSecret, err := e.client.CoreV1().Secrets(serviceAccount.Namespace).Get(ctx, pendingTokenName, metav1.GetOptions{})
 	if err != nil {
 		if kapierrors.IsNotFound(err) {
 			// this client supplies an empty struct in this case for some reason
@@ -584,7 +584,7 @@ func (e *DockercfgController) createDockerPullSecret(serviceAccount *v1.ServiceA
 		klog.V(4).Infof("Creating dockercfg secret %q for service account %s/%s", dockercfgSecret.Name, serviceAccount.Namespace, serviceAccount.Name)
 
 		// Save the secret
-		_, err = e.client.CoreV1().Secrets(serviceAccount.Namespace).Create(context.TODO(), dockercfgSecret, metav1.CreateOptions{})
+		_, err = e.client.CoreV1().Secrets(serviceAccount.Namespace).Create(ctx, dockercfgSecret, metav1.CreateOptions{})
 		// If we cannot create this secret because the namespace it is being terminated isn't a thing we should fail and requeue a retry.
 		// Instead, we know that when a new namespace gets created, the serviceaccount will be recreated and we'll get a second shot at
 		// processing the serviceaccount.
@@ -596,13 +596,13 @@ func (e *DockercfgController) createDockerPullSecret(serviceAccount *v1.ServiceA
 			return nil, false, fmt.Errorf("failed to create the dockercfg secret: %w", err)
 		}
 
-		currentSecret, err = e.client.CoreV1().Secrets(serviceAccount.Namespace).Get(context.TODO(), dockercfgSecret.Name, metav1.GetOptions{})
+		currentSecret, err = e.client.CoreV1().Secrets(serviceAccount.Namespace).Get(ctx, dockercfgSecret.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, false, fmt.Errorf("failed to retrieve the dockercfg secret that was supposed to be already created: %w", err)
 		}
 	}
 
-	updatedSecret, err := e.renewSecretToken(serviceAccount.Name, currentSecret)
+	updatedSecret, err := e.renewSecretToken(ctx, serviceAccount.Name, currentSecret)
 	return updatedSecret, err == nil, err
 }
 
