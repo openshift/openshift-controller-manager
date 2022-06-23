@@ -205,11 +205,18 @@ func (e *DockercfgController) Run(ctx context.Context, workers int) {
 	klog.V(1).Infof("caches synced")
 
 	for i := 0; i < workers; i++ {
-		go wait.UntilWithContext(ctx, e.serviceAccountWorker, time.Second)
-		go wait.UntilWithContext(ctx, e.secretWorker, time.Second)
+		go wait.UntilWithContext(ctx, runner(e.serviceAccountWorker), time.Second)
+		go wait.UntilWithContext(ctx, runner(e.secretWorker), time.Second)
 		go wait.UntilWithContext(ctx, e.secretExpirationsChecker, ExpirationCheckPeriod)
 	}
 	<-ctx.Done()
+}
+
+func runner(syncFunc func(ctx context.Context) bool) func(ctx context.Context) {
+	return func(ctx context.Context) {
+		for syncFunc(ctx) {
+		}
+	}
 }
 
 func (c *DockercfgController) waitForDockerURLs(ctx context.Context, ready chan<- struct{}) {
@@ -241,10 +248,10 @@ func (e *DockercfgController) enqueueServiceAccount(serviceAccount *v1.ServiceAc
 
 // serviceAccountWorker runs a worker thread that just dequeues items, processes them, and marks them done.
 // It enforces that the syncHandler is never invoked concurrently with the same key.
-func (e *DockercfgController) serviceAccountWorker(ctx context.Context) {
+func (e *DockercfgController) serviceAccountWorker(ctx context.Context) bool {
 	key, quit := e.saQueue.Get()
 	if quit {
-		return
+		return false
 	}
 	defer e.saQueue.Done(key)
 
@@ -264,14 +271,16 @@ func (e *DockercfgController) serviceAccountWorker(ctx context.Context) {
 
 		}
 	}
+
+	return true
 }
 
 // secretWorker runs a worker thread that just dequeues items, processes them, and marks them done.
 // It enforces that the syncHandler is never invoked concurrently with the same key.
-func (e *DockercfgController) secretWorker(ctx context.Context) {
+func (e *DockercfgController) secretWorker(ctx context.Context) bool {
 	key, quit := e.secretQueue.Get()
 	if quit {
-		return
+		return false
 	}
 	defer e.secretQueue.Done(key)
 
@@ -290,6 +299,8 @@ func (e *DockercfgController) secretWorker(ctx context.Context) {
 			e.secretQueue.AddRateLimited(key)
 		}
 	}
+
+	return true
 }
 
 func (e *DockercfgController) secretExpirationsChecker(_ context.Context) {
