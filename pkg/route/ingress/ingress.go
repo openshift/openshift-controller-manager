@@ -31,9 +31,7 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	networkingv1listers "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	routev1 "github.com/openshift/api/route/v1"
 	routeclient "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
@@ -74,8 +72,6 @@ import (
 // * creating a dynamic route spec.host
 //
 type Controller struct {
-	eventRecorder record.EventRecorder
-
 	routeClient   routeclient.RoutesGetter
 	ingressClient kv1networking.IngressesGetter
 
@@ -166,15 +162,8 @@ type queueKey struct {
 
 // NewController instantiates a Controller
 func NewController(eventsClient kv1core.EventsGetter, routeClient routeclient.RoutesGetter, ingressClient kv1networking.IngressesGetter, ingresses networkingv1informers.IngressInformer, ingressclasses networkingv1informers.IngressClassInformer, secrets coreinformers.SecretInformer, services coreinformers.ServiceInformer, routes routeinformers.RouteInformer) *Controller {
-	broadcaster := record.NewBroadcaster()
-	broadcaster.StartLogging(klog.Infof)
-	// TODO: remove the wrapper when every clients have moved to use the clientset.
-	broadcaster.StartRecordingToSink(&kv1core.EventSinkImpl{Interface: eventsClient.Events("")})
-	recorder := broadcaster.NewRecorder(legacyscheme.Scheme, corev1.EventSource{Component: "ingress-to-route-controller"})
-
 	c := &Controller{
-		eventRecorder: recorder,
-		queue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route"),
+		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "ingress-to-route"),
 
 		expectations:     newExpectations(),
 		expectationDelay: 2 * time.Second,

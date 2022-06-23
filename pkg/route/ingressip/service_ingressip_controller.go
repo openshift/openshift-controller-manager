@@ -8,11 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/klog/v2"
-
 	v1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -22,10 +21,11 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
-	"k8s.io/kubernetes/pkg/controller"
-	"k8s.io/kubernetes/pkg/registry/core/service/allocator"
-	"k8s.io/kubernetes/pkg/registry/core/service/ipallocator"
+	"k8s.io/klog/v2"
+
+	routev1 "github.com/openshift/api/route/v1"
+	"github.com/openshift/openshift-controller-manager/pkg/route/allocator"
+	"github.com/openshift/openshift-controller-manager/pkg/route/ipallocator"
 )
 
 const (
@@ -46,6 +46,7 @@ type IngressIPController struct {
 	client kcoreclient.ServicesGetter
 
 	controller cache.Controller
+	keyFunc    func(obj interface{}) (string, error)
 	hasSynced  cache.InformerSynced
 
 	maxRetries int
@@ -84,7 +85,11 @@ type serviceChange struct {
 func NewIngressIPController(services cache.SharedIndexInformer, kc kclientset.Interface, ipNet *net.IPNet, resyncInterval time.Duration) *IngressIPController {
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartRecordingToSink(&kv1core.EventSinkImpl{Interface: kc.CoreV1().Events("")})
-	recorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "ingressip-controller"})
+
+	eventScheme := runtime.NewScheme()
+	utilruntime.Must(routev1.Install(eventScheme))
+
+	recorder := eventBroadcaster.NewRecorder(eventScheme, v1.EventSource{Component: "ingressip-controller"})
 
 	ic := &IngressIPController{
 		client:     kc.CoreV1(),
@@ -93,6 +98,7 @@ func NewIngressIPController(services cache.SharedIndexInformer, kc kclientset.In
 		recorder:   recorder,
 	}
 
+	ic.keyFunc = cache.DeletionHandlingMetaNamespaceKeyFunc
 	ic.cache = services.GetStore()
 	ic.controller = services.GetController()
 	services.AddEventHandlerWithResyncPeriod(
@@ -137,7 +143,7 @@ func (ic *IngressIPController) enqueueChange(new interface{}, old interface{}) {
 	if new != nil {
 		// Queue the key needed to retrieve the lastest state from the
 		// cache when the change is processed.
-		key, err := controller.KeyFunc(new)
+		key, err := ic.keyFunc(new)
 		if err != nil {
 			utilruntime.HandleError(fmt.Errorf("Couldn't get key for object %+v: %v", new, err))
 			return
@@ -273,7 +279,7 @@ func (ic *IngressIPController) processInitialSync() bool {
 	// Add pending service additions back to the queue in consistent order.
 	sort.Sort(serviceAge(pendingServices))
 	for _, service := range pendingServices {
-		if key, err := controller.KeyFunc(service); err == nil {
+		if key, err := ic.keyFunc(service); err == nil {
 			klog.V(5).Infof("Adding service back to queue: %v ", key)
 			change := &serviceChange{key: key}
 			ic.queue.Add(change)
@@ -442,7 +448,7 @@ func (ic *IngressIPController) clearOldAllocation(new, old *v1.Service) bool {
 	// New allocation differs from old due to update or deletion
 
 	// Get the key from the old service since the new service may be nil
-	if key, err := controller.KeyFunc(old); err == nil {
+	if key, err := ic.keyFunc(old); err == nil {
 		ic.clearLocalAllocation(key, oldIP)
 		return true
 	} else {
