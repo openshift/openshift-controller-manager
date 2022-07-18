@@ -65,9 +65,10 @@ func TestCustomCreateBuildPod(t *testing.T) {
 	// build-system-configmap
 	// certificate authorities
 	// container storage
+	// container run
 	// global CA injection configmap
-	if len(container.VolumeMounts) != 8 {
-		t.Fatalf("Expected 8 volumes in container, got %d", len(container.VolumeMounts))
+	if len(container.VolumeMounts) != 9 {
+		t.Fatalf("Expected 9 volumes in container, got %d", len(container.VolumeMounts))
 	}
 	expectedMounts := []string{"/var/run/docker.sock",
 		DockerPushSecretMountPath,
@@ -76,7 +77,8 @@ func TestCustomCreateBuildPod(t *testing.T) {
 		ConfigMapBuildSystemConfigsMountPath,
 		ConfigMapCertsMountPath,
 		ConfigMapBuildGlobalCAMountPath,
-		"/var/lib/containers/storage",
+		"/var/lib/containers",
+		"/var/run/containers",
 	}
 	for i, expected := range expectedMounts {
 		if container.VolumeMounts[i].MountPath != expected {
@@ -94,8 +96,8 @@ func TestCustomCreateBuildPod(t *testing.T) {
 	if !kapihelper.Semantic.DeepEqual(container.Resources, build.Spec.Resources) {
 		t.Fatalf("Expected actual=expected, %v != %v", container.Resources, build.Spec.Resources)
 	}
-	if len(actual.Spec.Volumes) != 8 {
-		t.Fatalf("Expected 8 volumes in Build pod, got %d", len(actual.Spec.Volumes))
+	if len(actual.Spec.Volumes) != 9 {
+		t.Fatalf("Expected 9 volumes in Build pod, got %d", len(actual.Spec.Volumes))
 	}
 	buildJSON, _ := runtime.Encode(customBuildEncodingCodecFactory.LegacyCodec(buildv1.GroupVersion), build)
 	errorCases := map[int][]string{
@@ -266,4 +268,16 @@ func mockCustomBuild(forcePull, emptySource bool) *buildv1.Build {
 			Phase: buildv1.BuildPhaseNew,
 		},
 	}
+}
+
+func TestCustomCreateBuildPodAutonsUser(t *testing.T) {
+	strategy := CustomBuildStrategy{}
+
+	build := mockCustomBuild(false, false)
+
+	testCreateBuildPodAutonsUser(t, build, &strategy,
+		func(build *buildv1.Build, env corev1.EnvVar) {
+			build.Spec.Strategy.CustomStrategy.Env = append(build.Spec.Strategy.CustomStrategy.Env, env)
+		},
+	)
 }

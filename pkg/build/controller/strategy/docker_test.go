@@ -65,7 +65,6 @@ func TestDockerCreateBuildPod(t *testing.T) {
 		"BUILD_REGISTRIES_DIR_PATH":   "",
 		"BUILD_SIGNATURE_POLICY_PATH": "",
 		"BUILD_STORAGE_CONF_PATH":     "",
-		"BUILD_STORAGE_DRIVER":        "",
 		"BUILD_BLOBCACHE_DIR":         "",
 		"BUILD_MOUNT_ETC_PKI_CATRUST": "",
 	}
@@ -87,11 +86,12 @@ func TestDockerCreateBuildPod(t *testing.T) {
 	// build-system-config
 	// certificate authorities
 	// container storage
+	// container run
 	// blobs content cache
 	// global CA injection configmap
 	// node pull secrets
-	if len(container.VolumeMounts) != 12 {
-		t.Fatalf("Expected 12 volumes in container, got %d", len(container.VolumeMounts))
+	if len(container.VolumeMounts) != 13 {
+		t.Fatalf("Expected 13 volumes in container, got %d", len(container.VolumeMounts))
 	}
 	if *actual.Spec.ActiveDeadlineSeconds != 60 {
 		t.Errorf("Expected ActiveDeadlineSeconds 60, got %d", *actual.Spec.ActiveDeadlineSeconds)
@@ -106,7 +106,8 @@ func TestDockerCreateBuildPod(t *testing.T) {
 		ConfigMapBuildSystemConfigsMountPath,
 		ConfigMapCertsMountPath,
 		ConfigMapBuildGlobalCAMountPath,
-		"/var/lib/containers/storage",
+		"/var/lib/containers",
+		"/var/run/containers",
 		buildutil.BuildBlobsContentCache,
 	}
 	for i, expected := range expectedMounts {
@@ -115,8 +116,8 @@ func TestDockerCreateBuildPod(t *testing.T) {
 		}
 	}
 	// build pod has an extra volume: the git clone source secret
-	if len(actual.Spec.Volumes) != 13 {
-		t.Fatalf("Expected 13 volumes in Build pod, got %d", len(actual.Spec.Volumes))
+	if len(actual.Spec.Volumes) != 14 {
+		t.Fatalf("Expected 14 volumes in Build pod, got %d", len(actual.Spec.Volumes))
 	}
 	if !kapihelper.Semantic.DeepEqual(container.Resources, build.Spec.Resources) {
 		t.Fatalf("Expected actual=expected, %v != %v", container.Resources, build.Spec.Resources)
@@ -237,4 +238,18 @@ func mockDockerBuild() *buildv1.Build {
 			Phase: buildv1.BuildPhaseNew,
 		},
 	}
+}
+
+func TestDockerCreateBuildPodAutonsUser(t *testing.T) {
+	strategy := DockerBuildStrategy{
+		Image: "docker-test-image",
+	}
+
+	build := mockDockerBuild()
+
+	testCreateBuildPodAutonsUser(t, build, &strategy,
+		func(build *buildv1.Build, env corev1.EnvVar) {
+			build.Spec.Strategy.DockerStrategy.Env = append(build.Spec.Strategy.DockerStrategy.Env, env)
+		},
+	)
 }
