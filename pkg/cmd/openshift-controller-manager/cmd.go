@@ -85,7 +85,6 @@ func (o *OpenShiftControllerManager) StartControllerManager(stopCh <-chan struct
 	}
 
 	go daemon.SdNotify(false, "READY=1")
-
 	select {
 	case <-stopCh:
 		klog.Infof("Controller Manager received stop signal. exiting.")
