@@ -806,7 +806,7 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 ## explicit
 gopkg.in/yaml.v3
-# k8s.io/api v0.24.0 => k8s.io/api v0.24.0
+# k8s.io/api v0.24.0 => github.com/qjkee/kubernetes/staging/src/k8s.io/api v0.0.0-20220805164915-f97fa78cef58
 ## explicit; go 1.16
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
@@ -856,7 +856,7 @@ k8s.io/api/scheduling/v1beta1
 k8s.io/api/storage/v1
 k8s.io/api/storage/v1alpha1
 k8s.io/api/storage/v1beta1
-# k8s.io/apimachinery v0.24.0 => k8s.io/apimachinery v0.24.0
+# k8s.io/apimachinery v0.24.0 => github.com/qjkee/kubernetes/staging/src/k8s.io/apimachinery v0.0.0-20220805164915-f97fa78cef58
 ## explicit; go 1.16
 k8s.io/apimachinery/pkg/api/apitesting
 k8s.io/apimachinery/pkg/api/apitesting/fuzzer
@@ -920,8 +920,8 @@ k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/json
 k8s.io/apimachinery/third_party/forked/golang/netutil
 k8s.io/apimachinery/third_party/forked/golang/reflect
-# k8s.io/apiserver v0.24.0 => k8s.io/apiserver v0.24.0
-## explicit; go 1.16
+# k8s.io/apiserver v0.24.0 => github.com/qjkee/kubernetes/staging/src/k8s.io/apiserver v0.0.0-20220805164915-f97fa78cef58
+## explicit; go 1.17
 k8s.io/apiserver/pkg/admission
 k8s.io/apiserver/pkg/admission/configuration
 k8s.io/apiserver/pkg/admission/initializer
@@ -1030,7 +1030,7 @@ k8s.io/apiserver/plugin/pkg/authorizer/webhook
 k8s.io/cli-runtime/pkg/genericclioptions
 k8s.io/cli-runtime/pkg/printers
 k8s.io/cli-runtime/pkg/resource
-# k8s.io/client-go v0.24.0 => k8s.io/client-go v0.24.0
+# k8s.io/client-go v0.24.0 => github.com/qjkee/kubernetes/staging/src/k8s.io/client-go v0.0.0-20220805164915-f97fa78cef58
 ## explicit; go 1.16
 k8s.io/client-go/applyconfigurations/admissionregistration/v1
 k8s.io/client-go/applyconfigurations/admissionregistration/v1beta1
@@ -1330,7 +1330,7 @@ k8s.io/client-go/util/jsonpath
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/retry
 k8s.io/client-go/util/workqueue
-# k8s.io/component-base v0.24.0 => k8s.io/component-base v0.24.0
+# k8s.io/component-base v0.24.0 => github.com/qjkee/kubernetes/staging/src/k8s.io/component-base v0.0.0-20220805164915-f97fa78cef58
 ## explicit; go 1.16
 k8s.io/component-base/cli
 k8s.io/component-base/cli/flag
@@ -1638,16 +1638,11 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 # gopkg.in/square/go-jose.v2 => gopkg.in/square/go-jose.v2 v2.2.2
-# k8s.io/api => k8s.io/api v0.24.0
 # k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.24.0
-# k8s.io/apimachinery => k8s.io/apimachinery v0.24.0
-# k8s.io/apiserver => k8s.io/apiserver v0.24.0
 # k8s.io/cli-runtime => k8s.io/cli-runtime v0.24.0
-# k8s.io/client-go => k8s.io/client-go v0.24.0
 # k8s.io/cloud-provider => k8s.io/cloud-provider v0.24.0
 # k8s.io/cluster-bootstrap => k8s.io/cluster-bootstrap v0.24.0
 # k8s.io/code-generator => k8s.io/code-generator v0.24.0
-# k8s.io/component-base => k8s.io/component-base v0.24.0
 # k8s.io/component-helpers => k8s.io/component-helpers v0.24.0
 # k8s.io/controller-manager => k8s.io/controller-manager v0.24.0
 # k8s.io/cri-api => k8s.io/cri-api v0.24.0
@@ -1664,3 +1659,8 @@ sigs.k8s.io/yaml
 # k8s.io/mount-utils => k8s.io/mount-utils v0.24.0
 # k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.24.0
 # k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.24.0
+# k8s.io/api => github.com/qjkee/kubernetes/staging/src/k8s.io/api v0.0.0-20220805164915-f97fa78cef58
+# k8s.io/apimachinery => github.com/qjkee/kubernetes/staging/src/k8s.io/apimachinery v0.0.0-20220805164915-f97fa78cef58
+# k8s.io/client-go => github.com/qjkee/kubernetes/staging/src/k8s.io/client-go v0.0.0-20220805164915-f97fa78cef58
+# k8s.io/component-base => github.com/qjkee/kubernetes/staging/src/k8s.io/component-base v0.0.0-20220805164915-f97fa78cef58
+# k8s.io/apiserver => github.com/qjkee/kubernetes/staging/src/k8s.io/apiserver v0.0.0-20220805164915-f97fa78cef58
