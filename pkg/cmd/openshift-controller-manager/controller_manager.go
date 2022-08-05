@@ -23,6 +23,7 @@ import (
 
 	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	origincontrollers "github.com/openshift/openshift-controller-manager/pkg/cmd/controller"
+	"github.com/openshift/openshift-controller-manager/pkg/cmd/controller/route"
 	"github.com/openshift/openshift-controller-manager/pkg/cmd/imageformat"
 	"github.com/openshift/openshift-controller-manager/pkg/version"
 )
@@ -154,7 +155,12 @@ func startControllers(controllerContext *origincontrollers.ControllerContext, cl
 		klog.Infof("Started %q", controllerName)
 	}
 	klog.Infof("Started Origin Controllers")
-	_, err := origincontrollers.RunRouteControllerManager(controllerContext, clientConfig)
+
+	kubeClient, err := controllerContext.ClientBuilder.Client(route.InfraIngressToRouteControllerServiceAccountName)
+	if err != nil {
+		return err
+	}
+	_, err = origincontrollers.RunRouteControllerManager(&controllerContext.OpenshiftControllerConfig, kubeClient, clientConfig)
 	if err != nil {
 		klog.Fatalf("Error starting route controller manager (%v)", err)
 	}

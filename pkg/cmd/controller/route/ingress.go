@@ -9,7 +9,7 @@ import (
 )
 
 func RunIngressToRouteController(ctx *ControllerContext) (bool, error) {
-	clientConfig := ctx.ClientBuilder.ConfigOrDie(infraIngressToRouteControllerServiceAccountName)
+	clientConfig := ctx.ClientBuilder.ConfigOrDie(InfraIngressToRouteControllerServiceAccountName)
 	coreClient, err := coreclient.NewForConfig(clientConfig)
 	if err != nil {
 		return false, err
