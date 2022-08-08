@@ -3,6 +3,7 @@ package openshift_controller_manager
 import (
 	"context"
 	"fmt"
+	"github.com/openshift/openshift-controller-manager/pkg/cmd/routecontroller"
 	"net/http"
 	"os"
 	"time"
@@ -160,7 +161,7 @@ func startControllers(controllerContext *origincontrollers.ControllerContext, cl
 	if err != nil {
 		return err
 	}
-	_, err = origincontrollers.RunRouteControllerManager(&controllerContext.OpenshiftControllerConfig, kubeClient, clientConfig)
+	_, err = routecontroller.RunRouteControllerManager(&controllerContext.OpenshiftControllerConfig, kubeClient, clientConfig)
 	if err != nil {
 		klog.Fatalf("Error starting route controller manager (%v)", err)
 	}
