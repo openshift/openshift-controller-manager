@@ -8,7 +8,6 @@ import (
 	"k8s.io/klog/v2"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	cacheddiscovery "k8s.io/client-go/discovery/cached"
@@ -25,7 +24,6 @@ import (
 	operatorinformer "github.com/openshift/client-go/operator/informers/externalversions"
 	routeclient "github.com/openshift/client-go/route/clientset/versioned"
 	routeinformer "github.com/openshift/client-go/route/informers/externalversions"
-	"github.com/openshift/openshift-controller-manager/pkg/client/genericinformers"
 )
 
 type ControllerClientBuilder interface {
@@ -54,8 +52,7 @@ type ControllerContext struct {
 	RouteInformers    routeinformer.SharedInformerFactory
 	OperatorInformers operatorinformer.SharedInformerFactory
 
-	GenericResourceInformer genericinformers.GenericResourceInformer
-	RestMapper              meta.RESTMapper
+	RestMapper meta.RESTMapper
 
 	// Stop is the stop channel
 	Stop    <-chan struct{}
@@ -127,16 +124,6 @@ func (c *ControllerContext) StartInformers(stopCh <-chan struct{}) {
 		close(c.InformersStarted)
 		c.informersStartedClosed = true
 	}
-}
-
-func (c *ControllerContext) ToGenericInformer() genericinformers.GenericResourceInformer {
-	return genericinformers.NewGenericInformers(
-		c.StartInformers,
-		c.KubernetesInformers,
-		genericinformers.GenericResourceInformerFunc(func(resource schema.GroupVersionResource) (informers.GenericInformer, error) {
-			return c.RouteInformers.ForResource(resource)
-		}),
-	)
 }
 
 // InitFunc is used to launch a particular controller.  It may run additional "should I activate checks".
@@ -218,7 +205,6 @@ func NewControllerContext(
 		InformersStarted:                   make(chan struct{}),
 		RestMapper:                         dynamicRestMapper,
 	}
-	routeControllerContext.GenericResourceInformer = routeControllerContext.ToGenericInformer()
 
 	return routeControllerContext, nil
 }
