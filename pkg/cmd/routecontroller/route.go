@@ -1,10 +1,11 @@
-package controller
+package routecontroller
 
 import (
 	"context"
 	"os"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/leaderelection"
@@ -13,20 +14,16 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
+	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
+
 	routecontrollers "github.com/openshift/openshift-controller-manager/pkg/cmd/controller/route"
 )
 
-func RunRouteControllerManager(ctx *ControllerContext, clientConfig *rest.Config) (bool, error) {
-	kubeClient, err := ctx.ClientBuilder.Client(infraIngressToRouteControllerServiceAccountName)
-	if err != nil {
-		return true, err
-	}
-	config := ctx.OpenshiftControllerConfig
-
+func RunRouteControllerManager(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, kubeClient kubernetes.Interface, clientConfig *rest.Config) (bool, error) {
 	routeControllerManager := func(cntx context.Context) {
 		// Start Route Controllers
 		// TODO: This can be split further
-		routeControllerContext, err := routecontrollers.NewControllerContext(cntx, config, clientConfig)
+		routeControllerContext, err := routecontrollers.NewControllerContext(cntx, *config, clientConfig)
 		if err != nil {
 			klog.Fatal(err)
 		}
@@ -38,7 +35,7 @@ func RunRouteControllerManager(ctx *ControllerContext, clientConfig *rest.Config
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
-	eventRecorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "cluster-route-controller"})
+	eventRecorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "route-controller-manager"})
 	id, err := os.Hostname()
 	if err != nil {
 		return false, err
