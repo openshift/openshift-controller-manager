@@ -80,7 +80,7 @@ func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftCont
 		return err
 	}
 	rl, err := resourcelock.New(
-		"configmaps",
+		resourcelock.ConfigMapsLeasesResourceLock,
 		"openshift-controller-manager",
 		"openshift-master-controllers", // this matches what ansible used to set
 		kubeClient.CoreV1(),
