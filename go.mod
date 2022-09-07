@@ -153,6 +153,7 @@ require (
 )
 
 replace (
+	github.com/openshift/api => github.com/flavianmissi/api v0.0.0-20220901145017-956aca874f9f
 	gopkg.in/square/go-jose.v2 => gopkg.in/square/go-jose.v2 v2.2.2
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for each of these k8s deps in its go.mod
 	k8s.io/api => k8s.io/api v0.24.0

@@ -286,7 +286,7 @@ github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
-# github.com/openshift/api v0.0.0-20220616165336-689617d54300
+# github.com/openshift/api v0.0.0-20220616165336-689617d54300 => github.com/flavianmissi/api v0.0.0-20220901145017-956aca874f9f
 ## explicit; go 1.16
 github.com/openshift/api
 github.com/openshift/api/annotations
@@ -1637,6 +1637,7 @@ sigs.k8s.io/structured-merge-diff/v4/value
 # sigs.k8s.io/yaml v1.2.0
 ## explicit; go 1.12
 sigs.k8s.io/yaml
+# github.com/openshift/api => github.com/flavianmissi/api v0.0.0-20220901145017-956aca874f9f
 # gopkg.in/square/go-jose.v2 => gopkg.in/square/go-jose.v2 v2.2.2
 # k8s.io/api => k8s.io/api v0.24.0
 # k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.24.0
