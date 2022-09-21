@@ -27,7 +27,7 @@ import (
 	"github.com/openshift/openshift-controller-manager/pkg/version"
 )
 
-func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, clientConfig *rest.Config) error {
+func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, clientConfig *rest.Config, ctx context.Context) error {
 	serviceability.InitLogrusFromKlog()
 	kubeClient, err := kubernetes.NewForConfig(clientConfig)
 	if err != nil {
@@ -56,19 +56,19 @@ func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftCont
 		klog.Infof("Build controller using images from %q", imageTemplate.ExpandOrDie("<component>"))
 	}
 
-	originControllerManager := func(ctx context.Context) {
+	originControllerManager := func(c context.Context) {
 		if err := WaitForHealthyAPIServer(kubeClient.Discovery().RESTClient()); err != nil {
 			klog.Fatal(err)
 		}
 
-		controllerContext, err := origincontrollers.NewControllerContext(ctx, *config, clientConfig)
+		controllerContext, err := origincontrollers.NewControllerContext(c, *config, clientConfig)
 		if err != nil {
 			klog.Fatal(err)
 		}
 		if err := startControllers(controllerContext); err != nil {
 			klog.Fatal(err)
 		}
-		controllerContext.StartInformers(ctx.Done())
+		controllerContext.StartInformers(c.Done())
 	}
 
 	eventBroadcaster := record.NewBroadcaster()
@@ -92,7 +92,8 @@ func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftCont
 	if err != nil {
 		return err
 	}
-	go leaderelection.RunOrDie(context.Background(),
+
+	leaderelection.RunOrDie(ctx,
 		leaderelection.LeaderElectionConfig{
 			Lock:            rl,
 			ReleaseOnCancel: true,
@@ -102,7 +103,8 @@ func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftCont
 			Callbacks: leaderelection.LeaderCallbacks{
 				OnStartedLeading: originControllerManager,
 				OnStoppedLeading: func() {
-					klog.Fatalf("leaderelection lost")
+					defer os.Exit(0)
+					klog.Warningf("Controller Manager received stop signal: leaderelection lost")
 				},
 			},
 		})

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"runtime"
 
@@ -39,7 +40,7 @@ func init() {
 }
 
 func main() {
-	stopCh := genericapiserver.SetupSignalHandler()
+	ctx := genericapiserver.SetupSignalContext()
 
 	defer serviceability.BehaviorOnPanic(os.Getenv("OPENSHIFT_ON_PANIC"), version.Get())()
 	defer serviceability.Profile(os.Getenv("OPENSHIFT_PROFILE")).Stop()
@@ -48,12 +49,12 @@ func main() {
 		runtime.GOMAXPROCS(runtime.NumCPU())
 	}
 
-	command := NewOpenShiftControllerManagerCommand(stopCh)
+	command := NewOpenShiftControllerManagerCommand(ctx)
 	code := cli.Run(command)
 	os.Exit(code)
 }
 
-func NewOpenShiftControllerManagerCommand(stopCh <-chan struct{}) *cobra.Command {
+func NewOpenShiftControllerManagerCommand(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "openshift-controller-manager",
 		Short: "Command for the OpenShift Controllers",
@@ -62,7 +63,7 @@ func NewOpenShiftControllerManagerCommand(stopCh <-chan struct{}) *cobra.Command
 			os.Exit(1)
 		},
 	}
-	start := openshift_controller_manager.NewOpenShiftControllerManagerCommand("start", os.Stdout, os.Stderr, stopCh)
+	start := openshift_controller_manager.NewOpenShiftControllerManagerCommand("start", os.Stdout, os.Stderr, ctx)
 	cmd.AddCommand(start)
 	return cmd
 }
