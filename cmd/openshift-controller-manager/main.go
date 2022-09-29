@@ -22,7 +22,6 @@ import (
 	"github.com/openshift/api/user"
 
 	openshift_controller_manager "github.com/openshift/openshift-controller-manager/pkg/cmd/openshift-controller-manager"
-	route_controller_manager "github.com/openshift/openshift-controller-manager/pkg/cmd/route-controller-manager"
 	"github.com/openshift/openshift-controller-manager/pkg/version"
 )
 
@@ -65,9 +64,5 @@ func NewOpenShiftControllerManagerCommand(stopCh <-chan struct{}) *cobra.Command
 	}
 	start := openshift_controller_manager.NewOpenShiftControllerManagerCommand("start", os.Stdout, os.Stderr, stopCh)
 	cmd.AddCommand(start)
-
-	routeStart := route_controller_manager.NewRouteControllerManagerCommand("route-controller-manager-start", os.Stdout, os.Stderr, stopCh)
-	cmd.AddCommand(routeStart)
-
 	return cmd
 }
