@@ -2157,6 +2157,8 @@ func newFakeBuildController(buildClient buildv1client.Interface, imageClient ima
 		ImageStreamInformer:                imageInformers.Image().V1().ImageStreams(),
 		ProxyConfigInformer:                configInformers.Config().V1().Proxies(),
 		ImageContentSourcePolicyInformer:   operatorInformers.Operator().V1alpha1().ImageContentSourcePolicies(),
+		ImageDigestMirrorSetInformer:       configInformers.Config().V1().ImageDigestMirrorSets(),
+		ImageTagMirrorSetInformer:          configInformers.Config().V1().ImageTagMirrorSets(),
 		PodInformer:                        kubeExternalInformers.Core().V1().Pods(),
 		SecretInformer:                     kubeExternalInformers.Core().V1().Secrets(),
 		ConfigMapInformer:                  kubeExternalInformers.Core().V1().ConfigMaps(),
