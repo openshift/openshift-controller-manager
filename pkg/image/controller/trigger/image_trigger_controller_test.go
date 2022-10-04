@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	buildapply "github.com/openshift/client-go/build/applyconfigurations/build/v1"
 	corev1 "k8s.io/api/core/v1"
 	kapierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -153,43 +154,51 @@ type fakeBuildConfigInterface struct {
 	namespace string
 }
 
-func (fakeBuildConfigInterface) Create(ctx context.Context, bc *buildv1.BuildConfig, opts metav1.CreateOptions) (*buildv1.BuildConfig, error) {
+func (*fakeBuildConfigInterface) Apply(context.Context, *buildapply.BuildConfigApplyConfiguration, metav1.ApplyOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Update(ctx context.Context, bc *buildv1.BuildConfig, opts metav1.UpdateOptions) (*buildv1.BuildConfig, error) {
+func (*fakeBuildConfigInterface) ApplyStatus(context.Context, *buildapply.BuildConfigApplyConfiguration, metav1.ApplyOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) UpdateStatus(ctx context.Context, bc *buildv1.BuildConfig, opts metav1.UpdateOptions) (*buildv1.BuildConfig, error) {
+func (*fakeBuildConfigInterface) Create(context.Context, *buildv1.BuildConfig, metav1.CreateOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Delete(ctx context.Context, name string, options metav1.DeleteOptions) error {
+func (*fakeBuildConfigInterface) Update(context.Context, *buildv1.BuildConfig, metav1.UpdateOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) DeleteCollection(ctx context.Context, options metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+func (*fakeBuildConfigInterface) UpdateStatus(context.Context, *buildv1.BuildConfig, metav1.UpdateOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Get(ctx context.Context, name string, options metav1.GetOptions) (*buildv1.BuildConfig, error) {
+func (*fakeBuildConfigInterface) Delete(context.Context, string, metav1.DeleteOptions) error {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) List(ctx context.Context, opts metav1.ListOptions) (*buildv1.BuildConfigList, error) {
+func (*fakeBuildConfigInterface) DeleteCollection(context.Context, metav1.DeleteOptions, metav1.ListOptions) error {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+func (*fakeBuildConfigInterface) Get(context.Context, string, metav1.GetOptions) (*buildv1.BuildConfig, error) {
 	panic("implement me")
 }
 
-func (fakeBuildConfigInterface) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *buildv1.BuildConfig, err error) {
+func (*fakeBuildConfigInterface) List(context.Context, metav1.ListOptions) (*buildv1.BuildConfigList, error) {
 	panic("implement me")
 }
 
-func (f *fakeBuildConfigInterface) Instantiate(ctx context.Context, buildConfigName string, buildRequest *buildv1.BuildRequest, options metav1.CreateOptions) (*buildv1.Build, error) {
+func (*fakeBuildConfigInterface) Watch(context.Context, metav1.ListOptions) (watch.Interface, error) {
+	panic("implement me")
+}
+
+func (*fakeBuildConfigInterface) Patch(context.Context, string, types.PatchType, []byte, metav1.PatchOptions, ...string) (*buildv1.BuildConfig, error) {
+	panic("implement me")
+}
+
+func (f *fakeBuildConfigInterface) Instantiate(_ context.Context, _ string, buildRequest *buildv1.BuildRequest, _ metav1.CreateOptions) (*buildv1.Build, error) {
 	return f.inst.Instantiate(f.namespace, buildRequest)
 }
 
