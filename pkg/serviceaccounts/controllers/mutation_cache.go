@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	etcd "k8s.io/apiserver/pkg/storage/etcd3"
+	"k8s.io/apiserver/pkg/storage"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubernetes/pkg/controller"
 )
@@ -34,7 +34,7 @@ func NewEtcdMutationCache(backingCache cache.Store) MutationCache {
 	return &mutationCache{
 		backingCache:  backingCache,
 		mutationCache: lru,
-		comparator:    etcd.APIObjectVersioner{},
+		comparator:    storage.APIObjectVersioner{},
 	}
 }
 
