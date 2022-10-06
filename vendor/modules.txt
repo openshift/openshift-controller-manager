@@ -418,16 +418,6 @@ github.com/openshift/client-go/operator/informers/externalversions/operator/v1
 github.com/openshift/client-go/operator/informers/externalversions/operator/v1alpha1
 github.com/openshift/client-go/operator/listers/operator/v1
 github.com/openshift/client-go/operator/listers/operator/v1alpha1
-github.com/openshift/client-go/route/clientset/versioned
-github.com/openshift/client-go/route/clientset/versioned/fake
-github.com/openshift/client-go/route/clientset/versioned/scheme
-github.com/openshift/client-go/route/clientset/versioned/typed/route/v1
-github.com/openshift/client-go/route/clientset/versioned/typed/route/v1/fake
-github.com/openshift/client-go/route/informers/externalversions
-github.com/openshift/client-go/route/informers/externalversions/internalinterfaces
-github.com/openshift/client-go/route/informers/externalversions/route
-github.com/openshift/client-go/route/informers/externalversions/route/v1
-github.com/openshift/client-go/route/listers/route/v1
 github.com/openshift/client-go/security/clientset/versioned
 github.com/openshift/client-go/security/clientset/versioned/scheme
 github.com/openshift/client-go/security/clientset/versioned/typed/security/v1
@@ -1513,8 +1503,6 @@ k8s.io/kubernetes/pkg/credentialprovider/secrets
 k8s.io/kubernetes/pkg/features
 k8s.io/kubernetes/pkg/fieldpath
 k8s.io/kubernetes/pkg/registry/core/secret
-k8s.io/kubernetes/pkg/registry/core/service/allocator
-k8s.io/kubernetes/pkg/registry/core/service/ipallocator
 k8s.io/kubernetes/pkg/serviceaccount
 k8s.io/kubernetes/pkg/util/hash
 k8s.io/kubernetes/pkg/util/labels

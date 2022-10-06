@@ -29,8 +29,6 @@ import (
 	imageinformer "github.com/openshift/client-go/image/informers/externalversions"
 	operatorclient "github.com/openshift/client-go/operator/clientset/versioned"
 	operatorinformer "github.com/openshift/client-go/operator/informers/externalversions"
-	routeclient "github.com/openshift/client-go/route/clientset/versioned"
-	routeinformer "github.com/openshift/client-go/route/informers/externalversions"
 	securityclient "github.com/openshift/client-go/security/clientset/versioned"
 	templateclient "github.com/openshift/client-go/template/clientset/versioned"
 	templateinformer "github.com/openshift/client-go/template/informers/externalversions"
@@ -80,10 +78,6 @@ func NewControllerContext(
 	if err != nil {
 		return nil, err
 	}
-	routerClient, err := routeclient.NewForConfig(clientConfig)
-	if err != nil {
-		return nil, err
-	}
 	templateClient, err := templateclient.NewForConfig(clientConfig)
 	if err != nil {
 		return nil, err
@@ -128,7 +122,6 @@ func NewControllerContext(
 		ConfigInformers:                    configinformer.NewSharedInformerFactory(configClient, defaultInformerResyncPeriod),
 		ImageInformers:                     imageinformer.NewSharedInformerFactory(imageClient, defaultInformerResyncPeriod),
 		OperatorInformers:                  operatorinformer.NewSharedInformerFactory(operatorClient, defaultInformerResyncPeriod),
-		RouteInformers:                     routeinformer.NewSharedInformerFactory(routerClient, defaultInformerResyncPeriod),
 		TemplateInformers:                  templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
 		Stop:                               ctx.Done(),
 		Context:                            ctx,
@@ -153,7 +146,6 @@ type ControllerContext struct {
 	ControllerManagerKubeInformers     informers.SharedInformerFactory
 
 	TemplateInformers templateinformer.SharedInformerFactory
-	RouteInformers    routeinformer.SharedInformerFactory
 
 	AppsInformers     appsinformer.SharedInformerFactory
 	BuildInformers    buildinformer.SharedInformerFactory
@@ -185,7 +177,6 @@ func (c *ControllerContext) StartInformers(stopCh <-chan struct{}) {
 	c.ImageInformers.Start(stopCh)
 
 	c.TemplateInformers.Start(stopCh)
-	c.RouteInformers.Start(stopCh)
 	c.OperatorInformers.Start(stopCh)
 
 	c.informersStartedLock.Lock()

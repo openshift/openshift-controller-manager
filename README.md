@@ -8,8 +8,6 @@ The controllers are generally organized by API group:
 - `build.openshift.io` - OpenShift `Builds` and `BuildConfigs`.
 - `image.openshift.io` - `ImageStreams` and `Images`.
 - `project.openshift.io` - Projects, OpenShift's wrapper for `Namespaces`.
-- `route.openshift.io` - OpenShift `Routes`, which provide similar capability to upstream `Ingress`
-  objects.
 - `template.openshift.io` - OpenShift `Templates` - a simple way to deploy applications.
 
 There are additional controllers which add OpenShift-specific capabilities to the cluster:
