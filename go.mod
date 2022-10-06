@@ -1,6 +1,6 @@
 module github.com/openshift/openshift-controller-manager
 
-go 1.18
+go 1.19
 
 require (
 	github.com/BurntSushi/toml v0.3.1
