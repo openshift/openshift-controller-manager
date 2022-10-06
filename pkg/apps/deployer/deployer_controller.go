@@ -36,7 +36,6 @@ import (
 //
 // 5ms, 10ms, 20ms, 40ms, 80ms, 160ms, 320ms, 640ms, 1.3s, 2.6s, 5.1s, 10.2s, 20.4s, 41s, 82s
 //
-//
 // The most common errors are:
 //
 // * failure to delete the deployer pods
@@ -67,8 +66,8 @@ func (e actionableError) Error() string { return string(e) }
 //
 // When the deployment enters a terminal status:
 //
-//   1. If the deployment finished normally, the deployer pod is deleted.
-//   2. If the deployment failed, the deployer pod is not deleted.
+//  1. If the deployment finished normally, the deployer pod is deleted.
+//  2. If the deployment failed, the deployer pod is not deleted.
 type DeploymentController struct {
 	// rn is used for updating replication controllers.
 	rn kcoreclient.ReplicationControllersGetter
@@ -447,14 +446,13 @@ func (c *DeploymentController) makeDeployerPod(deployment *corev1.ReplicationCon
 
 // makeDeployerContainer creates containers in the following way:
 //
-//   1. For the Recreate and Rolling strategies, strategy, use the factory's
-//      DeployerImage as the container image, and the factory's Environment
-//      as the container environment.
-//   2. For all Custom strategies, or if the CustomParams field is set, use
-//      the strategy's image for the container image, and use the combination
-//      of the factory's Environment and the strategy's environment as the
-//      container environment.
-//
+//  1. For the Recreate and Rolling strategies, strategy, use the factory's
+//     DeployerImage as the container image, and the factory's Environment
+//     as the container environment.
+//  2. For all Custom strategies, or if the CustomParams field is set, use
+//     the strategy's image for the container image, and use the combination
+//     of the factory's Environment and the strategy's environment as the
+//     container environment.
 func (c *DeploymentController) makeDeployerContainer(strategy *appsv1.DeploymentStrategy) *corev1.Container {
 	image := c.deployerImage
 	var environment []corev1.EnvVar

@@ -242,14 +242,14 @@ func needsImport(stream *imagev1.ImageStream) (ok bool, partial bool) {
 //
 // There are 3 scenarios:
 //
-// 1. spec.DockerImageRepository defined without any tags results in all tags being imported
-//    from upstream image repository
+//  1. spec.DockerImageRepository defined without any tags results in all tags being imported
+//     from upstream image repository
 //
-// 2. spec.DockerImageRepository + tags defined - import all tags from upstream image repository,
-//    and all the specified which (if name matches) will overwrite the default ones.
-//    Additionally:
-//    for kind == DockerImage import or reference underlying image, exact tag (not provided means latest),
-//    for kind != DockerImage reference tag from the same or other ImageStream
+//  2. spec.DockerImageRepository + tags defined - import all tags from upstream image repository,
+//     and all the specified which (if name matches) will overwrite the default ones.
+//     Additionally:
+//     for kind == DockerImage import or reference underlying image, exact tag (not provided means latest),
+//     for kind != DockerImage reference tag from the same or other ImageStream
 //
 // 3. spec.DockerImageRepository not defined - import tags per each definition.
 //

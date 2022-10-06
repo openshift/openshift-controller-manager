@@ -54,8 +54,9 @@ type RCControllerRefManager struct {
 // If CanAdopt() returns a non-nil error, all adoptions will fail.
 //
 // NOTE: Once CanAdopt() is called, it will not be called again by the same
-//       RCControllerRefManager instance. Create a new instance if it
-//       makes sense to check CanAdopt() again (e.g. in a different sync pass).
+//
+//	RCControllerRefManager instance. Create a new instance if it
+//	makes sense to check CanAdopt() again (e.g. in a different sync pass).
 func NewRCControllerRefManager(
 	rcControl RCControlInterface,
 	controller kmetav1.Object,
@@ -77,8 +78,8 @@ func NewRCControllerRefManager(
 // ClaimReplicationController tries to take ownership of a ReplicationController.
 //
 // It will reconcile the following:
-//   * Adopt the ReplicationController if it's an orphan.
-//   * Release owned ReplicationController if the selector no longer matches.
+//   - Adopt the ReplicationController if it's an orphan.
+//   - Release owned ReplicationController if the selector no longer matches.
 //
 // A non-nil error is returned if some form of reconciliation was attempted and
 // failed. Usually, controllers should try again later in case reconciliation
@@ -104,8 +105,8 @@ func (m *RCControllerRefManager) ClaimReplicationController(rc *v1.ReplicationCo
 // ClaimReplicationControllers tries to take ownership of a list of ReplicationControllers.
 //
 // It will reconcile the following:
-//   * Adopt orphans if the selector matches.
-//   * Release owned objects if the selector no longer matches.
+//   - Adopt orphans if the selector matches.
+//   - Release owned objects if the selector no longer matches.
 //
 // A non-nil error is returned if some form of reconciliation was attempted and
 // failed. Usually, controllers should try again later in case reconciliation
