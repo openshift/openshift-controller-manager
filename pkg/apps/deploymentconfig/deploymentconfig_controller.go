@@ -49,8 +49,8 @@ func (e fatalError) Error() string {
 // DeploymentConfigController is responsible for creating a new deployment
 // when:
 //
-//    1. The config version is > 0 and,
-//    2. No deployment for the version exists.
+//  1. The config version is > 0 and,
+//  2. No deployment for the version exists.
 //
 // The controller reconciles deployments with the replica count specified on
 // the config. The active deployment (that is, the latest successful

@@ -1191,6 +1191,8 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.SetHostnameAsFQDN = nil
 				// k8s 1.23 - this is enabled by the IdentifyPodOS feature
 				p.Spec.OS = nil
+				// k8s 1.25 - this is enabled by the UserNamespacesSupport feature
+				p.Spec.HostUsers = nil
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}
