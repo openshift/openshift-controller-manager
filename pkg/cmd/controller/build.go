@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"fmt"
 	"strings"
 
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	"k8s.io/kubernetes/pkg/features"
 
 	buildclient "github.com/openshift/client-go/build/clientset/versioned"
 	buildcontroller "github.com/openshift/openshift-controller-manager/pkg/build/controller/build"
@@ -55,11 +57,15 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 
 	fg := ctx.OpenshiftControllerConfig.FeatureGates
 	csiVolumesEnabled := false
+	clearHostUsersForUserNS := false
 	if fg != nil {
 		for _, v := range fg {
 			v = strings.TrimSpace(v)
 			if v == "BuildCSIVolumes=true" {
 				csiVolumesEnabled = true
+			}
+			if v == fmt.Sprintf("%s=true", string(features.UserNamespacesStatelessPodsSupport)) {
+				clearHostUsersForUserNS = true
 			}
 		}
 	}
@@ -85,13 +91,17 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 		DockerBuildStrategy: &buildstrategy.DockerBuildStrategy{
 			Image:                  imageTemplate.ExpandOrDie("docker-builder"),
 			BuildCSIVolumesEnabled: csiVolumesEnabled,
+			ClearHostUsers:         clearHostUsersForUserNS,
 		},
 		SourceBuildStrategy: &buildstrategy.SourceBuildStrategy{
 			Image:                   imageTemplate.ExpandOrDie("docker-builder"),
 			SecurityClient:          securityClient.SecurityV1(),
 			BuildCSIVolumeseEnabled: csiVolumesEnabled,
+			ClearHostUsers:          clearHostUsersForUserNS,
 		},
-		CustomBuildStrategy:      &buildstrategy.CustomBuildStrategy{},
+		CustomBuildStrategy: &buildstrategy.CustomBuildStrategy{
+			ClearHostUsers: clearHostUsersForUserNS,
+		},
 		BuildDefaults:            builddefaults.BuildDefaults{Config: ctx.OpenshiftControllerConfig.Build.BuildDefaults},
 		BuildOverrides:           buildoverrides.BuildOverrides{Config: ctx.OpenshiftControllerConfig.Build.BuildOverrides},
 		InternalRegistryHostname: ctx.OpenshiftControllerConfig.DockerPullSecret.InternalRegistryHostname,

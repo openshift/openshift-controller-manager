@@ -317,5 +317,8 @@ func TestS2ICreateBuildPodAutonsUser(t *testing.T) {
 		func(build *buildv1.Build, env corev1.EnvVar) {
 			build.Spec.Strategy.SourceStrategy.Env = append(build.Spec.Strategy.SourceStrategy.Env, env)
 		},
+		func(clearHostUsersForUserNS bool) {
+			strategy.ClearHostUsers = clearHostUsersForUserNS
+		},
 	)
 }

@@ -13,6 +13,7 @@ import (
 	kvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/apis/policy"
+	"k8s.io/utils/pointer"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	"github.com/openshift/library-go/pkg/build/naming"
@@ -570,9 +571,12 @@ func setupBuilderDeviceFUSE(pod *corev1.Pod) {
 
 // Request that the builder be run in a user namespace, mapped from host ID
 // ranges chosen by the node.
-func setupBuilderAutonsUser(build *buildv1.Build, vars []corev1.EnvVar, pod *corev1.Pod) {
+func setupBuilderAutonsUser(build *buildv1.Build, vars []corev1.EnvVar, clearHostUsersForUserNS bool, pod *corev1.Pod) {
 	metav1.SetMetaDataAnnotation(&pod.ObjectMeta, "io.openshift.builder", "")
 	metav1.SetMetaDataAnnotation(&pod.ObjectMeta, "io.kubernetes.cri-o.userns-mode", "auto:size=65536")
+	if clearHostUsersForUserNS {
+		pod.Spec.HostUsers = pointer.Bool(false)
+	}
 }
 
 // setupBuildCAs mounts certificate authorities for the build from a predetermined ConfigMap.

@@ -251,5 +251,8 @@ func TestDockerCreateBuildPodAutonsUser(t *testing.T) {
 		func(build *buildv1.Build, env corev1.EnvVar) {
 			build.Spec.Strategy.DockerStrategy.Env = append(build.Spec.Strategy.DockerStrategy.Env, env)
 		},
+		func(clearHostUsersForUserNS bool) {
+			strategy.ClearHostUsers = clearHostUsersForUserNS
+		},
 	)
 }

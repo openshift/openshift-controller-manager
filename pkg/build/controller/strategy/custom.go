@@ -30,6 +30,7 @@ func init() {
 
 // CustomBuildStrategy creates a build using a custom builder image.
 type CustomBuildStrategy struct {
+	ClearHostUsers bool // use "hostUsers: false" to ask to run in a user namespace because we're "stateless" (i.e., have no volumes which will persist beyond the life of this pod)
 }
 
 // CreateBuildPod creates the pod to be used for the Custom build
@@ -138,7 +139,7 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	setupBuildCAs(build, pod, additionalCAs, internalRegistryHost)
 	setupContainersStorage(pod, &pod.Spec.Containers[0])
 	if securityContext == nil || securityContext.Privileged == nil || !*securityContext.Privileged {
-		setupBuilderAutonsUser(build, strategy.Env, pod)
+		setupBuilderAutonsUser(build, strategy.Env, bs.ClearHostUsers, pod)
 		setupBuilderDeviceFUSE(pod)
 	}
 	return pod, nil

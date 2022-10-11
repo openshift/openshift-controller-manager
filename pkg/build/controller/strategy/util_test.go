@@ -820,67 +820,135 @@ type buildPodCreator interface {
 	CreateBuildPod(build *buildv1.Build, additionalCAs map[string]string, internalRegistryHost string) (*corev1.Pod, error)
 }
 
-func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy buildPodCreator, addEnv func(build *buildv1.Build, env corev1.EnvVar)) {
+func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy buildPodCreator, addEnv func(build *buildv1.Build, env corev1.EnvVar), clearHostUsersForUserNS func(clearHostUsersForUserNS bool)) {
 	for _, testCase := range []struct {
-		env           string
-		expectError   bool
-		privileged    bool
-		annotations   map[string]string
-		noAnnotations []string
+		env                   string
+		expectError           bool
+		privileged            bool
+		useUserNamespaceUsers bool
+		annotations           map[string]string
+		noAnnotations         []string
+		expectHostUsers       bool
 	}{
 		{
-			env:        "",
-			privileged: true,
+			env:                   "",
+			privileged:            true,
+			useUserNamespaceUsers: false,
 			noAnnotations: []string{
 				"io.openshift.builder",
 				"io.kubernetes.cri-o.Devices",
 				"io.kubernetes.cri-o.userns-mode",
 			},
+			expectHostUsers: true,
 		},
 		{
-			env:        "BUILD_PRIVILEGED=0",
-			privileged: false,
+			env:                   "",
+			privileged:            true,
+			useUserNamespaceUsers: true,
+			noAnnotations: []string{
+				"io.openshift.builder",
+				"io.kubernetes.cri-o.Devices",
+				"io.kubernetes.cri-o.userns-mode",
+			},
+			expectHostUsers: true,
+		},
+		{
+			env:                   "BUILD_PRIVILEGED=0",
+			privileged:            false,
+			useUserNamespaceUsers: false,
 			annotations: map[string]string{
 				"io.openshift.builder":            "",
 				"io.kubernetes.cri-o.Devices":     "/dev/fuse:rwm",
 				"io.kubernetes.cri-o.userns-mode": "auto:size=65536",
 			},
+			expectHostUsers: true, // won't set HostUsers: false without the UserNamespacesStatelessPodsSupport feature
 		},
 		{
-			env:        "BUILD_PRIVILEGED=42",
-			privileged: true,
-			noAnnotations: []string{
-				"io.openshift.builder",
-				"io.kubernetes.cri-o.Devices",
-				"io.kubernetes.cri-o.userns-mode",
-			},
-		},
-		{
-			env:        "BUILD_PRIVILEGED=false",
-			privileged: false,
+			env:                   "BUILD_PRIVILEGED=0",
+			privileged:            false,
+			useUserNamespaceUsers: true,
 			annotations: map[string]string{
 				"io.openshift.builder":            "",
 				"io.kubernetes.cri-o.Devices":     "/dev/fuse:rwm",
 				"io.kubernetes.cri-o.userns-mode": "auto:size=65536",
 			},
+			expectHostUsers: false,
 		},
 		{
-			env:        "BUILD_PRIVILEGED=true",
-			privileged: true,
+			env:                   "BUILD_PRIVILEGED=42",
+			privileged:            true,
+			useUserNamespaceUsers: false,
 			noAnnotations: []string{
 				"io.openshift.builder",
 				"io.kubernetes.cri-o.Devices",
 				"io.kubernetes.cri-o.userns-mode",
 			},
+			expectHostUsers: true,
+		},
+		{
+			env:                   "BUILD_PRIVILEGED=42",
+			privileged:            true,
+			useUserNamespaceUsers: true,
+			noAnnotations: []string{
+				"io.openshift.builder",
+				"io.kubernetes.cri-o.Devices",
+				"io.kubernetes.cri-o.userns-mode",
+			},
+			expectHostUsers: true,
+		},
+		{
+			env:                   "BUILD_PRIVILEGED=false",
+			privileged:            false,
+			useUserNamespaceUsers: false,
+			annotations: map[string]string{
+				"io.openshift.builder":            "",
+				"io.kubernetes.cri-o.Devices":     "/dev/fuse:rwm",
+				"io.kubernetes.cri-o.userns-mode": "auto:size=65536",
+			},
+			expectHostUsers: true, // won't set HostUsers: false without the UserNamespacesStatelessPodsSupport feature
+		},
+		{
+			env:                   "BUILD_PRIVILEGED=false",
+			privileged:            false,
+			useUserNamespaceUsers: true,
+			annotations: map[string]string{
+				"io.openshift.builder":            "",
+				"io.kubernetes.cri-o.Devices":     "/dev/fuse:rwm",
+				"io.kubernetes.cri-o.userns-mode": "auto:size=65536",
+			},
+			expectHostUsers: false,
+		},
+		{
+			env:                   "BUILD_PRIVILEGED=true",
+			privileged:            true,
+			useUserNamespaceUsers: false,
+			noAnnotations: []string{
+				"io.openshift.builder",
+				"io.kubernetes.cri-o.Devices",
+				"io.kubernetes.cri-o.userns-mode",
+			},
+			expectHostUsers: true,
+		},
+		{
+			env:                   "BUILD_PRIVILEGED=true",
+			privileged:            true,
+			useUserNamespaceUsers: true,
+			noAnnotations: []string{
+				"io.openshift.builder",
+				"io.kubernetes.cri-o.Devices",
+				"io.kubernetes.cri-o.userns-mode",
+			},
+			expectHostUsers: true,
 		},
 	} {
-		t.Run(testCase.env, func(t *testing.T) {
+		t.Run(testCase.env+fmt.Sprintf(",useUserNamespaceUsers=%t", testCase.useUserNamespaceUsers), func(t *testing.T) {
 			build := build.DeepCopy()
 			for _, envVar := range strings.Split(testCase.env, ":") {
 				if env := strings.SplitN(envVar, "=", 2); len(env) > 1 {
 					addEnv(build, corev1.EnvVar{Name: env[0], Value: env[1]})
 				}
 			}
+			clearHostUsersForUserNS(testCase.useUserNamespaceUsers)
 			actual, err := strategy.CreateBuildPod(build, nil, testInternalRegistryHost)
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
@@ -914,6 +982,13 @@ func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy b
 				if metav1.HasAnnotation(actual.ObjectMeta, annotation) {
 					t.Errorf("Expected no %q annotation, but got one", annotation)
 				}
+			}
+			hostUsers := true
+			if actual.Spec.HostUsers != nil {
+				hostUsers = *actual.Spec.HostUsers
+			}
+			if hostUsers != testCase.expectHostUsers {
+				t.Errorf("Expected to see pod HostUsers=%t, got %t (%#v)", testCase.expectHostUsers, hostUsers, actual.Spec.HostUsers)
 			}
 		})
 	}
