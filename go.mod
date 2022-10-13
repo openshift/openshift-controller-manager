@@ -13,10 +13,10 @@ require (
 	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/golang-lru v0.5.4
-	github.com/openshift/api v0.0.0-20221004120407-c46852673d03
+	github.com/openshift/api v0.0.0-20221013123531-622889ac07cf
 	github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d
 	github.com/openshift/client-go v0.0.0-20220915152853-9dfefb19db2e
-	github.com/openshift/library-go v0.0.0-20221004125358-0d713c6520e2
+	github.com/openshift/library-go v0.0.0-20221013141004-83a3f3e9de05
 	github.com/openshift/runtime-utils v0.0.0-20220926190846-5c488b20a19f
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/client_model v0.2.0
