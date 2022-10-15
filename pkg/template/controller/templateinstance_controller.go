@@ -411,6 +411,10 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 
 	templatePtr := &templateInstance.Spec.Template
 	template := templatePtr.DeepCopy()
+	if len(template.Namespace) == 0 {
+		// api servers now (k8s 1.25) care that the namespace actually match the target namespace
+		template.Namespace = templateInstance.Namespace
+	}
 
 	if secret != nil {
 		for i, param := range template.Parameters {
