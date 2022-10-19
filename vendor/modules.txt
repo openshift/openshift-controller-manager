@@ -285,7 +285,7 @@ github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 ## explicit
 github.com/opencontainers/runtime-spec/specs-go
-# github.com/openshift/api v0.0.0-20221004120407-c46852673d03
+# github.com/openshift/api v0.0.0-20221013123531-622889ac07cf
 ## explicit; go 1.18
 github.com/openshift/api
 github.com/openshift/api/annotations
@@ -457,7 +457,7 @@ github.com/openshift/client-go/template/informers/externalversions/internalinter
 github.com/openshift/client-go/template/informers/externalversions/template
 github.com/openshift/client-go/template/informers/externalversions/template/v1
 github.com/openshift/client-go/template/listers/template/v1
-# github.com/openshift/library-go v0.0.0-20221004125358-0d713c6520e2
+# github.com/openshift/library-go v0.0.0-20221013141004-83a3f3e9de05
 ## explicit; go 1.18
 github.com/openshift/library-go/pkg/apps/appsserialization
 github.com/openshift/library-go/pkg/apps/appsutil

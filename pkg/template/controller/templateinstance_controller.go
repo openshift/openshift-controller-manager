@@ -399,18 +399,22 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 			Resource:  "secrets",
 			Name:      templateInstance.Spec.Secret.Name,
 		}); err != nil {
-			return err
+			return fmt.Errorf("unable to authorize user to retrive TemplateInstance Secret: %w", err)
 		}
 
 		s, err := c.kc.CoreV1().Secrets(templateInstance.Namespace).Get(context.TODO(), templateInstance.Spec.Secret.Name, metav1.GetOptions{})
 		secret = s
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to retrieve TemplateInstance Secret: %w", err)
 		}
 	}
 
 	templatePtr := &templateInstance.Spec.Template
 	template := templatePtr.DeepCopy()
+	if len(template.Namespace) == 0 {
+		// api servers now (k8s 1.25) care that the namespace actually match the target namespace
+		template.Namespace = templateInstance.Namespace
+	}
 
 	if secret != nil {
 		for i, param := range template.Parameters {
@@ -428,18 +432,18 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 		Resource:  "templateconfigs",
 		Name:      template.Name,
 	}); err != nil {
-		return err
+		return fmt.Errorf("unable to authorize user to create TemplateConfig : %w", err)
 	}
 
 	klog.V(4).Infof("TemplateInstance controller: creating TemplateConfig for %s/%s", templateInstance.Namespace, templateInstance.Name)
 
 	v1Template, err := legacyscheme.Scheme.ConvertToVersion(template, templatev1.GroupVersion)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to convert template to %s.%s.Template: %w", templatev1.GroupName, templatev1.GroupVersion, err)
 	}
 	processedObjects, err := templateprocessingclient.NewDynamicTemplateProcessor(c.dynamicClient).ProcessToList(v1Template.(*templatev1.Template))
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to process Template objects: %w", err)
 	}
 
 	for _, obj := range processedObjects.Items {
@@ -454,17 +458,17 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 	// First, do all the SARs to ensure the requester actually has permissions
 	// to create.
 	klog.V(4).Infof("TemplateInstance controller: running SARs for %s/%s", templateInstance.Namespace, templateInstance.Name)
-	allErrors := []error{}
+	var allErrors []error
 	for _, currObj := range processedObjects.Items {
-		restMapping, mappingErr := c.dynamicRestMapper.RESTMapping(currObj.GroupVersionKind().GroupKind(), currObj.GroupVersionKind().Version)
-		if mappingErr != nil {
-			allErrors = append(allErrors, mappingErr)
+		restMapping, err := c.dynamicRestMapper.RESTMapping(currObj.GroupVersionKind().GroupKind(), currObj.GroupVersionKind().Version)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("unable to identify the resource mapping for %s: %w", currObj.GroupVersionKind(), err))
 			continue
 		}
 
-		namespace, nsErr := c.processNamespace(templateInstance.Namespace, currObj.GetNamespace(), restMapping.Scope.Name() == meta.RESTScopeNameRoot)
-		if nsErr != nil {
-			allErrors = append(allErrors, nsErr)
+		namespace, err := c.processNamespace(templateInstance.Namespace, currObj.GetNamespace(), restMapping.Scope.Name() == meta.RESTScopeNameRoot)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("error processing namespace for %s, Name=%s:%w", currObj.GroupVersionKind(), currObj.GetName(), err))
 			continue
 		}
 
@@ -475,7 +479,7 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 			Resource:  restMapping.Resource.Resource,
 			Name:      currObj.GetName(),
 		}); err != nil {
-			allErrors = append(allErrors, err)
+			allErrors = append(allErrors, fmt.Errorf("unable to authorize user to create %s, Name=%s: %w", restMapping.Resource, currObj.GetName(), err))
 			continue
 		}
 	}
@@ -487,25 +491,25 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 	// labelled as having previously been created by us.
 	klog.V(4).Infof("TemplateInstance controller: creating objects for %s/%s", templateInstance.Namespace, templateInstance.Name)
 	templateInstance.Status.Objects = nil
-	allErrors = []error{}
+	allErrors = nil
 	for _, currObj := range processedObjects.Items {
-		restMapping, mappingErr := c.dynamicRestMapper.RESTMapping(currObj.GroupVersionKind().GroupKind(), currObj.GroupVersionKind().Version)
-		if mappingErr != nil {
-			allErrors = append(allErrors, mappingErr)
+		restMapping, err := c.dynamicRestMapper.RESTMapping(currObj.GroupVersionKind().GroupKind(), currObj.GroupVersionKind().Version)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("unable to identify the resource mapping for %s: %w", currObj.GroupVersionKind(), err))
 			continue
 		}
 
-		namespace, nsErr := c.processNamespace(templateInstance.Namespace, currObj.GetNamespace(), restMapping.Scope.Name() == meta.RESTScopeNameRoot)
-		if nsErr != nil {
-			allErrors = append(allErrors, nsErr)
+		namespace, err := c.processNamespace(templateInstance.Namespace, currObj.GetNamespace(), restMapping.Scope.Name() == meta.RESTScopeNameRoot)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("error processing namespace for %s, Name=%s:%w", currObj.GroupVersionKind(), currObj.GetName(), err))
 			continue
 		}
 
-		createObj, createErr := c.dynamicClient.Resource(restMapping.Resource).Namespace(namespace).Create(context.TODO(), &currObj, metav1.CreateOptions{})
-		if kerrors.IsAlreadyExists(createErr) {
+		createObj, err := c.dynamicClient.Resource(restMapping.Resource).Namespace(namespace).Create(context.TODO(), &currObj, metav1.CreateOptions{})
+		if kerrors.IsAlreadyExists(err) {
 			freshGottenObj, getErr := c.dynamicClient.Resource(restMapping.Resource).Namespace(namespace).Get(context.TODO(), currObj.GetName(), metav1.GetOptions{})
 			if getErr != nil {
-				allErrors = append(allErrors, getErr)
+				allErrors = append(allErrors, fmt.Errorf("unable to retrive existing %s, Name=%s: %w", restMapping.Resource, currObj.GetName(), getErr))
 				continue
 			}
 
@@ -513,14 +517,11 @@ func (c *TemplateInstanceController) instantiate(templateInstance *templatev1.Te
 			// if the labels match, it's already our object so pretend we created
 			// it successfully.
 			if ok && owner == string(templateInstance.UID) {
-				createObj, createErr = freshGottenObj, nil
-			} else {
-				allErrors = append(allErrors, createErr)
-				continue
+				createObj, err = freshGottenObj, nil
 			}
 		}
-		if createErr != nil {
-			allErrors = append(allErrors, createErr)
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("unable to create %s, Name=%s: %w", restMapping.Resource, currObj.GetName(), err))
 			continue
 		}
 
