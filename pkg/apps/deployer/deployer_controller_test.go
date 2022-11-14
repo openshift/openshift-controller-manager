@@ -1148,6 +1148,7 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.Containers[0].Env = append(p.Spec.Containers[0].Env, corev1.EnvVar{Name: "OPENSHIFT_DEPLOYMENT_NAMESPACE", Value: "default"})
 				p.Spec.Containers[0].Resources = container.Resources
 				p.Spec.Containers[0].ImagePullPolicy = corev1.PullIfNotPresent
+				p.Spec.Containers[0].TerminationMessagePolicy = corev1.TerminationMessageFallbackToLogsOnError
 
 				p.Spec.DNSPolicy = "None"
 				p.Spec.DNSConfig = &corev1.PodDNSConfig{
