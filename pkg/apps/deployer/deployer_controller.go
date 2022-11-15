@@ -401,12 +401,13 @@ func (c *DeploymentController) makeDeployerPod(deployment *corev1.ReplicationCon
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
 				{
-					Name:      "deployment",
-					Command:   container.Command,
-					Args:      container.Args,
-					Image:     container.Image,
-					Env:       envVars,
-					Resources: deploymentConfig.Spec.Strategy.Resources,
+					Name:                     "deployment",
+					Command:                  container.Command,
+					Args:                     container.Args,
+					Image:                    container.Image,
+					Env:                      envVars,
+					Resources:                deploymentConfig.Spec.Strategy.Resources,
+					TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 				},
 			},
 			ActiveDeadlineSeconds: &maxDeploymentDurationSeconds,
