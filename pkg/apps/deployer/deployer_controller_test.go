@@ -1194,6 +1194,9 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.OS = nil
 				// k8s 1.25 - this is enabled by the UserNamespacesSupport feature
 				p.Spec.HostUsers = nil
+				// k8s 1.26
+				p.Spec.ResourceClaims = []corev1.PodResourceClaim{}
+				p.Spec.SchedulingGates = []corev1.PodSchedulingGate{}
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}

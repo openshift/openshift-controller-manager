@@ -423,6 +423,8 @@ func (c *DeploymentController) makeDeployerPod(deployment *corev1.ReplicationCon
 			ServiceAccountName:            c.serviceAccount,
 			TerminationGracePeriodSeconds: &gracePeriod,
 			ShareProcessNamespace:         &shareProcessNamespace,
+			ResourceClaims:                []corev1.PodResourceClaim{},
+			SchedulingGates:               []corev1.PodSchedulingGate{},
 		},
 	}
 
