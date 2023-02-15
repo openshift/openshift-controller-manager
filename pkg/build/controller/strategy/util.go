@@ -719,7 +719,7 @@ func setupBlobCache(pod *corev1.Pod) {
 }
 
 // setupBuildVolumes sets up user defined BuildVolumes
-func setupBuildVolumes(pod *corev1.Pod, buildVolumes []buildv1.BuildVolume) error {
+func setupBuildVolumes(pod *corev1.Pod, buildVolumes []buildv1.BuildVolume, csiVolumesEnabled bool) error {
 	// if there are no BuildVolumes or the pod is nil,
 	// there is no processing needed, so just return quickly
 	if len(buildVolumes) == 0 || pod == nil {
@@ -755,6 +755,9 @@ func setupBuildVolumes(pod *corev1.Pod, buildVolumes []buildv1.BuildVolume) erro
 			volumeSource.ConfigMap = buildVolume.Source.ConfigMap
 			mountConfigMapVolume(pod, &pod.Spec.Containers[0], strings.ToLower(buildVolume.Source.ConfigMap.Name), PathForBuildVolume(buildVolume.Source.ConfigMap.Name), buildVolumeSuffix, &volumeSource)
 		case buildv1.BuildVolumeSourceTypeCSI:
+			if !csiVolumesEnabled {
+				return fmt.Errorf("csi volumes require the BuildCSIVolumes feature gate to be enabled")
+			}
 			volumeSource.CSI = buildVolume.Source.CSI
 			mountCSIVolume(pod, &pod.Spec.Containers[0], strings.ToLower(buildVolume.Name), PathForBuildVolume(buildVolume.Name), buildVolumeSuffix, &volumeSource)
 		default:
