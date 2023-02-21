@@ -44,10 +44,16 @@ const (
 	// build source repository and also handle binary input content.
 	GitCloneContainer = "git-clone"
 
+	// ChmodContainer name of the init-container to execute chmod in the git-clone data.
+	ChmodContainer = "chmod-git-clone"
+
 	// buildVolumeMountPath is where user defined BuildVolumes get mounted
 	buildVolumeMountPath = "/var/run/openshift.io/volumes"
 	// buildVolumeSuffix is a suffix for BuildVolume names
 	buildVolumeSuffix = "user-build-volume"
+
+	// buildWorkDirVolume build working directory volume name
+	BuildWorkDirVolume = "buildworkdir"
 )
 
 const (
@@ -315,6 +321,7 @@ func addOutputEnvVars(buildOutput *corev1.ObjectReference, output *[]corev1.EnvV
 	outputVars := []corev1.EnvVar{
 		{Name: "OUTPUT_REGISTRY", Value: registry},
 		{Name: "OUTPUT_IMAGE", Value: image},
+		{Name: "OUTPUT_REGISTRY_IMAGE", Value: fmt.Sprintf("%s/%s", registry, image)},
 	}
 
 	*output = append(*output, outputVars...)
@@ -763,6 +770,69 @@ func setupBuildVolumes(pod *corev1.Pod, buildVolumes []buildv1.BuildVolume) erro
 	}
 
 	return nil
+}
+
+// setupChmodInitContainer wires up a init-container to change the mode (chmod) of the informed
+// directory, it will set mode 0777 in order to permit reading and writing during the build process.
+func setupChmodInitContainer(
+	pod *corev1.Pod,
+	build *buildv1.Build,
+	gitCloneImage string,
+	containerEnv []corev1.EnvVar,
+	securityContext *corev1.SecurityContext,
+	mode int,
+	directory string,
+) {
+	chownContainer := corev1.Container{
+		Name:                     "git-chown",
+		Image:                    gitCloneImage,
+		Command:                  []string{"chmod"},
+		Args:                     []string{fmt.Sprintf("0%o", mode), directory},
+		Env:                      copyEnvVarSlice(containerEnv),
+		SecurityContext:          securityContext,
+		TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
+		VolumeMounts: []corev1.VolumeMount{{
+			Name:      BuildWorkDirVolume,
+			MountPath: buildutil.BuildWorkDirMount,
+		}},
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Resources:       build.Spec.Resources,
+		// making sure the target chmod directory is decleared as working-diretory, this attribute is
+		// automatically picked by up cri-o and created if not present
+		WorkingDir: directory,
+	}
+	pod.Spec.InitContainers = append(pod.Spec.InitContainers, chownContainer)
+}
+
+// setupGitCloneInitContainer wires up the informed image as a pod init-container, using the informed
+// parameters to fill up the blanks.
+func setupGitCloneInitContainer(
+	pod *corev1.Pod,
+	build *buildv1.Build,
+	gitCloneImage string,
+	containerEnv []corev1.EnvVar,
+	securityContext *corev1.SecurityContext,
+) {
+	gitCloneContainer := corev1.Container{
+		Name:                     GitCloneContainer,
+		Image:                    gitCloneImage,
+		Args:                     []string{"openshift-git-clone"},
+		Env:                      copyEnvVarSlice(containerEnv),
+		SecurityContext:          securityContext,
+		TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
+		VolumeMounts: []corev1.VolumeMount{{
+			Name:      BuildWorkDirVolume,
+			MountPath: buildutil.BuildWorkDirMount,
+		}},
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Resources:       build.Spec.Resources,
+	}
+	if build.Spec.Source.Binary != nil {
+		gitCloneContainer.Stdin = true
+		gitCloneContainer.StdinOnce = true
+	}
+	setupSourceSecrets(pod, &gitCloneContainer, build.Spec.Source.SourceSecret)
+	pod.Spec.InitContainers = append(pod.Spec.InitContainers, gitCloneContainer)
 }
 
 // NameForBuildVolume returns a valid pod volume name for the provided build volume name.

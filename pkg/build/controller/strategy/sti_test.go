@@ -117,19 +117,19 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 	}
 
 	// expected volumes:
-	// node pull secrets
-	// buildworkdir
-	// blobs meta cache
-	// pushsecret
-	// pullsecret
-	// inputsecret
-	// inputconfigmap
-	// build-system-configmap
-	// certificate authorities
-	// container storage
-	// container run
-	// blobs content cache
-	// global CA injection configmap
+	//  - node pull secrets
+	//  - buildworkdir
+	//  - blobs meta cache
+	//  - pushsecret
+	//  - pullsecret
+	//  - inputsecret
+	//  - inputconfigmap
+	//  - build-system-configmap
+	//  - certificate authorities
+	//  - container storage
+	//  - container run
+	//  - blobs content cache
+	//  - global CA injection configmap
 	if len(container.VolumeMounts) != 13 {
 		t.Fatalf("Expected 13 volumes in container, got %d %v", len(container.VolumeMounts), container.VolumeMounts)
 	}

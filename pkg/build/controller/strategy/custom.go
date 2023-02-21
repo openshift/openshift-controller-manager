@@ -3,6 +3,7 @@ package strategy
 import (
 	"errors"
 	"fmt"
+	"path"
 
 	"k8s.io/klog/v2"
 
@@ -30,6 +31,7 @@ func init() {
 
 // CustomBuildStrategy creates a build using a custom builder image.
 type CustomBuildStrategy struct {
+	Image string // git clone init-container image
 }
 
 // CreateBuildPod creates the pod to be used for the Custom build
@@ -63,6 +65,10 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	}
 	addTrustedCAMountEnvVar(build.Spec.MountTrustedCA, &containerEnv)
 
+	if len(strategy.Env) > 0 {
+		buildutil.MergeTrustedEnvWithoutDuplicates(strategy.Env, &containerEnv, true)
+	}
+
 	if build.Spec.Output.To != nil {
 		addOutputEnvVars(build.Spec.Output.To, &containerEnv)
 		if err != nil {
@@ -89,6 +95,7 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	}
 
 	securityContext := securityContextForBuild(strategy.Env)
+	workingDir := path.Join(buildutil.BuildWorkDirMount, "inputs")
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      buildutil.GetBuildPodName(build),
@@ -104,11 +111,42 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					Env:                      containerEnv,
 					SecurityContext:          securityContext,
 					TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
+					VolumeMounts: []corev1.VolumeMount{{
+						Name:      BuildWorkDirVolume,
+						MountPath: buildutil.BuildWorkDirMount,
+					}, {
+						Name:      "buildcachedir",
+						MountPath: buildutil.BuildBlobsMetaCache,
+					}},
+					Resources: build.Spec.Resources,
+					// setting the container to run directly in the location the repository is cloned
+					// using the openshift helper
+					WorkingDir: workingDir,
 				},
 			},
+			Volumes: []corev1.Volume{{
+				Name: BuildWorkDirVolume,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			}, {
+				Name: "buildcachedir",
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: buildutil.BuildBlobsMetaCache,
+					},
+				},
+			}},
 			RestartPolicy: corev1.RestartPolicyNever,
 			NodeSelector:  build.Spec.NodeSelector,
 		},
+	}
+
+	if build.Spec.Source.Git != nil || build.Spec.Source.Binary != nil {
+		// when source repository is declared, executing the clone as usual
+		setupGitCloneInitContainer(pod, build, bs.Image, containerEnv, securityContext)
+		// making sure the build working directory is writtable
+		setupChmodInitContainer(pod, build, bs.Image, containerEnv, securityContext, 0o777, workingDir)
 	}
 
 	pod = setupActiveDeadline(pod, build)
@@ -118,11 +156,6 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	} else {
 		klog.V(2).Infof("ForcePull is enabled for %s build", build.Name)
 		pod.Spec.Containers[0].ImagePullPolicy = corev1.PullAlways
-	}
-	pod.Spec.Containers[0].Resources = build.Spec.Resources
-	if build.Spec.Source.Binary != nil {
-		pod.Spec.Containers[0].Stdin = true
-		pod.Spec.Containers[0].StdinOnce = true
 	}
 
 	if strategy.ExposeDockerSocket {
@@ -140,5 +173,6 @@ func (bs *CustomBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		setupBuilderAutonsUser(build, strategy.Env, pod)
 		setupBuilderDeviceFUSE(pod)
 	}
+	setupBlobCache(pod)
 	return pod, nil
 }

@@ -72,7 +72,9 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 			Image:          imageTemplate.ExpandOrDie("docker-builder"),
 			SecurityClient: securityClient.SecurityV1(),
 		},
-		CustomBuildStrategy:      &buildstrategy.CustomBuildStrategy{},
+		CustomBuildStrategy: &buildstrategy.CustomBuildStrategy{
+			Image: imageTemplate.ExpandOrDie("docker-builder"),
+		},
 		BuildDefaults:            builddefaults.BuildDefaults{Config: ctx.OpenshiftControllerConfig.Build.BuildDefaults},
 		BuildOverrides:           buildoverrides.BuildOverrides{Config: ctx.OpenshiftControllerConfig.Build.BuildOverrides},
 		InternalRegistryHostname: ctx.OpenshiftControllerConfig.DockerPullSecret.InternalRegistryHostname,

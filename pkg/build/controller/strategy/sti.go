@@ -90,7 +90,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 							MountPath: buildutil.NodePullSecretsPath,
 						},
 						{
-							Name:      "buildworkdir",
+							Name:      BuildWorkDirVolume,
 							MountPath: buildutil.BuildWorkDirMount,
 						},
 						{
@@ -119,7 +119,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					},
 				},
 				{
-					Name: "buildworkdir",
+					Name: BuildWorkDirVolume,
 					VolumeSource: corev1.VolumeSource{
 						EmptyDir: &corev1.EmptyDirVolumeSource{},
 					},
@@ -131,28 +131,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	}
 
 	if build.Spec.Source.Git != nil || build.Spec.Source.Binary != nil {
-		gitCloneContainer := corev1.Container{
-			Name:                     GitCloneContainer,
-			Image:                    bs.Image,
-			Args:                     []string{"openshift-git-clone"},
-			Env:                      copyEnvVarSlice(containerEnv),
-			SecurityContext:          securityContext,
-			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "buildworkdir",
-					MountPath: buildutil.BuildWorkDirMount,
-				},
-			},
-			ImagePullPolicy: corev1.PullIfNotPresent,
-			Resources:       build.Spec.Resources,
-		}
-		if build.Spec.Source.Binary != nil {
-			gitCloneContainer.Stdin = true
-			gitCloneContainer.StdinOnce = true
-		}
-		setupSourceSecrets(pod, &gitCloneContainer, build.Spec.Source.SourceSecret)
-		pod.Spec.InitContainers = append(pod.Spec.InitContainers, gitCloneContainer)
+		setupGitCloneInitContainer(pod, build, bs.Image, containerEnv, securityContext)
 	}
 	if len(build.Spec.Source.Images) > 0 {
 		extractImageContentContainer := corev1.Container{
@@ -168,7 +147,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					MountPath: buildutil.NodePullSecretsPath,
 				},
 				{
-					Name:      "buildworkdir",
+					Name:      BuildWorkDirVolume,
 					MountPath: buildutil.BuildWorkDirMount,
 				},
 				{
@@ -193,7 +172,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 			TerminationMessagePolicy: corev1.TerminationMessageFallbackToLogsOnError,
 			VolumeMounts: []corev1.VolumeMount{
 				{
-					Name:      "buildworkdir",
+					Name:      BuildWorkDirVolume,
 					MountPath: buildutil.BuildWorkDirMount,
 				},
 			},

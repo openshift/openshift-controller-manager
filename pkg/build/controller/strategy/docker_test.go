@@ -77,19 +77,19 @@ func TestDockerCreateBuildPod(t *testing.T) {
 	}
 
 	// expected volumes:
-	// buildworkdir
-	// blobs meta cache
-	// pushsecret
-	// pullsecret
-	// inputsecret
-	// inputconfigmap
-	// build-system-config
-	// certificate authorities
-	// container storage
-	// container run
-	// blobs content cache
-	// global CA injection configmap
-	// node pull secrets
+	//  - buildworkdir
+	//  - blobs meta cache
+	//  - pushsecret
+	//  - pullsecret
+	//  - inputsecret
+	//  - inputconfigmap
+	//  - build-system-config
+	//  - certificate authorities
+	//  - container storage
+	//  - container run
+	//  - blobs content cache
+	//  - global CA injection configmap
+	//  - node pull secrets
 	if len(container.VolumeMounts) != 13 {
 		t.Fatalf("Expected 13 volumes in container, got %d", len(container.VolumeMounts))
 	}

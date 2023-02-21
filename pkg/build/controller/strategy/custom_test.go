@@ -58,19 +58,21 @@ func TestCustomCreateBuildPod(t *testing.T) {
 	}
 
 	// expected volumes:
-	// docker socket
-	// push secret
-	// source secret
-	// additional secrets
-	// build-system-configmap
-	// certificate authorities
-	// container storage
-	// container run
-	// global CA injection configmap
-	if len(container.VolumeMounts) != 9 {
-		t.Fatalf("Expected 9 volumes in container, got %d", len(container.VolumeMounts))
-	}
-	expectedMounts := []string{"/var/run/docker.sock",
+	//  - buildworkdir
+	// 	- docker socket
+	//  - push secret
+	//  - source secret
+	//  - additional secrets
+	//  - build-system-configmap
+	//  - certificate authorities
+	//  - container storage
+	//  - container run
+	//  - global CA injection configmap
+	//  - blobs content cache
+	expectedMounts := []string{
+		buildutil.BuildWorkDirMount,
+		buildutil.BuildBlobsMetaCache,
+		"/var/run/docker.sock",
 		DockerPushSecretMountPath,
 		sourceSecretMountPath,
 		"secret",
@@ -79,26 +81,29 @@ func TestCustomCreateBuildPod(t *testing.T) {
 		ConfigMapBuildGlobalCAMountPath,
 		"/var/lib/containers",
 		"/var/run/containers",
+		buildutil.BuildBlobsContentCache,
+	}
+
+	if len(container.VolumeMounts) != len(expectedMounts) {
+		t.Fatalf("Expected %d volumes in container (%#v), got %d (%#v)",
+			len(expectedMounts), expectedMounts, len(container.VolumeMounts), container.VolumeMounts)
 	}
 	for i, expected := range expectedMounts {
 		if container.VolumeMounts[i].MountPath != expected {
-			t.Fatalf("Expected %s in VolumeMount[%d], got %s", expected, i, container.VolumeMounts[i].MountPath)
+			t.Fatalf("Expected %q in VolumeMount[%d], got %q", expected, i, container.VolumeMounts[i].MountPath)
 		}
 	}
+
 	if *actual.Spec.ActiveDeadlineSeconds != 60 {
 		t.Errorf("Expected ActiveDeadlineSeconds 60, got %d", *actual.Spec.ActiveDeadlineSeconds)
-	}
-	for i, expected := range []string{dockerSocketPath, DockerPushSecretMountPath, sourceSecretMountPath} {
-		if container.VolumeMounts[i].MountPath != expected {
-			t.Fatalf("Expected %s in VolumeMount[%d], got %s", expected, i, container.VolumeMounts[i].MountPath)
-		}
 	}
 	if !kapihelper.Semantic.DeepEqual(container.Resources, build.Spec.Resources) {
 		t.Fatalf("Expected actual=expected, %v != %v", container.Resources, build.Spec.Resources)
 	}
-	if len(actual.Spec.Volumes) != 9 {
-		t.Fatalf("Expected 9 volumes in Build pod, got %d", len(actual.Spec.Volumes))
+	if len(actual.Spec.Volumes) != len(expectedMounts) {
+		t.Fatalf("Expected %d volumes in Build pod, got %d", len(expectedMounts), len(actual.Spec.Volumes))
 	}
+
 	buildJSON, _ := runtime.Encode(customBuildEncodingCodecFactory.LegacyCodec(buildv1.GroupVersion), build)
 	errorCases := map[int][]string{
 		0: {"BUILD", string(buildJSON)},
@@ -111,6 +116,7 @@ func TestCustomCreateBuildPod(t *testing.T) {
 		"SOURCE_REF",
 		"OUTPUT_IMAGE",
 		"OUTPUT_REGISTRY",
+		"OUTPUT_REGISTRY_IMAGE",
 		"BUILD_MOUNT_ETC_PKI_CATRUST",
 	}
 	for index, exp := range errorCases {
