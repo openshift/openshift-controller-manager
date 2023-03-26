@@ -1,11 +1,7 @@
 reviewers:
-  - bparees
-  - gabemontero
-  - adambkaplan
+  - divyansh42
   - coreydaley
 approvers:
   - bparees
-  - adambkaplan
-  - gabemontero
   - coreydaley
 component: openshift-controller-manager
