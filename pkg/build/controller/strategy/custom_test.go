@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -61,18 +62,20 @@ func TestCustomCreateBuildPod(t *testing.T) {
 	// docker socket
 	// push secret
 	// source secret
+	// source configmap
 	// additional secrets
 	// build-system-configmap
 	// certificate authorities
 	// container storage
 	// container run
 	// global CA injection configmap
-	if len(container.VolumeMounts) != 9 {
-		t.Fatalf("Expected 9 volumes in container, got %d", len(container.VolumeMounts))
+	if len(container.VolumeMounts) != 10 {
+		t.Fatalf("Expected 10 volumes in container, got %d", len(container.VolumeMounts))
 	}
 	expectedMounts := []string{"/var/run/docker.sock",
 		DockerPushSecretMountPath,
 		sourceSecretMountPath,
+		filepath.Join(ConfigMapBuildSourceBaseMountPath, "custom-config"),
 		"secret",
 		ConfigMapBuildSystemConfigsMountPath,
 		ConfigMapCertsMountPath,
@@ -96,8 +99,8 @@ func TestCustomCreateBuildPod(t *testing.T) {
 	if !kapihelper.Semantic.DeepEqual(container.Resources, build.Spec.Resources) {
 		t.Fatalf("Expected actual=expected, %v != %v", container.Resources, build.Spec.Resources)
 	}
-	if len(actual.Spec.Volumes) != 9 {
-		t.Fatalf("Expected 9 volumes in Build pod, got %d", len(actual.Spec.Volumes))
+	if len(actual.Spec.Volumes) != 10 {
+		t.Fatalf("Expected 10 volumes in Build pod, got %d", len(actual.Spec.Volumes))
 	}
 	buildJSON, _ := runtime.Encode(customBuildEncodingCodecFactory.LegacyCodec(buildv1.GroupVersion), build)
 	errorCases := map[int][]string{
@@ -210,6 +213,14 @@ func mockCustomBuild(forcePull, emptySource bool) *buildv1.Build {
 			},
 			ContextDir:   "foo",
 			SourceSecret: &corev1.LocalObjectReference{Name: "secretFoo"},
+			ConfigMaps: []buildv1.ConfigMapBuildSource{
+				{
+					ConfigMap: corev1.LocalObjectReference{
+						Name: "custom-config",
+					},
+					DestinationDir: "a/path/for/config",
+				},
+			},
 		}
 	}
 	return &buildv1.Build{
