@@ -50,6 +50,8 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 	controllerManagerConfigMapInformer := ctx.ControllerManagerKubeInformers.Core().V1().ConfigMaps()
 	proxyCfgInformer := ctx.ConfigInformers.Config().V1().Proxies()
 	imageContentSourcePolicyInformer := ctx.OperatorInformers.Operator().V1alpha1().ImageContentSourcePolicies()
+	imageDigestMirrorSetInformer := ctx.ConfigInformers.Config().V1().ImageDigestMirrorSets()
+	imageTagMirrorSetInformer := ctx.ConfigInformers.Config().V1().ImageTagMirrorSets()
 
 	fg := ctx.OpenshiftControllerConfig.FeatureGates
 	csiVolumesEnabled := false
@@ -76,6 +78,8 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 		ControllerManagerConfigMapInformer: controllerManagerConfigMapInformer,
 		ProxyConfigInformer:                proxyCfgInformer,
 		ImageContentSourcePolicyInformer:   imageContentSourcePolicyInformer,
+		ImageDigestMirrorSetInformer:       imageDigestMirrorSetInformer,
+		ImageTagMirrorSetInformer:          imageTagMirrorSetInformer,
 		KubeClient:                         externalKubeClient,
 		BuildClient:                        buildClient,
 		DockerBuildStrategy: &buildstrategy.DockerBuildStrategy{

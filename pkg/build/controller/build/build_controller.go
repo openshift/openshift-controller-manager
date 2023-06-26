@@ -152,6 +152,8 @@ type BuildController struct {
 	proxyCfgLister              configv1lister.ProxyLister
 
 	imageContentSourcePolicyLister operatorv1alpha1lister.ImageContentSourcePolicyLister
+	imageDigestMirrorSetLister     configv1lister.ImageDigestMirrorSetLister
+	imageTagMirrorSetLister        configv1lister.ImageTagMirrorSetLister
 
 	buildQueue            workqueue.RateLimitingInterface
 	imageStreamQueue      *resourceTriggerQueue
@@ -172,6 +174,8 @@ type BuildController struct {
 	proxyCfgInformer cache.SharedIndexInformer
 
 	imageContentSourcePolicyInformer cache.SharedIndexInformer
+	imageDigestMirrorSetInformer     cache.SharedIndexInformer
+	imageTagMirrorSetInformer        cache.SharedIndexInformer
 
 	buildStoreSynced                      cache.InformerSynced
 	buildControllerConfigStoreSynced      cache.InformerSynced
@@ -184,6 +188,8 @@ type BuildController struct {
 	controllerManagerConfigMapStoreSynced cache.InformerSynced
 	proxyCfgStoreSynced                   cache.InformerSynced
 	imageContentSourcePolicySynched       cache.InformerSynced
+	imageDigestMirrorSetSynched           cache.InformerSynced
+	imageTagMirrorSetSynched              cache.InformerSynced
 
 	runPolicies              []policy.RunPolicy
 	createStrategy           buildPodCreationStrategy
@@ -215,6 +221,8 @@ type BuildControllerParams struct {
 	ControllerManagerConfigMapInformer kubeinformers.ConfigMapInformer
 	ProxyConfigInformer                configv1informer.ProxyInformer
 	ImageContentSourcePolicyInformer   operatorv1alpha1informer.ImageContentSourcePolicyInformer
+	ImageDigestMirrorSetInformer       configv1informer.ImageDigestMirrorSetInformer
+	ImageTagMirrorSetInformer          configv1informer.ImageTagMirrorSetInformer
 	KubeClient                         kubernetes.Interface
 	BuildClient                        buildv1client.Interface
 	DockerBuildStrategy                *strategy.DockerBuildStrategy
@@ -240,6 +248,8 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 		buildControllerConfigLister:      params.BuildControllerConfigInformer.Lister(),
 		proxyCfgLister:                   params.ProxyConfigInformer.Lister(),
 		imageContentSourcePolicyLister:   params.ImageContentSourcePolicyInformer.Lister(),
+		imageDigestMirrorSetLister:       params.ImageDigestMirrorSetInformer.Lister(),
+		imageTagMirrorSetLister:          params.ImageTagMirrorSetInformer.Lister(),
 		imageConfigLister:                params.ImageConfigInformer.Lister(),
 		secretStore:                      params.SecretInformer.Lister(),
 		configMapStore:                   params.ConfigMapInformer.Lister(),
@@ -255,6 +265,8 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 		buildStore:                       params.BuildInformer.Lister(),
 		proxyCfgInformer:                 params.ProxyConfigInformer.Informer(),
 		imageContentSourcePolicyInformer: params.ImageContentSourcePolicyInformer.Informer(),
+		imageDigestMirrorSetInformer:     params.ImageDigestMirrorSetInformer.Informer(),
+		imageTagMirrorSetInformer:        params.ImageTagMirrorSetInformer.Informer(),
 		imageStreamStore:                 params.ImageStreamInformer.Lister(),
 		createStrategy: &typeBasedFactoryStrategy{
 			dockerBuildStrategy: params.DockerBuildStrategy,
@@ -293,6 +305,16 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 		UpdateFunc: c.buildControllerConfigUpdated,
 		DeleteFunc: c.buildControllerConfigDeleted,
 	})
+	c.imageDigestMirrorSetInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.buildControllerConfigAdded,
+		UpdateFunc: c.buildControllerConfigUpdated,
+		DeleteFunc: c.buildControllerConfigDeleted,
+	})
+	c.imageTagMirrorSetInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.buildControllerConfigAdded,
+		UpdateFunc: c.buildControllerConfigUpdated,
+		DeleteFunc: c.buildControllerConfigDeleted,
+	})
 	params.ImageStreamInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.imageStreamAdded,
 		UpdateFunc: c.imageStreamUpdated,
@@ -317,6 +339,8 @@ func NewBuildController(params *BuildControllerParams) *BuildController {
 	c.podStoreSynced = c.podInformer.HasSynced
 	c.proxyCfgStoreSynced = c.proxyCfgInformer.HasSynced
 	c.imageContentSourcePolicySynched = c.imageContentSourcePolicyInformer.HasSynced
+	c.imageDigestMirrorSetSynched = c.imageDigestMirrorSetInformer.HasSynced
+	c.imageTagMirrorSetSynched = c.imageTagMirrorSetInformer.HasSynced
 	c.secretStoreSynced = params.SecretInformer.Informer().HasSynced
 	c.serviceAccountStoreSynced = params.ServiceAccountInformer.Informer().HasSynced
 	c.imageStreamStoreSynced = params.ImageStreamInformer.Informer().HasSynced
@@ -2094,7 +2118,23 @@ func (bc *BuildController) readClusterImageConfig() []error {
 		}
 		imageContentSourcePolicies = []*operatorv1alpha1.ImageContentSourcePolicy{}
 	}
-	registriesTOML, regErr := bc.createBuildRegistriesConfigData(imageConfig, imageContentSourcePolicies)
+	idmsRules, err := bc.imageDigestMirrorSetLister.List(labels.Everything())
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			configErrs = append(configErrs, err)
+			return configErrs
+		}
+		idmsRules = []*configv1.ImageDigestMirrorSet{}
+	}
+	itmsRules, err := bc.imageTagMirrorSetLister.List(labels.Everything())
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			configErrs = append(configErrs, err)
+			return configErrs
+		}
+		itmsRules = []*configv1.ImageTagMirrorSet{}
+	}
+	registriesTOML, regErr := bc.createBuildRegistriesConfigData(imageConfig, imageContentSourcePolicies, idmsRules, itmsRules)
 	if regErr != nil {
 		configErrs = append(configErrs, regErr)
 	} else {
@@ -2139,7 +2179,8 @@ func (bc *BuildController) getAdditionalTrustedCAData(config *configv1.Image) (m
 	return additionalCA.Data, nil
 }
 
-func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Image, policies []*operatorv1alpha1.ImageContentSourcePolicy) (string, error) {
+func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Image, policies []*operatorv1alpha1.ImageContentSourcePolicy,
+	idmsRules []*configv1.ImageDigestMirrorSet, itmsRules []*configv1.ImageTagMirrorSet) (string, error) {
 
 	blockedRegs := []string{}
 	insecureRegs := []string{}
@@ -2147,7 +2188,7 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 		insecureRegs = config.Spec.RegistrySources.InsecureRegistries
 		blockedRegs = config.Spec.RegistrySources.BlockedRegistries
 	}
-	if len(insecureRegs) == 0 && len(blockedRegs) == 0 && len(policies) == 0 {
+	if len(insecureRegs) == 0 && len(blockedRegs) == 0 && len(policies) == 0 && len(idmsRules) == 0 && len(itmsRules) == 0 {
 		klog.V(4).Info("using default registry settings for builds")
 		return "", nil
 	}
@@ -2155,7 +2196,7 @@ func (bc *BuildController) createBuildRegistriesConfigData(config *configv1.Imag
 	configObj := sysregistriesv2.V2RegistriesConf{}
 	// line up with the search list in the default registries.conf in openshift/builder, see PR #266 there
 	configObj.UnqualifiedSearchRegistries = []string{"registry.redhat.io", "registry.access.redhat.com", "quay.io", "docker.io"}
-	err := rutil.EditRegistriesConfig(&configObj, insecureRegs, blockedRegs, policies, nil, nil)
+	err := rutil.EditRegistriesConfig(&configObj, insecureRegs, blockedRegs, policies, idmsRules, itmsRules)
 	if err != nil {
 		klog.V(0).Infof("MCO library had problem building registries config: %s", err.Error())
 		return "", err
