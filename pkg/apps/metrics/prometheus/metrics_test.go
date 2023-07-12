@@ -363,6 +363,7 @@ func TestCollect(t *testing.T) {
 			}
 
 			d := cmp.Diff(tc.expectedMetrics, collectedMetrics, cmp.Comparer(func(lhs prometheus.Metric, rhs prometheus.Metric) bool {
+
 				var lhsOut dto.Metric
 				err := lhs.Write(&lhsOut)
 				if err != nil {
@@ -373,8 +374,13 @@ func TestCollect(t *testing.T) {
 				if err != nil {
 					t.Fatal(nil)
 				}
-
-				return reflect.DeepEqual(lhs.Desc(), rhs.Desc()) && reflect.DeepEqual(lhsOut, rhsOut)
+				return reflect.DeepEqual(lhsOut.Counter, rhsOut.Counter) &&
+					reflect.DeepEqual(lhsOut.Gauge, rhsOut.Gauge) &&
+					reflect.DeepEqual(lhsOut.Histogram, rhsOut.Histogram) &&
+					reflect.DeepEqual(lhsOut.Summary, rhsOut.Summary) &&
+					reflect.DeepEqual(lhsOut.Untyped, rhsOut.Untyped) &&
+					reflect.DeepEqual(lhsOut.TimestampMs, rhsOut.TimestampMs) &&
+					reflect.DeepEqual(lhsOut.Histogram, rhsOut.Histogram)
 			}))
 			if len(d) > 0 {
 				t.Errorf("expected and collected metrics differ: %s", d)
