@@ -138,7 +138,7 @@ func WaitForHealthyAPIServer(client rest.Interface) error {
 // allocation controller is passed in because it wants direct etcd access.  Naughty.
 func startControllers(controllerContext *origincontrollers.ControllerContext) error {
 	for controllerName, initFn := range origincontrollers.ControllerInitializers {
-		if !controllerContext.IsControllerEnabled(controllerName) {
+		if !controllerContext.IsControllerEnabled(string(controllerName)) {
 			klog.Warningf("%q is disabled", controllerName)
 			continue
 		}

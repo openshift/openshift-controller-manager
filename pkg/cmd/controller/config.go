@@ -1,27 +1,31 @@
 package controller
 
-var ControllerInitializers = map[string]InitFunc{
-	"openshift.io/serviceaccount": RunServiceAccountController,
+import (
+	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
+)
 
-	"openshift.io/default-rolebindings": RunDefaultRoleBindingController,
+var ControllerInitializers = map[openshiftcontrolplanev1.OpenShiftControllerName]InitFunc{
+	openshiftcontrolplanev1.OpenShiftServiceAccountController: RunServiceAccountController,
 
-	"openshift.io/serviceaccount-pull-secrets": RunServiceAccountPullSecretsController,
-	"openshift.io/origin-namespace":            RunOriginNamespaceController,
+	openshiftcontrolplanev1.OpenShiftDefaultRoleBindingsController: RunDefaultRoleBindingController,
 
-	"openshift.io/build":               RunBuildController,
-	"openshift.io/build-config-change": RunBuildConfigChangeController,
+	openshiftcontrolplanev1.OpenShiftServiceAccountPullSecretsController: RunServiceAccountPullSecretsController,
+	openshiftcontrolplanev1.OpenshiftOriginNamespaceController:           RunOriginNamespaceController,
 
-	"openshift.io/deployer":         RunDeployerController,
-	"openshift.io/deploymentconfig": RunDeploymentConfigController,
+	openshiftcontrolplanev1.OpenshiftBuildController:             RunBuildController,
+	openshiftcontrolplanev1.OpenshiftBuildConfigChangeController: RunBuildConfigChangeController,
 
-	"openshift.io/image-trigger":          RunImageTriggerController,
-	"openshift.io/image-import":           RunImageImportController,
-	"openshift.io/image-signature-import": RunImageSignatureImportController,
+	openshiftcontrolplanev1.OpenshiftDeployerController:         RunDeployerController,
+	openshiftcontrolplanev1.OpenshiftDeploymentConfigController: RunDeploymentConfigController,
 
-	"openshift.io/templateinstance":          RunTemplateInstanceController,
-	"openshift.io/templateinstancefinalizer": RunTemplateInstanceFinalizerController,
+	openshiftcontrolplanev1.OpenshiftImageTriggerController:         RunImageTriggerController,
+	openshiftcontrolplanev1.OpenshiftImageImportController:          RunImageImportController,
+	openshiftcontrolplanev1.OpenshiftImageSignatureImportController: RunImageSignatureImportController,
 
-	"openshift.io/unidling": RunUnidlingController,
+	openshiftcontrolplanev1.OpenshiftTemplateInstanceController:          RunTemplateInstanceController,
+	openshiftcontrolplanev1.OpenshiftTemplateInstanceFinalizerController: RunTemplateInstanceFinalizerController,
+
+	openshiftcontrolplanev1.OpenshiftUnidlingController: RunUnidlingController,
 }
 
 const (
