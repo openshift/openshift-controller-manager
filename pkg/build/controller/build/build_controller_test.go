@@ -81,6 +81,8 @@ const (
 `
 )
 
+// Triger ci
+
 // registryCAConfigMap is created by the openshift-controller-manager-operator, serving as a placeholder
 // for the service-ca-operator to inject the internal registry's certificate authority
 var registryCAConfigMap = &corev1.ConfigMap{
