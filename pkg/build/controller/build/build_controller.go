@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/image/signature"
+	"github.com/containers/image/v5/signature"
 	"k8s.io/klog/v2"
 
 	corev1 "k8s.io/api/core/v1"
