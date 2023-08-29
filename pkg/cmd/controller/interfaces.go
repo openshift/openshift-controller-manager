@@ -27,6 +27,8 @@ import (
 	configinformer "github.com/openshift/client-go/config/informers/externalversions"
 	imageclient "github.com/openshift/client-go/image/clientset/versioned"
 	imageinformer "github.com/openshift/client-go/image/informers/externalversions"
+	imageregistryclient "github.com/openshift/client-go/imageregistry/clientset/versioned"
+	imageregistryinformer "github.com/openshift/client-go/imageregistry/informers/externalversions"
 	operatorclient "github.com/openshift/client-go/operator/clientset/versioned"
 	operatorinformer "github.com/openshift/client-go/operator/informers/externalversions"
 	securityclient "github.com/openshift/client-go/security/clientset/versioned"
@@ -78,6 +80,10 @@ func NewControllerContext(
 	if err != nil {
 		return nil, err
 	}
+	imageRegistryClient, err := imageregistryclient.NewForConfig(clientConfig)
+	if err != nil {
+		return nil, err
+	}
 	templateClient, err := templateclient.NewForConfig(clientConfig)
 	if err != nil {
 		return nil, err
@@ -121,6 +127,7 @@ func NewControllerContext(
 		BuildInformers:                     buildinformer.NewSharedInformerFactory(buildClient, defaultInformerResyncPeriod),
 		ConfigInformers:                    configinformer.NewSharedInformerFactory(configClient, defaultInformerResyncPeriod),
 		ImageInformers:                     imageinformer.NewSharedInformerFactory(imageClient, defaultInformerResyncPeriod),
+		ImageRegistryInformers:             imageregistryinformer.NewSharedInformerFactory(imageRegistryClient, defaultInformerResyncPeriod),
 		OperatorInformers:                  operatorinformer.NewSharedInformerFactory(operatorClient, defaultInformerResyncPeriod),
 		TemplateInformers:                  templateinformer.NewSharedInformerFactory(templateClient, defaultInformerResyncPeriod),
 		Stop:                               ctx.Done(),
@@ -147,11 +154,12 @@ type ControllerContext struct {
 
 	TemplateInformers templateinformer.SharedInformerFactory
 
-	AppsInformers     appsinformer.SharedInformerFactory
-	BuildInformers    buildinformer.SharedInformerFactory
-	ConfigInformers   configinformer.SharedInformerFactory
-	ImageInformers    imageinformer.SharedInformerFactory
-	OperatorInformers operatorinformer.SharedInformerFactory
+	AppsInformers          appsinformer.SharedInformerFactory
+	BuildInformers         buildinformer.SharedInformerFactory
+	ConfigInformers        configinformer.SharedInformerFactory
+	ImageInformers         imageinformer.SharedInformerFactory
+	ImageRegistryInformers imageregistryinformer.SharedInformerFactory
+	OperatorInformers      operatorinformer.SharedInformerFactory
 
 	RestMapper meta.RESTMapper
 
@@ -175,7 +183,7 @@ func (c *ControllerContext) StartInformers(stopCh <-chan struct{}) {
 	c.BuildInformers.Start(stopCh)
 	c.ConfigInformers.Start(stopCh)
 	c.ImageInformers.Start(stopCh)
-
+	c.ImageRegistryInformers.Start(stopCh)
 	c.TemplateInformers.Start(stopCh)
 	c.OperatorInformers.Start(stopCh)
 

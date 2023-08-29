@@ -14,16 +14,16 @@ require (
 	github.com/openshift/api v0.0.0-20230811093819-1468e815af63
 	github.com/openshift/build-machinery-go v0.0.0-20230306181456-d321ffa04533
 	github.com/openshift/client-go v0.0.0-20230705133330-7f808ad59404
-	github.com/openshift/library-go v0.0.0-20230706195801-561433066966
+	github.com/openshift/library-go v0.0.0-20230809121909-d7e7beca5bae
 	github.com/openshift/runtime-utils v0.0.0-20220926190846-5c488b20a19f
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
 	github.com/spf13/cobra v1.7.0
-	k8s.io/api v0.27.3
-	k8s.io/apimachinery v0.27.3
-	k8s.io/apiserver v0.27.3
+	k8s.io/api v0.27.4
+	k8s.io/apimachinery v0.27.4
+	k8s.io/apiserver v0.27.4
 	k8s.io/client-go v1.5.2
-	k8s.io/component-base v0.27.3
+	k8s.io/component-base v0.27.4
 	k8s.io/controller-manager v0.27.3
 	k8s.io/klog/v2 v2.100.1
 	k8s.io/kubectl v0.27.3
@@ -106,6 +106,7 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/onsi/ginkgo/v2 v2.9.2 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc3 // indirect
 	github.com/opencontainers/runc v1.1.7 // indirect
@@ -116,6 +117,7 @@ require (
 	github.com/proglottis/gpgme v0.1.3 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
+	github.com/robfig/cron v1.2.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sigstore/fulcio v1.0.0 // indirect
 	github.com/sigstore/rekor v1.0.1 // indirect
@@ -168,7 +170,7 @@ require (
 	k8s.io/cli-runtime v0.27.3 // indirect
 	k8s.io/cloud-provider v0.27.3 // indirect
 	k8s.io/component-helpers v0.27.3 // indirect
-	k8s.io/kms v0.27.3 // indirect
+	k8s.io/kms v0.27.4 // indirect
 	k8s.io/kube-openapi v0.0.0-20230501164219-8b0f38b5fd1f // indirect
 	k8s.io/kubelet v0.27.3 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.1.2 // indirect
