@@ -282,6 +282,9 @@ func CheckReadiness(oc buildv1client.Interface, ref corev1.ObjectReference, obj 
 
 	switch ref.GroupVersionKind() {
 	case groupVersionKind(buildv1.GroupVersion, "BuildConfig"), schema.GroupVersionKind{Group: "", Version: "v1", Kind: "BuildConfig"}:
+		if oc == nil {
+			return false, false, nil
+		}
 		return checkBuildConfigReadiness(oc, castObj)
 	}
 
