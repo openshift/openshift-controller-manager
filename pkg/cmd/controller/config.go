@@ -12,11 +12,13 @@ var ControllerInitializers = map[openshiftcontrolplanev1.OpenShiftControllerName
 	openshiftcontrolplanev1.OpenShiftServiceAccountPullSecretsController: RunServiceAccountPullSecretsController,
 	openshiftcontrolplanev1.OpenshiftOriginNamespaceController:           RunOriginNamespaceController,
 
-	openshiftcontrolplanev1.OpenshiftBuildController:             RunBuildController,
-	openshiftcontrolplanev1.OpenshiftBuildConfigChangeController: RunBuildConfigChangeController,
+	openshiftcontrolplanev1.OpenShiftBuilderServiceAccountController: RunBuilderServiceAccountController,
+	openshiftcontrolplanev1.OpenshiftBuildController:                 RunBuildController,
+	openshiftcontrolplanev1.OpenshiftBuildConfigChangeController:     RunBuildConfigChangeController,
 
-	openshiftcontrolplanev1.OpenshiftDeployerController:         RunDeployerController,
-	openshiftcontrolplanev1.OpenshiftDeploymentConfigController: RunDeploymentConfigController,
+	openshiftcontrolplanev1.OpenShiftDeployerServiceAccountController: RunDeployerServiceAccountController,
+	openshiftcontrolplanev1.OpenshiftDeployerController:               RunDeployerController,
+	openshiftcontrolplanev1.OpenshiftDeploymentConfigController:       RunDeploymentConfigController,
 
 	openshiftcontrolplanev1.OpenshiftImageTriggerController:         RunImageTriggerController,
 	openshiftcontrolplanev1.OpenshiftImageImportController:          RunImageImportController,
