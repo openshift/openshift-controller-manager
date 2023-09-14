@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	kclientsetexternal "k8s.io/client-go/kubernetes"
 
+	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
 	triggerutil "github.com/openshift/library-go/pkg/image/trigger"
 	imagecontroller "github.com/openshift/openshift-controller-manager/pkg/image/controller"
 	imagesignaturecontroller "github.com/openshift/openshift-controller-manager/pkg/image/controller/signature"
@@ -27,37 +28,38 @@ import (
 
 func RunImageTriggerController(ctx *ControllerContext) (bool, error) {
 	informer := ctx.ImageInformers.Image().V1().ImageStreams()
-
-	buildClient, err := ctx.ClientBuilder.OpenshiftBuildClient(infraImageTriggerControllerServiceAccountName)
-	if err != nil {
-		return true, err
-	}
-
-	appsClient, err := ctx.ClientBuilder.OpenshiftAppsClient(infraImageTriggerControllerServiceAccountName)
-	if err != nil {
-		return true, err
-	}
 	kclient := ctx.ClientBuilder.ClientOrDie(infraImageTriggerControllerServiceAccountName)
 
 	updater := podSpecUpdater{kclient}
 	broadcaster := imagetriggercontroller.NewTriggerEventBroadcaster(kclient.CoreV1())
 
-	sources := []imagetriggercontroller.TriggerSource{
-		{
+	var sources []imagetriggercontroller.TriggerSource
+	if ctx.IsControllerEnabled(string(openshiftcontrolplanev1.OpenshiftDeploymentConfigController)) {
+		appsClient, err := ctx.ClientBuilder.OpenshiftAppsClient(infraImageTriggerControllerServiceAccountName)
+		if err != nil {
+			return true, err
+		}
+		sources = append(sources, imagetriggercontroller.TriggerSource{
 			Resource:  schema.GroupResource{Group: "apps.openshift.io", Resource: "deploymentconfigs"},
 			Informer:  ctx.AppsInformers.Apps().V1().DeploymentConfigs().Informer(),
 			Store:     ctx.AppsInformers.Apps().V1().DeploymentConfigs().Informer().GetIndexer(),
 			TriggerFn: triggerdeploymentconfigs.NewDeploymentConfigTriggerIndexer,
 			Reactor:   &triggerdeploymentconfigs.DeploymentConfigReactor{Client: appsClient.AppsV1()},
-		},
+		})
 	}
-	sources = append(sources, imagetriggercontroller.TriggerSource{
-		Resource:  schema.GroupResource{Group: "build.openshift.io", Resource: "buildconfigs"},
-		Informer:  ctx.BuildInformers.Build().V1().BuildConfigs().Informer(),
-		Store:     ctx.BuildInformers.Build().V1().BuildConfigs().Informer().GetIndexer(),
-		TriggerFn: triggerbuildconfigs.NewBuildConfigTriggerIndexer,
-		Reactor:   triggerbuildconfigs.NewBuildConfigReactor(buildClient.BuildV1(), kclient.CoreV1().RESTClient()),
-	})
+	if ctx.IsControllerEnabled(string(openshiftcontrolplanev1.OpenshiftBuildController)) {
+		buildClient, err := ctx.ClientBuilder.OpenshiftBuildClient(infraImageTriggerControllerServiceAccountName)
+		if err != nil {
+			return true, err
+		}
+		sources = append(sources, imagetriggercontroller.TriggerSource{
+			Resource:  schema.GroupResource{Group: "build.openshift.io", Resource: "buildconfigs"},
+			Informer:  ctx.BuildInformers.Build().V1().BuildConfigs().Informer(),
+			Store:     ctx.BuildInformers.Build().V1().BuildConfigs().Informer().GetIndexer(),
+			TriggerFn: triggerbuildconfigs.NewBuildConfigTriggerIndexer,
+			Reactor:   triggerbuildconfigs.NewBuildConfigReactor(buildClient.BuildV1(), kclient.CoreV1().RESTClient()),
+		})
+	}
 	sources = append(sources, imagetriggercontroller.TriggerSource{
 		Resource:  schema.GroupResource{Group: "apps", Resource: "deployments"},
 		Informer:  ctx.KubernetesInformers.Apps().V1().Deployments().Informer(),
