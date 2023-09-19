@@ -3,15 +3,6 @@ package main
 import (
 	"context"
 	"os"
-	"runtime"
-
-	"github.com/spf13/cobra"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	genericapiserver "k8s.io/apiserver/pkg/server"
-	"k8s.io/component-base/cli"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
-
-	"github.com/openshift/library-go/pkg/serviceability"
 
 	"github.com/openshift/api/apps"
 	"github.com/openshift/api/authorization"
@@ -21,9 +12,12 @@ import (
 	"github.com/openshift/api/project"
 	"github.com/openshift/api/template"
 	"github.com/openshift/api/user"
+	"github.com/spf13/cobra"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/component-base/cli"
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	openshift_controller_manager "github.com/openshift/openshift-controller-manager/pkg/cmd/openshift-controller-manager"
-	"github.com/openshift/openshift-controller-manager/pkg/version"
 )
 
 func init() {
@@ -40,16 +34,7 @@ func init() {
 }
 
 func main() {
-	ctx := genericapiserver.SetupSignalContext()
-
-	defer serviceability.BehaviorOnPanic(os.Getenv("OPENSHIFT_ON_PANIC"), version.Get())()
-	defer serviceability.Profile(os.Getenv("OPENSHIFT_PROFILE")).Stop()
-
-	if len(os.Getenv("GOMAXPROCS")) == 0 {
-		runtime.GOMAXPROCS(runtime.NumCPU())
-	}
-
-	command := NewOpenShiftControllerManagerCommand(ctx)
+	command := NewOpenShiftControllerManagerCommand(context.Background())
 	code := cli.Run(command)
 	os.Exit(code)
 }
@@ -63,7 +48,6 @@ func NewOpenShiftControllerManagerCommand(ctx context.Context) *cobra.Command {
 			os.Exit(1)
 		},
 	}
-	start := openshift_controller_manager.NewOpenShiftControllerManagerCommand("start", os.Stdout, os.Stderr, ctx)
-	cmd.AddCommand(start)
+	cmd.AddCommand(openshift_controller_manager.NewOpenShiftControllerManagerCommand(ctx))
 	return cmd
 }
