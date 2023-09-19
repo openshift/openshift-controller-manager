@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/containers/image/docker"
+	"github.com/containers/image/v5/docker"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"

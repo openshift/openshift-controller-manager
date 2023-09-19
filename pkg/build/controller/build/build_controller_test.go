@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/containers/image/pkg/sysregistriesv2"
-	"github.com/containers/image/signature"
-	sysregtypes "github.com/containers/image/types"
+	"github.com/containers/image/v5/pkg/sysregistriesv2"
+	"github.com/containers/image/v5/signature"
+	sysregtypes "github.com/containers/image/v5/types"
 	"github.com/google/uuid"
 
 	corev1 "k8s.io/api/core/v1"
