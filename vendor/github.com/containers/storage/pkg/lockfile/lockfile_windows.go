@@ -138,7 +138,6 @@ func (l *LockFile) Modified() (bool, error) {
 func (l *LockFile) Touch() error {
 	return nil
 }
-
 func (l *LockFile) IsReadWrite() bool {
 	return false
 }
