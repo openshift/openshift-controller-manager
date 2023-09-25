@@ -1,86 +1,56 @@
 package controller
 
 import (
+	"fmt"
+
+	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
-
-	kapiv1 "k8s.io/api/core/v1"
-	sacontroller "k8s.io/kubernetes/pkg/controller/serviceaccount"
-
-	serviceaccountcontrollers "github.com/openshift/openshift-controller-manager/pkg/serviceaccounts/controllers"
+	"k8s.io/kubernetes/pkg/controller/serviceaccount"
 )
 
 func RunServiceAccountController(ctx *ControllerContext) (bool, error) {
-	if len(ctx.OpenshiftControllerConfig.ServiceAccount.ManagedNames) == 0 {
-		klog.Infof("Skipped starting Service Account Manager, no managed names specified")
+	managedNames := ctx.OpenshiftControllerConfig.ServiceAccount.ManagedNames
+	if len(managedNames) == 0 {
+		klog.Info(openshiftcontrolplanev1.OpenShiftServiceAccountController + ": no managed names specified")
 		return false, nil
 	}
-
-	options := sacontroller.DefaultServiceAccountsControllerOptions()
-	options.ServiceAccounts = []kapiv1.ServiceAccount{}
-
-	for _, saName := range ctx.OpenshiftControllerConfig.ServiceAccount.ManagedNames {
-		// the upstream controller does this one, so we don't have to
-		if saName == "default" {
-			continue
-		}
-		sa := kapiv1.ServiceAccount{}
-		sa.Name = saName
-
-		options.ServiceAccounts = append(options.ServiceAccounts, sa)
-	}
-
-	controller, err := sacontroller.NewServiceAccountsController(
-		ctx.KubernetesInformers.Core().V1().ServiceAccounts(),
-		ctx.KubernetesInformers.Core().V1().Namespaces(),
-		ctx.ClientBuilder.ClientOrDie(infraServiceAccountControllerServiceAccountName),
-		options)
-	if err != nil {
-		return true, nil
-	}
-	go controller.Run(ctx.Context, 3)
-
-	return true, nil
+	return runServiceAccountsController(ctx, managedNames...)
 }
 
-func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error) {
-	// Bug 1785023: Increase the rate limit for the SA Pull Secrets controller.
-	// The pull secrets controller needs to create new dockercfg secrets at the same rate as the
-	// upstream token secret controller.
-	kc := ctx.HighRateLimitClientBuilder.ClientOrDie(iInfraServiceAccountPullSecretsControllerServiceAccountName)
+func RunBuilderServiceAccountController(ctx *ControllerContext) (bool, error) {
+	return runServiceAccountsController(ctx, "builder")
+}
 
-	go serviceaccountcontrollers.NewDockercfgDeletedController(
-		ctx.KubernetesInformers.Core().V1().Secrets(),
-		kc,
-		serviceaccountcontrollers.DockercfgDeletedControllerOptions{},
-	).Run(ctx.Stop)
+func RunDeployerServiceAccountController(ctx *ControllerContext) (bool, error) {
+	return runServiceAccountsController(ctx, "deployer")
+}
 
-	go serviceaccountcontrollers.NewDockercfgTokenDeletedController(
-		ctx.KubernetesInformers.Core().V1().Secrets(),
-		kc,
-		serviceaccountcontrollers.DockercfgTokenDeletedControllerOptions{},
-	).Run(ctx.Stop)
-
-	dockerURLsInitialized := make(chan struct{})
-	dockercfgController := serviceaccountcontrollers.NewDockercfgController(
-		ctx.KubernetesInformers.Core().V1().ServiceAccounts(),
-		ctx.KubernetesInformers.Core().V1().Secrets(),
-		kc,
-		serviceaccountcontrollers.DockercfgControllerOptions{DockerURLsInitialized: dockerURLsInitialized},
-	)
-	go dockercfgController.Run(5, ctx.Stop)
-
-	dockerRegistryControllerOptions := serviceaccountcontrollers.DockerRegistryServiceControllerOptions{
-		DockercfgController:    dockercfgController,
-		DockerURLsInitialized:  dockerURLsInitialized,
-		ClusterDNSSuffix:       "cluster.local",
-		AdditionalRegistryURLs: ctx.OpenshiftControllerConfig.DockerPullSecret.RegistryURLs,
+func runServiceAccountsController(cctx *ControllerContext, managedNames ...string) (bool, error) {
+	options := serviceaccount.DefaultServiceAccountsControllerOptions()
+	options.ServiceAccounts = nil
+	for _, name := range managedNames {
+		if name == "default" {
+			// kube-controller-manager already does this one
+			continue
+		}
+		options.ServiceAccounts = append(options.ServiceAccounts,
+			corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name}},
+		)
 	}
-	go serviceaccountcontrollers.NewDockerRegistryServiceController(
-		ctx.KubernetesInformers.Core().V1().Secrets(),
-		ctx.KubernetesInformers.Core().V1().Services(),
-		kc,
-		dockerRegistryControllerOptions,
-	).Run(10, ctx.Stop)
-
+	if len(options.ServiceAccounts) == 0 {
+		return false, fmt.Errorf("no managed names specified")
+	}
+	controller, err := serviceaccount.NewServiceAccountsController(
+		cctx.KubernetesInformers.Core().V1().ServiceAccounts(),
+		cctx.KubernetesInformers.Core().V1().Namespaces(),
+		cctx.ClientBuilder.ClientOrDie(infraServiceAccountControllerServiceAccountName),
+		options,
+	)
+	if err != nil {
+		return false, err
+	}
+	go controller.Run(cctx.Context, 3)
 	return true, nil
 }

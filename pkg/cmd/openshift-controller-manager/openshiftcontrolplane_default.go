@@ -46,8 +46,6 @@ func setRecommendedOpenShiftControllerConfigDefaults(config *openshiftcontrolpla
 		config.ImageImport.ScheduledImageImportMinimumIntervalSeconds = 15 * 60 // 15 minutes
 	}
 
-	configdefaults.DefaultStringSlice(&config.ServiceAccount.ManagedNames, []string{"builder", "deployer"})
-
 	// TODO this default is WRONG, but it appears to work
 	configdefaults.DefaultString(&config.Deployer.ImageTemplateFormat.Format, "quay.io/openshift/origin-${component}:${version}")
 
