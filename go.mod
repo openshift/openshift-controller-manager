@@ -11,14 +11,15 @@ require (
 	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/golang-lru v0.5.4
-	github.com/openshift/api v0.0.0-20230920152731-7d89b46689d4
+	github.com/openshift/api v0.0.0-20231010075512-1ccc6058c62d
 	github.com/openshift/build-machinery-go v0.0.0-20230824093055-6a18da01283c
-	github.com/openshift/client-go v0.0.0-20230915115245-53bd8980dfb7
-	github.com/openshift/library-go v0.0.0-20230921140650-cf7c1f73089c
-	github.com/openshift/runtime-utils v0.0.0-20220926190846-5c488b20a19f
+	github.com/openshift/client-go v0.0.0-20230926161409-848405da69e1
+	github.com/openshift/library-go v0.0.0-20231020125034-5a2d9fe760b3
+	github.com/openshift/runtime-utils v0.0.0-20230921210328-7bdb5b9c177b
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
 	github.com/spf13/cobra v1.7.0
+	gopkg.in/square/go-jose.v2 v2.6.0
 	k8s.io/api v0.28.2
 	k8s.io/apimachinery v0.28.2
 	k8s.io/apiserver v0.28.2
@@ -115,6 +116,7 @@ require (
 	github.com/proglottis/gpgme v0.1.3 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
+	github.com/robfig/cron v1.2.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sigstore/fulcio v1.2.0 // indirect
 	github.com/sigstore/rekor v1.1.0 // indirect
@@ -164,7 +166,6 @@ require (
 	gopkg.in/go-jose/go-jose.v2 v2.6.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.28.2 // indirect
