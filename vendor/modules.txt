@@ -442,7 +442,7 @@ github.com/openshift/client-go/template/informers/externalversions/internalinter
 github.com/openshift/client-go/template/informers/externalversions/template
 github.com/openshift/client-go/template/informers/externalversions/template/v1
 github.com/openshift/client-go/template/listers/template/v1
-# github.com/openshift/library-go v0.0.0-20220615161831-8b2df431789c
+# github.com/openshift/library-go v0.0.0-20231031183916-46d900b16f01
 ## explicit; go 1.17
 github.com/openshift/library-go/pkg/apps/appsserialization
 github.com/openshift/library-go/pkg/apps/appsutil
