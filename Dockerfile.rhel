@@ -1,10 +1,15 @@
 FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.20-openshift-4.15 AS builder
+
+# Install the latest version of Delve
+RUN GOFLAGS='' go install github.com/go-delve/delve/cmd/dlv@latest
+
 WORKDIR /go/src/github.com/openshift/openshift-controller-manager
 COPY . .
 RUN make build --warn-undefined-variables
 
 FROM registry.ci.openshift.org/ocp/4.15:base
 COPY --from=builder /go/src/github.com/openshift/openshift-controller-manager/openshift-controller-manager /usr/bin/
+COPY --from=builder /go/bin/dlv /usr/bin/
 LABEL io.k8s.display-name="OpenShift Controller Manager Command" \
       io.k8s.description="OpenShift is a platform for developing, building, and deploying containerized applications." \
       io.openshift.tags="openshift,openshift-controller-manager"
