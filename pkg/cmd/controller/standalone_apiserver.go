@@ -12,6 +12,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apiserver/pkg/authorization/authorizer"
 	apifilters "k8s.io/apiserver/pkg/endpoints/filters"
 	apiserver "k8s.io/apiserver/pkg/server"
 	apiserverfilters "k8s.io/apiserver/pkg/server/filters"
@@ -47,7 +48,7 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 		return err
 	}
 	sarClient := kubeExternal.AuthorizationV1()
-	remoteAuthz, err := authzwebhook.NewFromInterface(sarClient, 5*time.Minute, 5*time.Minute, *authzwebhook.DefaultRetryBackoff(), authzwebhook.AuthorizerMetrics{
+	remoteAuthz, err := authzwebhook.NewFromInterface(sarClient, 5*time.Minute, 5*time.Minute, *authzwebhook.DefaultRetryBackoff(), authorizer.DecisionNoOpinion, authzwebhook.AuthorizerMetrics{
 		RecordRequestTotal:   noopMetrics{}.RequestTotal,
 		RecordRequestLatency: noopMetrics{}.RequestLatency,
 	})
