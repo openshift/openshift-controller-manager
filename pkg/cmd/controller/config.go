@@ -10,24 +10,24 @@ var ControllerInitializers = map[openshiftcontrolplanev1.OpenShiftControllerName
 	openshiftcontrolplanev1.OpenShiftDefaultRoleBindingsController: RunDefaultRoleBindingController,
 
 	openshiftcontrolplanev1.OpenShiftServiceAccountPullSecretsController: RunServiceAccountPullSecretsController,
-	openshiftcontrolplanev1.OpenshiftOriginNamespaceController:           RunOriginNamespaceController,
+	openshiftcontrolplanev1.OpenShiftOriginNamespaceController:           RunOriginNamespaceController,
 
 	openshiftcontrolplanev1.OpenShiftBuilderServiceAccountController: RunBuilderServiceAccountController,
-	openshiftcontrolplanev1.OpenshiftBuildController:                 RunBuildController,
-	openshiftcontrolplanev1.OpenshiftBuildConfigChangeController:     RunBuildConfigChangeController,
+	openshiftcontrolplanev1.OpenShiftBuildController:                 RunBuildController,
+	openshiftcontrolplanev1.OpenShiftBuildConfigChangeController:     RunBuildConfigChangeController,
 
 	openshiftcontrolplanev1.OpenShiftDeployerServiceAccountController: RunDeployerServiceAccountController,
-	openshiftcontrolplanev1.OpenshiftDeployerController:               RunDeployerController,
-	openshiftcontrolplanev1.OpenshiftDeploymentConfigController:       RunDeploymentConfigController,
+	openshiftcontrolplanev1.OpenShiftDeployerController:               RunDeployerController,
+	openshiftcontrolplanev1.OpenShiftDeploymentConfigController:       RunDeploymentConfigController,
 
-	openshiftcontrolplanev1.OpenshiftImageTriggerController:         RunImageTriggerController,
-	openshiftcontrolplanev1.OpenshiftImageImportController:          RunImageImportController,
-	openshiftcontrolplanev1.OpenshiftImageSignatureImportController: RunImageSignatureImportController,
+	openshiftcontrolplanev1.OpenShiftImageTriggerController:         RunImageTriggerController,
+	openshiftcontrolplanev1.OpenShiftImageImportController:          RunImageImportController,
+	openshiftcontrolplanev1.OpenShiftImageSignatureImportController: RunImageSignatureImportController,
 
-	openshiftcontrolplanev1.OpenshiftTemplateInstanceController:          RunTemplateInstanceController,
-	openshiftcontrolplanev1.OpenshiftTemplateInstanceFinalizerController: RunTemplateInstanceFinalizerController,
+	openshiftcontrolplanev1.OpenShiftTemplateInstanceController:          RunTemplateInstanceController,
+	openshiftcontrolplanev1.OpenShiftTemplateInstanceFinalizerController: RunTemplateInstanceFinalizerController,
 
-	openshiftcontrolplanev1.OpenshiftUnidlingController: RunUnidlingController,
+	openshiftcontrolplanev1.OpenShiftUnidlingController: RunUnidlingController,
 }
 
 const (
