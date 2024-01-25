@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/klog/v2"
-	"k8s.io/kubernetes/pkg/apis/policy"
 
 	buildv1 "github.com/openshift/api/build/v1"
 	"github.com/openshift/library-go/pkg/build/naming"
@@ -114,28 +113,29 @@ func setupDockerSocket(pod *corev1.Pod) {
 // mountConfigMapVolume is a helper method responsible for actual mounting configMap
 // volumes into a pod.
 func mountConfigMapVolume(pod *corev1.Pod, container *corev1.Container, configMapName, mountPath, volumeSuffix string, volumeSource *corev1.VolumeSource) {
-	mountVolume(pod, container, configMapName, mountPath, volumeSuffix, policy.ConfigMap, volumeSource)
+	mountVolume(pod, container, configMapName, mountPath, volumeSuffix, "configMap", volumeSource)
 }
 
 // mountSecretVolume is a helper method responsible for actual mounting secret
 // volumes into a pod.
 func mountSecretVolume(pod *corev1.Pod, container *corev1.Container, secretName, mountPath, volumeSuffix string, volumeSource *corev1.VolumeSource) {
-	mountVolume(pod, container, secretName, mountPath, volumeSuffix, policy.Secret, volumeSource)
+	mountVolume(pod, container, secretName, mountPath, volumeSuffix, "secret", volumeSource)
 }
 
 // mountCSIVolume is a helper method responsible for actual mounting csi
 // volumes into a pod.
 func mountCSIVolume(pod *corev1.Pod, container *corev1.Container, volumeName, mountPath, volumeSuffix string, volumeSource *corev1.VolumeSource) {
-	mountVolume(pod, container, volumeName, mountPath, volumeSuffix, policy.CSI, volumeSource)
+	mountVolume(pod, container, volumeName, mountPath, volumeSuffix, "csi", volumeSource)
 }
 
 // mountVolume is a helper method responsible for mounting volumes into a pod.
-// The following file system types for the volume are supported:
+// The following volume source types for the volume are supported:
 //
 // 1. ConfigMap
 // 2. EmptyDir
 // 3. Secret
-func mountVolume(pod *corev1.Pod, container *corev1.Container, objName, mountPath, volumeSuffix string, fsType policy.FSType, volumeSource *corev1.VolumeSource) {
+// 4. CSI
+func mountVolume(pod *corev1.Pod, container *corev1.Container, objName, mountPath, volumeSuffix string, volumeSourceType string, volumeSource *corev1.VolumeSource) {
 	volumeName := naming.GetName(objName, volumeSuffix, kvalidation.DNS1123LabelMaxLength)
 
 	// coerce from RFC1123 subdomain to RFC1123 label.
@@ -153,7 +153,7 @@ func mountVolume(pod *corev1.Pod, container *corev1.Container, objName, mountPat
 		mode = int32(0o644) // make sure unprivileged builders can read them
 	}
 	if !volumeExists {
-		volume := makeVolume(volumeName, objName, mode, fsType, volumeSource)
+		volume := makeVolume(volumeName, objName, mode, volumeSourceType, volumeSource)
 		pod.Spec.Volumes = append(pod.Spec.Volumes, volume)
 	}
 
@@ -165,14 +165,14 @@ func mountVolume(pod *corev1.Pod, container *corev1.Container, objName, mountPat
 	container.VolumeMounts = append(container.VolumeMounts, volumeMount)
 }
 
-func makeVolume(volumeName, refName string, mode int32, fsType policy.FSType, volumeSource *corev1.VolumeSource) corev1.Volume {
+func makeVolume(volumeName, refName string, mode int32, volumeSourceType string, volumeSource *corev1.VolumeSource) corev1.Volume {
 	// TODO: Add support for key-based paths for secrets and configMaps?
 	vol := corev1.Volume{
 		Name:         volumeName,
 		VolumeSource: corev1.VolumeSource{},
 	}
-	switch fsType {
-	case policy.ConfigMap:
+	switch volumeSourceType {
+	case "configMap":
 		if volumeSource != nil && volumeSource.ConfigMap != nil {
 			vol.VolumeSource.ConfigMap = volumeSource.ConfigMap.DeepCopy()
 		} else {
@@ -183,13 +183,13 @@ func makeVolume(volumeName, refName string, mode int32, fsType policy.FSType, vo
 				DefaultMode: &mode,
 			}
 		}
-	case policy.EmptyDir:
+	case "emptyDir":
 		if volumeSource != nil && volumeSource.EmptyDir != nil {
 			vol.VolumeSource.EmptyDir = volumeSource.EmptyDir.DeepCopy()
 		} else {
 			vol.VolumeSource.EmptyDir = &corev1.EmptyDirVolumeSource{}
 		}
-	case policy.Secret:
+	case "secret":
 		if volumeSource != nil && volumeSource.Secret != nil {
 			vol.VolumeSource.Secret = volumeSource.Secret.DeepCopy()
 		} else {
@@ -198,14 +198,14 @@ func makeVolume(volumeName, refName string, mode int32, fsType policy.FSType, vo
 				DefaultMode: &mode,
 			}
 		}
-	case policy.CSI:
+	case "csi":
 		if volumeSource != nil && volumeSource.CSI != nil {
 			vol.VolumeSource.CSI = volumeSource.CSI.DeepCopy()
 		} else {
 			vol.VolumeSource.CSI = &corev1.CSIVolumeSource{}
 		}
 	default:
-		klog.V(3).Infof("File system %s is not supported for volumes. Using empty directory instead.", fsType)
+		klog.V(3).Infof("Volume source type %s is not supported for volumes. Using empty directory instead.", volumeSourceType)
 		vol.VolumeSource.EmptyDir = &corev1.EmptyDirVolumeSource{}
 	}
 
