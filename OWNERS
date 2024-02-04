@@ -3,11 +3,11 @@ reviewers:
   - mfojtik
   - soltysh
   - csrwng
-  - coreydaley
+  - sayan-biswas
   - divyansh42
 approvers:
   - bparees
   - mfojtik
   - soltysh
-  - coreydaley
+  - sayan-biswas
 component: openshift-controller-manager
