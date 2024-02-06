@@ -171,10 +171,10 @@ func (c *ControllerContext) StartInformers(stopCh <-chan struct{}) {
 	c.OpenshiftConfigKubernetesInformers.Start(stopCh)
 	c.ControllerManagerKubeInformers.Start(stopCh)
 
-	if c.IsControllerEnabled(string(openshiftcontrolplanev1.OpenshiftDeploymentConfigController)) {
+	if c.IsControllerEnabled(string(openshiftcontrolplanev1.OpenShiftDeploymentConfigController)) {
 		c.AppsInformers.Start(stopCh)
 	}
-	if c.IsControllerEnabled(string(openshiftcontrolplanev1.OpenshiftBuildController)) {
+	if c.IsControllerEnabled(string(openshiftcontrolplanev1.OpenShiftBuildController)) {
 		c.BuildInformers.Start(stopCh)
 	}
 	c.ConfigInformers.Start(stopCh)

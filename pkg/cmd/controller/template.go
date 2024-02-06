@@ -20,7 +20,7 @@ func RunTemplateInstanceController(ctx *ControllerContext) (bool, error) {
 	}
 
 	var buildClient buildv1client.Interface
-	if ctx.IsControllerEnabled(string(openshiftcontrolplanev1.OpenshiftBuildController)) {
+	if ctx.IsControllerEnabled(string(openshiftcontrolplanev1.OpenShiftBuildController)) {
 		buildClient = ctx.ClientBuilder.OpenshiftBuildClientOrDie(saName)
 	}
 

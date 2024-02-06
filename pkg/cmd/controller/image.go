@@ -34,7 +34,7 @@ func RunImageTriggerController(ctx *ControllerContext) (bool, error) {
 	broadcaster := imagetriggercontroller.NewTriggerEventBroadcaster(kclient.CoreV1())
 
 	var sources []imagetriggercontroller.TriggerSource
-	if ctx.IsControllerEnabled(string(openshiftcontrolplanev1.OpenshiftDeploymentConfigController)) {
+	if ctx.IsControllerEnabled(string(openshiftcontrolplanev1.OpenShiftDeploymentConfigController)) {
 		appsClient, err := ctx.ClientBuilder.OpenshiftAppsClient(infraImageTriggerControllerServiceAccountName)
 		if err != nil {
 			return true, err
@@ -47,7 +47,7 @@ func RunImageTriggerController(ctx *ControllerContext) (bool, error) {
 			Reactor:   &triggerdeploymentconfigs.DeploymentConfigReactor{Client: appsClient.AppsV1()},
 		})
 	}
-	if ctx.IsControllerEnabled(string(openshiftcontrolplanev1.OpenshiftBuildController)) {
+	if ctx.IsControllerEnabled(string(openshiftcontrolplanev1.OpenShiftBuildController)) {
 		buildClient, err := ctx.ClientBuilder.OpenshiftBuildClient(infraImageTriggerControllerServiceAccountName)
 		if err != nil {
 			return true, err
