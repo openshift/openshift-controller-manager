@@ -9,7 +9,7 @@ var ControllerInitializers = map[openshiftcontrolplanev1.OpenShiftControllerName
 
 	openshiftcontrolplanev1.OpenShiftDefaultRoleBindingsController: RunDefaultRoleBindingController,
 
-	openshiftcontrolplanev1.OpenShiftServiceAccountPullSecretsController: RunServiceAccountPullSecretsController,
+	openshiftcontrolplanev1.OpenShiftServiceAccountPullSecretsController: RunInternalImageRegistryPullSecretsController,
 	openshiftcontrolplanev1.OpenShiftOriginNamespaceController:           RunOriginNamespaceController,
 
 	openshiftcontrolplanev1.OpenShiftBuilderServiceAccountController: RunBuilderServiceAccountController,
