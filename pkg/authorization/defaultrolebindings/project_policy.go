@@ -23,27 +23,69 @@ const (
 	DeployerServiceAccountName = "deployer"
 )
 
-func GetBootstrapServiceAccountProjectRoleBindings(namespace string) []rbacv1.RoleBinding {
+type projectRoleBindings func(namespace string) []rbacv1.RoleBinding
+type serviceAccountRoleBinding func(namespace string) rbacv1.RoleBinding
+
+// GetImagePullerProjectRoleBindings generates a role binding that allows all pods to pull ImageStream images associated with given namespace.
+// These should only be created if the "ImageRegistry" capability is enabled on the cluster.
+func GetImagePullerProjectRoleBindings(namespace string) rbacv1.RoleBinding {
 	imagePuller := newOriginRoleBindingForClusterRoleWithGroup(ImagePullerRoleBindingName, ImagePullerRoleName, namespace, serviceaccount.MakeNamespaceGroupName(namespace))
 	imagePuller.Annotations[openShiftDescription] = "Allows all pods in this namespace to pull images from this namespace.  It is auto-managed by a controller; remove subjects to disable."
 
+	return imagePuller
+}
+
+// GetBuilderServiceAccountProjectRoleBindings generates the role bindings specific to the "builder" service account of given namespace.
+// These should only be created if the "Build" capability is enabled on the cluster.
+func GetBuilderServiceAccountProjectRoleBindings(namespace string) rbacv1.RoleBinding {
 	imageBuilder := newOriginRoleBindingForClusterRoleWithSA(ImageBuilderRoleBindingName, ImageBuilderRoleName, namespace, BuilderServiceAccountName)
 	imageBuilder.Annotations[openShiftDescription] = "Allows builds in this namespace to push images to this namespace.  It is auto-managed by a controller; remove subjects to disable."
 
+	return imageBuilder
+}
+
+// GetDeployerServiceAccountProjectRoleBindings generates the role bindings specific to the "builder" service account of given namespace.
+// These should only be created if the "DeploymentConfig" capability is enabled on the cluster.
+func GetDeployerServiceAccountProjectRoleBindings(namespace string) rbacv1.RoleBinding {
 	deployer := newOriginRoleBindingForClusterRoleWithSA(DeployerRoleBindingName, DeployerRoleName, namespace, DeployerServiceAccountName)
 	deployer.Annotations[openShiftDescription] = "Allows deploymentconfigs in this namespace to rollout pods in this namespace.  It is auto-managed by a controller; remove subjects to disable."
 
-	return []rbacv1.RoleBinding{
-		imagePuller,
-		imageBuilder,
-		deployer,
+	return deployer
+}
+
+func composeRoleBindings(roleBindings ...serviceAccountRoleBinding) projectRoleBindings {
+	return func(namespace string) []rbacv1.RoleBinding {
+		bindings := []rbacv1.RoleBinding{}
+		for _, rbfunc := range roleBindings {
+			bindings = append(bindings, rbfunc(namespace))
+		}
+		return bindings
 	}
 }
 
-func GetBootstrapServiceAccountProjectRoleBindingNames() sets.String {
-	names := sets.NewString()
+// GetRoleBindingsForController returns the appropriate generator function for the
+// given named controller that will reconcile role bindings in a namespace.
+func GetRoleBindingsForController(controller string) projectRoleBindings {
+	switch controller {
+	case "BuilderRoleBindingController":
+		return composeRoleBindings(GetBuilderServiceAccountProjectRoleBindings)
+	case "DeployerRoleBindingController":
+		return composeRoleBindings(GetDeployerServiceAccountProjectRoleBindings)
+	case "ImagePullerRoleBindingController":
+		return composeRoleBindings(GetImagePullerProjectRoleBindings)
+	default:
+		return composeRoleBindings(GetImagePullerProjectRoleBindings,
+			GetBuilderServiceAccountProjectRoleBindings,
+			GetDeployerServiceAccountProjectRoleBindings,
+		)
+	}
+}
 
-	for _, roleBinding := range GetBootstrapServiceAccountProjectRoleBindings("default") {
+func GetBootstrapServiceAccountProjectRoleBindingNames(roleBindings projectRoleBindings) sets.Set[string] {
+	names := sets.Set[string]{}
+
+	// Gets the roleBinding Names in the "default" namespace
+	for _, roleBinding := range roleBindings("default") {
 		names.Insert(roleBinding.Name)
 	}
 
