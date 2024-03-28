@@ -22,10 +22,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var defaultRoleBindingNames = GetBootstrapServiceAccountProjectRoleBindingNames()
-
-// DefaultRoleBindingController is a controller to combine cluster roles
-type DefaultRoleBindingController struct {
+// RoleBindingController is a controller to combine cluster roles
+type RoleBindingController struct {
+	name              string
 	roleBindingClient rbacclient.RoleBindingsGetter
 
 	roleBindingLister rbaclisters.RoleBindingLister
@@ -33,13 +32,15 @@ type DefaultRoleBindingController struct {
 	namespaceLister   corelisters.NamespaceLister
 	namespaceSynced   cache.InformerSynced
 
-	syncHandler func(namespace string) error
-	queue       workqueue.RateLimitingInterface
+	syncHandler      func(namespace string) error
+	queue            workqueue.RateLimitingInterface
+	roleBindingsFunc projectRoleBindings
 }
 
-// NewDefaultRoleBinding creates a new controller
-func NewDefaultRoleBindingsController(roleBindingInformer rbacinformers.RoleBindingInformer, namespaceInformer coreinformers.NamespaceInformer, roleBindingClient rbacclient.RoleBindingsGetter) *DefaultRoleBindingController {
-	c := &DefaultRoleBindingController{
+// NewRoleBinding creates a new controller
+func NewRoleBindingsController(roleBindingInformer rbacinformers.RoleBindingInformer, namespaceInformer coreinformers.NamespaceInformer, roleBindingClient rbacclient.RoleBindingsGetter, controllerName string) *RoleBindingController {
+	c := &RoleBindingController{
+		name:              controllerName,
 		roleBindingClient: roleBindingClient,
 
 		roleBindingLister: roleBindingInformer.Lister(),
@@ -47,9 +48,12 @@ func NewDefaultRoleBindingsController(roleBindingInformer rbacinformers.RoleBind
 		namespaceLister:   namespaceInformer.Lister(),
 		namespaceSynced:   namespaceInformer.Informer().HasSynced,
 
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "DefaultRoleBindingsController"),
+		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), controllerName),
 	}
 	c.syncHandler = c.syncNamespace
+	c.roleBindingsFunc = GetRoleBindingsForController(controllerName)
+
+	roleBindingNames := GetBootstrapServiceAccountProjectRoleBindingNames(c.roleBindingsFunc)
 
 	roleBindingInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj interface{}) bool {
@@ -57,7 +61,7 @@ func NewDefaultRoleBindingsController(roleBindingInformer rbacinformers.RoleBind
 			if err != nil {
 				return false
 			}
-			return defaultRoleBindingNames.Has(metadata.GetName())
+			return roleBindingNames.Has(metadata.GetName())
 		},
 		Handler: cache.ResourceEventHandlerFuncs{
 			DeleteFunc: func(uncast interface{}) {
@@ -94,7 +98,7 @@ func NewDefaultRoleBindingsController(roleBindingInformer rbacinformers.RoleBind
 	return c
 }
 
-func (c *DefaultRoleBindingController) syncNamespace(namespaceName string) error {
+func (c *RoleBindingController) syncNamespace(namespaceName string) error {
 	namespace, err := c.namespaceLister.Get(namespaceName)
 	if errors.IsNotFound(err) {
 		return nil
@@ -112,7 +116,8 @@ func (c *DefaultRoleBindingController) syncNamespace(namespaceName string) error
 	}
 
 	errs := []error{}
-	desiredRoleBindings := GetBootstrapServiceAccountProjectRoleBindings(namespaceName)
+	desiredRoleBindings := GetRoleBindingsForController(c.name)(namespaceName)
+
 	for i := range desiredRoleBindings {
 		desiredRoleBinding := desiredRoleBindings[i]
 		found := false
@@ -142,14 +147,14 @@ func (c *DefaultRoleBindingController) syncNamespace(namespaceName string) error
 }
 
 // Run starts the controller and blocks until stopCh is closed.
-func (c *DefaultRoleBindingController) Run(workers int, stopCh <-chan struct{}) {
+func (c *RoleBindingController) Run(workers int, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
-	klog.Infof("Starting DefaultRoleBindingController")
-	defer klog.Infof("Shutting down DefaultRoleBindingController")
+	klog.Infof("Starting %v", c.name)
+	defer klog.Infof("Shutting down %v", c.name)
 
-	if !cache.WaitForNamedCacheSync("DefaultRoleBindingController", stopCh, c.roleBindingSynced, c.namespaceSynced) {
+	if !cache.WaitForNamedCacheSync(c.name, stopCh, c.roleBindingSynced, c.namespaceSynced) {
 		return
 	}
 
@@ -160,12 +165,12 @@ func (c *DefaultRoleBindingController) Run(workers int, stopCh <-chan struct{}) 
 	<-stopCh
 }
 
-func (c *DefaultRoleBindingController) runWorker() {
+func (c *RoleBindingController) runWorker() {
 	for c.processNextWorkItem() {
 	}
 }
 
-func (c *DefaultRoleBindingController) processNextWorkItem() bool {
+func (c *RoleBindingController) processNextWorkItem() bool {
 	dsKey, quit := c.queue.Get()
 	if quit {
 		return false

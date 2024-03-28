@@ -16,16 +16,25 @@ import (
 	"k8s.io/kubernetes/pkg/controller"
 )
 
+var controllerNames = []string{
+	"DefaultRoleBindingController",
+	"BuilderRoleBindingController",
+	"ImagePullerRoleBindingController",
+	"DeployerRoleBindingController",
+}
+
 func TestSync(t *testing.T) {
 	tests := []struct {
 		name                      string
+		controller                string
 		startingNamespaces        []*corev1.Namespace
 		startingRoleBindings      []*rbacv1.RoleBinding
 		namespaceToSync           string
 		expectedRoleBindingsNames []string
 	}{
 		{
-			name: "create-all",
+			name:       "create-default-all",
+			controller: "DefaultRoleBindingController",
 			startingNamespaces: []*corev1.Namespace{
 				{ObjectMeta: metav1.ObjectMeta{Name: "foo"}},
 			},
@@ -36,25 +45,65 @@ func TestSync(t *testing.T) {
 			expectedRoleBindingsNames: []string{"system:image-pullers", "system:image-builders", "system:deployers"},
 		},
 		{
-			name: "create-missing",
+			name:       "create-builder",
+			controller: "BuilderRoleBindingController",
 			startingNamespaces: []*corev1.Namespace{
 				{ObjectMeta: metav1.ObjectMeta{Name: "foo"}},
 			},
 			startingRoleBindings: []*rbacv1.RoleBinding{
-				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"}},
-				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "system:image-builders"}},
+				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "system:image-pullers"}},
 			},
 			namespaceToSync:           "foo",
-			expectedRoleBindingsNames: []string{"system:image-pullers", "system:deployers"},
+			expectedRoleBindingsNames: []string{"system:image-builders"},
 		},
 		{
-			name: "create-none",
+			name:       "create-deployer",
+			controller: "DeployerRoleBindingController",
 			startingNamespaces: []*corev1.Namespace{
 				{ObjectMeta: metav1.ObjectMeta{Name: "foo"}},
 			},
 			startingRoleBindings: []*rbacv1.RoleBinding{
 				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "system:image-builders"}},
 				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "system:image-pullers"}},
+			},
+			namespaceToSync:           "foo",
+			expectedRoleBindingsNames: []string{"system:deployers"},
+		},
+		{
+			name:       "create-image-puller",
+			controller: "ImagePullerRoleBindingController",
+			startingNamespaces: []*corev1.Namespace{
+				{ObjectMeta: metav1.ObjectMeta{Name: "foo"}},
+			},
+			startingRoleBindings: []*rbacv1.RoleBinding{
+				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"}},
+			},
+			namespaceToSync:           "foo",
+			expectedRoleBindingsNames: []string{"system:image-pullers"},
+		},
+		{
+			name:       "create-default-missing",
+			controller: "DefaultRoleBindingController",
+			startingNamespaces: []*corev1.Namespace{
+				{ObjectMeta: metav1.ObjectMeta{Name: "foo"}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "new"}},
+			},
+			startingRoleBindings: []*rbacv1.RoleBinding{
+				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "system:image-builders"}},
+				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "bar"}},
+			},
+			namespaceToSync:           "foo",
+			expectedRoleBindingsNames: []string{"system:image-pullers", "system:deployers"},
+		},
+		{
+			name:       "create-default-none",
+			controller: "DefaultRoleBindingController",
+			startingNamespaces: []*corev1.Namespace{
+				{ObjectMeta: metav1.ObjectMeta{Name: "foo"}},
+			},
+			startingRoleBindings: []*rbacv1.RoleBinding{
+				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "system:image-pullers"}},
+				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "system:image-builders"}},
 				{ObjectMeta: metav1.ObjectMeta{Namespace: "foo", Name: "system:deployers"}},
 			},
 			namespaceToSync: "foo",
@@ -75,42 +124,50 @@ func TestSync(t *testing.T) {
 				namespaceIndexer.Add(obj)
 			}
 			fakeClient := kubeclientfake.NewSimpleClientset(objs...)
-			c := DefaultRoleBindingController{
-				roleBindingClient: fakeClient.RbacV1(),
-				roleBindingLister: rbaclisters.NewRoleBindingLister(roleBindingIndexer),
-				namespaceLister:   corelisters.NewNamespaceLister(namespaceIndexer),
-			}
-
-			err := c.syncNamespace(test.namespaceToSync)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			allActions := fakeClient.Actions()
-			createActions := []clienttesting.CreateAction{}
-			for i := range allActions {
-				action := allActions[i]
-				createAction, ok := action.(clienttesting.CreateAction)
-				if !ok {
-					t.Errorf("unexpected action %#v", action)
+			for _, cName := range controllerNames {
+				c := RoleBindingController{
+					name:              cName,
+					roleBindingClient: fakeClient.RbacV1(),
+					roleBindingLister: rbaclisters.NewRoleBindingLister(roleBindingIndexer),
+					namespaceLister:   corelisters.NewNamespaceLister(namespaceIndexer),
 				}
-				createActions = append(createActions, createAction)
-			}
-			if len(createActions) != len(test.expectedRoleBindingsNames) {
-				t.Fatalf("expected %v, got %#v", test.expectedRoleBindingsNames, createActions)
-			}
 
-			for i, name := range test.expectedRoleBindingsNames {
-				action := createActions[i]
-				metadata, err := meta.Accessor(action.GetObject())
+				if c.name != test.controller {
+					continue
+				}
+
+				err := c.syncNamespace(test.namespaceToSync)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if name != metadata.GetName() {
-					t.Errorf("expected %v, got %v", name, metadata.GetName())
+
+				allActions := fakeClient.Actions()
+				createActions := []clienttesting.CreateAction{}
+				for i := range allActions {
+					action := allActions[i]
+					createAction, ok := action.(clienttesting.CreateAction)
+					if !ok {
+						t.Errorf("unexpected action %#v", action)
+					}
+					createActions = append(createActions, createAction)
 				}
-				if action.GetNamespace() != test.namespaceToSync {
-					t.Errorf("expected %v, got %v", test.namespaceToSync, action.GetNamespace())
+
+				if len(createActions) != len(test.expectedRoleBindingsNames) {
+					t.Fatalf("expected %v, got %#v", test.expectedRoleBindingsNames, createActions)
+				}
+
+				for i, name := range test.expectedRoleBindingsNames {
+					action := createActions[i]
+					metadata, err := meta.Accessor(action.GetObject())
+					if err != nil {
+						t.Fatal(err)
+					}
+					if name != metadata.GetName() {
+						t.Errorf("expected %v, got %v", name, metadata.GetName())
+					}
+					if action.GetNamespace() != test.namespaceToSync {
+						t.Errorf("expected %v, got %v", test.namespaceToSync, action.GetNamespace())
+					}
 				}
 			}
 		})
