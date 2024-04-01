@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"golang.org/x/exp/slices"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -212,25 +211,29 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 	// ensure managed image pull secret is referenced, only if there is data
 	if len(secret.Data[corev1.DockerConfigKey]) > len([]byte("{}")) {
 		patch.WithImagePullSecrets(applycorev1.LocalObjectReference().WithName(secretName))
+		// TODO remove the following line as part of API-1798
+		patch.WithSecrets(applycorev1.ObjectReference().WithName(secretName))
 	}
 	serviceAccount, err = c.client.CoreV1().ServiceAccounts(ns).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: serviceAccountControllerFieldManager})
 	if err != nil {
 		return err
 	}
 
-	// TODO haven't figured out how to remove the secret reference using Apply
-	if slices.ContainsFunc(serviceAccount.Secrets, func(ref corev1.ObjectReference) bool { return ref.Name == secretName }) {
-		sa := serviceAccount.DeepCopy()
-		var a []corev1.ObjectReference
-		for _, ref := range serviceAccount.Secrets {
-			if ref.Name != secretName {
-				a = append(a, ref)
+	// TODO add the commented out code as part of API-1798
+	/*
+		// TODO haven't figured out how to remove the secret reference using Apply
+		if slices.ContainsFunc(serviceAccount.Secrets, func(ref corev1.ObjectReference) bool { return ref.Name == secretName }) {
+			sa := serviceAccount.DeepCopy()
+			var a []corev1.ObjectReference
+			for _, ref := range serviceAccount.Secrets {
+				if ref.Name != secretName {
+					a = append(a, ref)
+				}
 			}
+			sa.Secrets = a
+			_, err = c.client.CoreV1().ServiceAccounts(ns).Update(ctx, sa, metav1.UpdateOptions{FieldManager: serviceAccountControllerFieldManager})
 		}
-		sa.Secrets = a
-		_, err = c.client.CoreV1().ServiceAccounts(ns).Update(ctx, sa, metav1.UpdateOptions{FieldManager: serviceAccountControllerFieldManager})
-	}
-
+	*/
 	return err
 }
 
