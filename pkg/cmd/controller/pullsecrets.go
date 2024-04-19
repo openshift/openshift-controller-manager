@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/openshift/openshift-controller-manager/pkg/serviceaccounts/controllers"
+	"github.com/openshift/openshift-controller-manager/pkg/serviceaccounts/controllers/rollback"
 )
 
 func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error) {
@@ -43,6 +44,17 @@ func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error
 		kc,
 		dockerRegistryControllerOptions,
 	).Run(10, ctx.Stop)
+
+	go rollback.NewLegacyImagePullSecretRollbackController(
+		kc,
+		ctx.KubernetesInformers.Core().V1().Secrets(),
+	).Run(ctx.Context, 1)
+
+	go rollback.NewServiceAccountRollbackController(
+		kc,
+		ctx.KubernetesInformers.Core().V1().ServiceAccounts(),
+		ctx.KubernetesInformers.Core().V1().Secrets(),
+	).Run(ctx.Context, 1)
 
 	return true, nil
 }
