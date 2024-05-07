@@ -11,7 +11,7 @@ require (
 	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.3.1
 	github.com/hashicorp/golang-lru v0.5.4
-	github.com/openshift/api v0.0.0-20240124164020-e2ce40831f2e
+	github.com/openshift/api v0.0.0-20240408161721-1e963d8dc466
 	github.com/openshift/build-machinery-go v0.0.0-20231128094528-1e9b1b0595c8
 	github.com/openshift/client-go v0.0.0-20240115204758-e6bf7d631d5e
 	github.com/openshift/library-go v0.0.0-20240124134907-4dfbf6bc7b11

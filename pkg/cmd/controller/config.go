@@ -15,14 +15,17 @@ var ControllerInitializers = map[openshiftcontrolplanev1.OpenShiftControllerName
 	openshiftcontrolplanev1.OpenShiftBuilderServiceAccountController: RunBuilderServiceAccountController,
 	openshiftcontrolplanev1.OpenShiftBuildController:                 RunBuildController,
 	openshiftcontrolplanev1.OpenShiftBuildConfigChangeController:     RunBuildConfigChangeController,
+	openshiftcontrolplanev1.OpenShiftBuilderRoleBindingsController:   RunBuilderRoleBindingController,
 
 	openshiftcontrolplanev1.OpenShiftDeployerServiceAccountController: RunDeployerServiceAccountController,
 	openshiftcontrolplanev1.OpenShiftDeployerController:               RunDeployerController,
 	openshiftcontrolplanev1.OpenShiftDeploymentConfigController:       RunDeploymentConfigController,
+	openshiftcontrolplanev1.OpenShiftDeployerRoleBindingsController:   RunDeployerRoleBindingController,
 
-	openshiftcontrolplanev1.OpenShiftImageTriggerController:         RunImageTriggerController,
-	openshiftcontrolplanev1.OpenShiftImageImportController:          RunImageImportController,
-	openshiftcontrolplanev1.OpenShiftImageSignatureImportController: RunImageSignatureImportController,
+	openshiftcontrolplanev1.OpenShiftImageTriggerController:            RunImageTriggerController,
+	openshiftcontrolplanev1.OpenShiftImageImportController:             RunImageImportController,
+	openshiftcontrolplanev1.OpenShiftImageSignatureImportController:    RunImageSignatureImportController,
+	openshiftcontrolplanev1.OpenShiftImagePullerRoleBindingsController: RunImagePullerRoleBindingController,
 
 	openshiftcontrolplanev1.OpenShiftTemplateInstanceController:          RunTemplateInstanceController,
 	openshiftcontrolplanev1.OpenShiftTemplateInstanceFinalizerController: RunTemplateInstanceFinalizerController,
