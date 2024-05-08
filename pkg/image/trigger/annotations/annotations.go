@@ -43,6 +43,13 @@ func (i annotationTriggerIndexer) Index(obj, old interface{}) (string, *trigger.
 		change = cache.Added
 	case old != nil && obj == nil:
 		// deleted
+		if _, ok := old.(cache.DeletedFinalStateUnknown); ok {
+			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(old)
+			if err != nil {
+				return "", nil, "", err
+			}
+			return key, nil, cache.Deleted, nil
+		}
 		m, err := meta.Accessor(old)
 		if err != nil {
 			return "", nil, change, err
