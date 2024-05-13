@@ -13,7 +13,7 @@ func RunInternalImageRegistryPullSecretsController(ctx *ControllerContext) (bool
 
 	serviceAccountController := controllers.NewServiceAccountController(kc, serviceAccounts, secrets)
 	imagePullSecretController, kids, urls := controllers.NewImagePullSecretController(kc, secrets)
-	keyIDObservationController := controllers.NewKeyIDObservationController(secrets, kids)
+	keyIDObservationController := controllers.NewKeyIDObservationController(kc, secrets, kids)
 	registryURLObservationController := controllers.NewRegistryURLObservationController(services, additionalRegistryURLs, urls)
 	legacyTokenSecretController := controllers.NewLegacyTokenSecretController(kc, secrets)
 	legacyImagePullSecretController := controllers.NewLegacyImagePullSecretController(kc, secrets)
