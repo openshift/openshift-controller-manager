@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -208,12 +209,26 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 	// don't leave out the anotation
 	patch.WithAnnotations(map[string]string{InternalRegistryImagePullSecretRefKey: secretName})
 
+	// the imagePullSecrets list's apply is atomic, so we need to copy any existing values it into the patch
+	serviceAccount, err = c.serviceAccounts.ServiceAccounts(ns).Get(name)
+	if err != nil {
+		return err
+	}
+	for _, ref := range serviceAccount.ImagePullSecrets {
+		patch.WithImagePullSecrets(applycorev1.LocalObjectReference().WithName(ref.Name))
+	}
+
 	// ensure managed image pull secret is referenced, only if there is data
 	if len(secret.Data[corev1.DockerConfigKey]) > len([]byte("{}")) {
-		patch.WithImagePullSecrets(applycorev1.LocalObjectReference().WithName(secretName))
+		if !slices.ContainsFunc(serviceAccount.ImagePullSecrets, func(ref corev1.LocalObjectReference) bool { return ref.Name == secretName }) {
+			patch.WithImagePullSecrets(applycorev1.LocalObjectReference().WithName(secretName))
+		}
 		// TODO remove the following line as part of API-1798
 		patch.WithSecrets(applycorev1.ObjectReference().WithName(secretName))
+	} else {
+		patch.ImagePullSecrets = slices.DeleteFunc(patch.ImagePullSecrets, func(ref applycorev1.LocalObjectReferenceApplyConfiguration) bool { return *ref.Name == secretName })
 	}
+
 	serviceAccount, err = c.client.CoreV1().ServiceAccounts(ns).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: serviceAccountControllerFieldManager})
 	if err != nil {
 		return err
