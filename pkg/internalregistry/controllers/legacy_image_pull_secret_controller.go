@@ -38,12 +38,15 @@ func NewLegacyImagePullSecretController(client kubernetes.Interface, secrets inf
 	}
 	secrets.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj any) bool {
-			secret := obj.(*corev1.Secret)
+			secret, ok := obj.(*corev1.Secret)
+			if !ok {
+				return false
+			}
 			if secret.Type != corev1.SecretTypeDockercfg {
 				// not an image pull secret
 				return false
 			}
-			if _, ok := secret.Annotations["openshift.io/token-secret.name"]; !ok {
+			if _, ok = secret.Annotations["openshift.io/token-secret.name"]; !ok {
 				// does not appear to be a legacy managed image pull secret
 				return false
 			}
