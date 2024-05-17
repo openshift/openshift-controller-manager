@@ -47,7 +47,10 @@ func NewRegistryURLObservationController(services informers.ServiceInformer, add
 	}
 	services.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj any) bool {
-			service := obj.(*corev1.Service)
+			service, ok := obj.(*corev1.Service)
+			if !ok {
+				return false
+			}
 			for _, l := range serviceLocations {
 				if l.name == service.Name && l.namespace == service.Namespace {
 					return true

@@ -37,7 +37,10 @@ func NewLegacyTokenSecretController(client kubernetes.Interface, secrets informe
 	}
 	secrets.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: func(obj any) bool {
-			secret := obj.(*corev1.Secret)
+			secret, ok := obj.(*corev1.Secret)
+			if !ok {
+				return false
+			}
 			if secret.Type != corev1.SecretTypeServiceAccountToken {
 				// not a service account token
 				return false
