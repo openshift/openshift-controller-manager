@@ -74,10 +74,7 @@ func GetRoleBindingsForController(controller string) projectRoleBindings {
 	case "ImagePullerRoleBindingController":
 		return composeRoleBindings(GetImagePullerProjectRoleBindings)
 	default:
-		return composeRoleBindings(GetImagePullerProjectRoleBindings,
-			GetBuilderServiceAccountProjectRoleBindings,
-			GetDeployerServiceAccountProjectRoleBindings,
-		)
+		return composeRoleBindings()
 	}
 }
 
