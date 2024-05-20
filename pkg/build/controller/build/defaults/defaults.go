@@ -96,8 +96,11 @@ func (b BuildDefaults) applyPodProxyDefaults(pod *corev1.Pod, isCustomBuild bool
 		// total control over the env+logic in a custom build pod anyway.
 		externalEnv := []corev1.EnvVar{}
 		externalEnv = append(externalEnv, corev1.EnvVar{Name: "HTTP_PROXY", Value: b.DefaultProxy.HTTPProxy})
+		externalEnv = append(externalEnv, corev1.EnvVar{Name: "http_proxy", Value: b.DefaultProxy.HTTPProxy})
 		externalEnv = append(externalEnv, corev1.EnvVar{Name: "HTTPS_PROXY", Value: b.DefaultProxy.HTTPSProxy})
+		externalEnv = append(externalEnv, corev1.EnvVar{Name: "https_proxy", Value: b.DefaultProxy.HTTPSProxy})
 		externalEnv = append(externalEnv, corev1.EnvVar{Name: "NO_PROXY", Value: b.DefaultProxy.NoProxy})
+		externalEnv = append(externalEnv, corev1.EnvVar{Name: "no_proxy", Value: b.DefaultProxy.NoProxy})
 
 		if isCustomBuild {
 			buildutil.MergeEnvWithoutDuplicates(externalEnv, &c.Env, false, []string{})
