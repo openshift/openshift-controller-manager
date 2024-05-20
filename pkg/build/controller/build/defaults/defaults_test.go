@@ -163,35 +163,24 @@ func TestGlobalProxyDefaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	httpProxyFound, httpsProxyFound, noProxyFound := false, false, false
+	proxyEnvs := map[string]string{
+		"HTTP_PROXY": "http", "http_proxy": "http", "HTTPS_PROXY": "https", "https_proxy": "https", "NO_PROXY": "no", "no_proxy": "no",
+	}
+	proxyFound := map[string]bool{
+		"HTTP_PROXY": false, "http_proxy": false, "HTTPS_PROXY": false, "https_proxy": false, "NO_PROXY": false, "no_proxy": false,
+	}
 	for _, ev := range pod.Spec.Containers[0].Env {
-		if ev.Name == "HTTP_PROXY" {
-			if ev.Value != "http" {
+		if val, found := proxyEnvs[ev.Name]; found {
+			if ev.Value != val {
 				t.Errorf("unexpected value %s", ev.Value)
 			}
-			httpProxyFound = true
-		}
-		if ev.Name == "HTTPS_PROXY" {
-			if ev.Value != "https" {
-				t.Errorf("unexpected value %s", ev.Value)
-			}
-			httpsProxyFound = true
-		}
-		if ev.Name == "NO_PROXY" {
-			if ev.Value != "no" {
-				t.Errorf("unexpected value %s", ev.Value)
-			}
-			noProxyFound = true
+			proxyFound[ev.Name] = true
 		}
 	}
-	if !httpProxyFound {
-		t.Errorf("HTTP_PROXY not found")
-	}
-	if !httpsProxyFound {
-		t.Errorf("HTTPS_PROXY not found")
-	}
-	if !noProxyFound {
-		t.Errorf("NO_PROXY not found")
+	for k, v := range proxyFound {
+		if !v {
+			t.Errorf("%s not found", k)
+		}
 	}
 
 	// source builds should not have the defaulted env vars applied to the build
@@ -199,17 +188,10 @@ func TestGlobalProxyDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	env := buildutil.GetBuildEnv(build)
 	for _, ev := range env {
-		if ev.Name == "HTTP_PROXY" {
-			t.Errorf("HTTP_PROXY was found, but should not have been")
-		}
-		if ev.Name == "HTTPS_PROXY" {
-			t.Errorf("HTTPS_PROXY was found, but should not have been")
-		}
-		if ev.Name == "NO_PROXY" {
-			t.Errorf("NO_PROXY was found, but should not have been")
+		if _, found := proxyEnvs[ev.Name]; found {
+			t.Errorf("%s was found, but should not have been", ev.Name)
 		}
 	}
 
@@ -220,35 +202,21 @@ func TestGlobalProxyDefaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	httpProxyFound, httpsProxyFound, noProxyFound = false, false, false
+	proxyFound = map[string]bool{
+		"HTTP_PROXY": false, "http_proxy": false, "HTTPS_PROXY": false, "https_proxy": false, "NO_PROXY": false, "no_proxy": false,
+	}
 	for _, ev := range pod.Spec.Containers[0].Env {
-		if ev.Name == "HTTP_PROXY" {
-			if ev.Value != "http" {
+		if val, found := proxyEnvs[ev.Name]; found {
+			if ev.Value != val {
 				t.Errorf("unexpected value %s", ev.Value)
 			}
-			httpProxyFound = true
-		}
-		if ev.Name == "HTTPS_PROXY" {
-			if ev.Value != "https" {
-				t.Errorf("unexpected value %s", ev.Value)
-			}
-			httpsProxyFound = true
-		}
-		if ev.Name == "NO_PROXY" {
-			if ev.Value != "no" {
-				t.Errorf("unexpected value %s", ev.Value)
-			}
-			noProxyFound = true
+			proxyFound[ev.Name] = true
 		}
 	}
-	if !httpProxyFound {
-		t.Errorf("HTTP_PROXY not found")
-	}
-	if !httpsProxyFound {
-		t.Errorf("HTTPS_PROXY not found")
-	}
-	if !noProxyFound {
-		t.Errorf("NO_PROXY not found")
+	for k, v := range proxyFound {
+		if !v {
+			t.Errorf("%s not found", k)
+		}
 	}
 
 	// docker builds should not have the defaulted env vars applied to the build
@@ -259,14 +227,8 @@ func TestGlobalProxyDefaults(t *testing.T) {
 
 	env = buildutil.GetBuildEnv(build)
 	for _, ev := range env {
-		if ev.Name == "HTTP_PROXY" {
-			t.Errorf("HTTP_PROXY was found, but should not have been")
-		}
-		if ev.Name == "HTTPS_PROXY" {
-			t.Errorf("HTTPS_PROXY was found, but should not have been")
-		}
-		if ev.Name == "NO_PROXY" {
-			t.Errorf("NO_PROXY was found, but should not have been")
+		if _, found := proxyEnvs[ev.Name]; found {
+			t.Errorf("%s was found, but should not have been", ev.Name)
 		}
 	}
 
@@ -277,35 +239,21 @@ func TestGlobalProxyDefaults(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	httpProxyFound, httpsProxyFound, noProxyFound = false, false, false
+	proxyFound = map[string]bool{
+		"HTTP_PROXY": false, "http_proxy": false, "HTTPS_PROXY": false, "https_proxy": false, "NO_PROXY": false, "no_proxy": false,
+	}
 	for _, ev := range pod.Spec.Containers[0].Env {
-		if ev.Name == "HTTP_PROXY" {
-			if ev.Value != "http" {
+		if val, found := proxyEnvs[ev.Name]; found {
+			if ev.Value != val {
 				t.Errorf("unexpected value %s", ev.Value)
 			}
-			httpProxyFound = true
-		}
-		if ev.Name == "HTTPS_PROXY" {
-			if ev.Value != "https" {
-				t.Errorf("unexpected value %s", ev.Value)
-			}
-			httpsProxyFound = true
-		}
-		if ev.Name == "NO_PROXY" {
-			if ev.Value != "no" {
-				t.Errorf("unexpected value %s", ev.Value)
-			}
-			noProxyFound = true
+			proxyFound[ev.Name] = true
 		}
 	}
-	if !httpProxyFound {
-		t.Errorf("HTTP_PROXY not found")
-	}
-	if !httpsProxyFound {
-		t.Errorf("HTTPS_PROXY not found")
-	}
-	if !noProxyFound {
-		t.Errorf("NO_PROXY not found")
+	for k, v := range proxyFound {
+		if !v {
+			t.Errorf("%s not found", k)
+		}
 	}
 
 	// custom builds should not have the defaulted env vars applied to the build
@@ -316,14 +264,8 @@ func TestGlobalProxyDefaults(t *testing.T) {
 
 	env = buildutil.GetBuildEnv(build)
 	for _, ev := range env {
-		if ev.Name == "HTTP_PROXY" {
-			t.Errorf("HTTP_PROXY was found, but should not have been")
-		}
-		if ev.Name == "HTTPS_PROXY" {
-			t.Errorf("HTTPS_PROXY was found, but should not have been")
-		}
-		if ev.Name == "NO_PROXY" {
-			t.Errorf("NO_PROXY was found, but should not have been")
+		if _, found := proxyEnvs[ev.Name]; found {
+			t.Errorf("%s was found, but should not have been", ev.Name)
 		}
 	}
 }
