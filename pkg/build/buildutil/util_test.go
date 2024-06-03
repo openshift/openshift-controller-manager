@@ -171,6 +171,47 @@ func TestMergeEnvWithoutDuplicates(t *testing.T) {
 				{Name: "LANG", Value: "en_US.utf8"},
 			},
 		},
+		{
+			name:      "use proxy env variables all upper-case",
+			whitelist: buildv1.WhitelistEnvVarNames,
+			input: []corev1.EnvVar{
+				// stripped by whitelist
+				{Name: "foo", Value: "bar"},
+				// stripped by whitelist
+				{Name: "input", Value: "inputVal"},
+				{Name: "HTTP_PROXY", Value: "http://username:password@127.0.0.1:80"},
+				{Name: "HTTPS_PROXY", Value: "https://username:password@127.0.0.1:443"},
+				{Name: "NO_PROXY", Value: "localdomain.com"},
+			},
+			currentOutput: []corev1.EnvVar{
+				{Name: "foo", Value: "test"},
+			},
+			expectedOutput: []corev1.EnvVar{
+				{Name: "foo", Value: "test"},
+				{Name: "HTTP_PROXY", Value: "http://username:password@127.0.0.1:80"},
+				{Name: "HTTPS_PROXY", Value: "https://username:password@127.0.0.1:443"},
+				{Name: "NO_PROXY", Value: "localdomain.com"},
+			},
+		},
+		{
+			name:      "use proxy env variables all lower-case",
+			whitelist: buildv1.WhitelistEnvVarNames,
+			input: []corev1.EnvVar{
+				// stripped by whitelist
+				{Name: "foo", Value: "bar"},
+				// stripped by whitelist
+				{Name: "input", Value: "inputVal"},
+				{Name: "http_proxy", Value: "http://username:password@127.0.0.1:80"},
+				{Name: "https_proxy", Value: "https://username:password@127.0.0.1:443"},
+				{Name: "no_proxy", Value: "localdomain.com"},
+			},
+			currentOutput: []corev1.EnvVar{},
+			expectedOutput: []corev1.EnvVar{
+				{Name: "http_proxy", Value: "http://username:password@127.0.0.1:80"},
+				{Name: "https_proxy", Value: "https://username:password@127.0.0.1:443"},
+				{Name: "no_proxy", Value: "localdomain.com"},
+			},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
