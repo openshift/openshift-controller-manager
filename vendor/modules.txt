@@ -780,7 +780,7 @@ go.uber.org/zap/internal/pool
 go.uber.org/zap/internal/stacktrace
 go.uber.org/zap/zapcore
 go.uber.org/zap/zapgrpc
-# golang.org/x/crypto v0.21.0
+# golang.org/x/crypto v0.24.0
 ## explicit; go 1.18
 golang.org/x/crypto/cast5
 golang.org/x/crypto/cryptobyte
@@ -824,11 +824,11 @@ golang.org/x/net/websocket
 ## explicit; go 1.18
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
-# golang.org/x/sync v0.6.0
+# golang.org/x/sync v0.7.0
 ## explicit; go 1.18
 golang.org/x/sync/errgroup
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.18.0
+# golang.org/x/sys v0.21.0
 ## explicit; go 1.18
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
@@ -836,10 +836,10 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.18.0
+# golang.org/x/term v0.21.0
 ## explicit; go 1.18
 golang.org/x/term
-# golang.org/x/text v0.14.0
+# golang.org/x/text v0.16.0
 ## explicit; go 1.18
 golang.org/x/text/encoding
 golang.org/x/text/encoding/internal
@@ -989,6 +989,7 @@ google.golang.org/protobuf/types/known/wrapperspb
 gopkg.in/go-jose/go-jose.v2
 gopkg.in/go-jose/go-jose.v2/cipher
 gopkg.in/go-jose/go-jose.v2/json
+gopkg.in/go-jose/go-jose.v2/jwt
 # gopkg.in/inf.v0 v0.9.1
 ## explicit
 gopkg.in/inf.v0
