@@ -72,12 +72,6 @@ func NewLegacyTokenSecretController(client kubernetes.Interface, secrets informe
 					c.queue.Add(key)
 				}
 			},
-			DeleteFunc: func(obj any) {
-				key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
-				if err == nil {
-					c.queue.Add(key)
-				}
-			},
 		},
 	})
 	return c

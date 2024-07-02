@@ -69,12 +69,6 @@ func NewServiceAccountController(kubeclient kubernetes.Interface, serviceAccount
 				c.queue.Add(key)
 			}
 		},
-		DeleteFunc: func(obj any) {
-			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
-			if err == nil {
-				c.queue.Add(key)
-			}
-		},
 	})
 
 	secrets.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
@@ -147,6 +141,8 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 			return err
 		}
 		patch.WithAnnotations(map[string]string{InternalRegistryImagePullSecretRefKey: secretName})
+		// add the UID to the patch to ensure we don't re-create the service account if it no longer exists
+		patch.WithUID(serviceAccount.UID)
 		// we apply this now to ensure the secret name stays stable in case a error occurs while reconciling
 		serviceAccount, err = c.client.CoreV1().ServiceAccounts(ns).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: serviceAccountControllerFieldManager})
 		if err != nil {
@@ -229,6 +225,9 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 	} else {
 		patch.ImagePullSecrets = slices.DeleteFunc(patch.ImagePullSecrets, func(ref applycorev1.LocalObjectReferenceApplyConfiguration) bool { return *ref.Name == secretName })
 	}
+
+	// add the UID to the patch to ensure we don't re-create the service account if it no longer exists
+	patch.WithUID(serviceAccount.UID)
 
 	serviceAccount, err = c.client.CoreV1().ServiceAccounts(ns).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: serviceAccountControllerFieldManager})
 	if err != nil {
