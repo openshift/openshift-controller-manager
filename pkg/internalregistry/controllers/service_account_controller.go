@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -268,31 +267,8 @@ func (c *serviceAccountController) managedImagePullSecretName(ctx context.Contex
 	if len(name) != 0 {
 		return name, nil
 	}
-	// maybe the annotation was clobbered, look for an existing managed image pull secret
-	secrets, err := c.secrets.Secrets(serviceAccount.Namespace).List(labels.Everything())
-	if err != nil {
-		return "", err
-	}
-	for _, secret := range secrets {
-		if secret.Type != corev1.SecretTypeDockercfg {
-			continue
-		}
-		if secret.Annotations != nil {
-			if sa, ok := secret.Annotations[InternalRegistryAuthTokenServiceAccountAnnotation]; ok {
-				if sa == serviceAccount.Name {
-					return secret.Name, nil
-				}
-				continue
-			}
-		}
-		for _, ref := range secret.OwnerReferences {
-			if ref.Name == serviceAccount.Name && ref.UID == serviceAccount.UID {
-				return secret.Name, nil
-			}
-		}
-	}
 	// try to reuse the legacy image pull secret name.
-	name, err = c.legacyImagePullSecretName(ctx, serviceAccount)
+	name, err := c.legacyImagePullSecretName(ctx, serviceAccount)
 	if err != nil {
 		return "", err
 	}

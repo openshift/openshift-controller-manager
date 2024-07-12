@@ -30,32 +30,30 @@ import (
 )
 
 type imagePullSecretController struct {
-	client          kubernetes.Interface
-	secrets         listers.SecretLister
-	serviceAccounts listers.ServiceAccountLister
-	cacheSyncs      []cache.InformerSynced
-	queue           workqueue.RateLimitingInterface
-	urls            *atomic.Pointer[[]string]
-	urlsC           chan []string
-	kids            *atomic.Pointer[[]string]
-	kidsC           chan []string
+	client     kubernetes.Interface
+	secrets    listers.SecretLister
+	cacheSyncs []cache.InformerSynced
+	queue      workqueue.RateLimitingInterface
+	urls       *atomic.Pointer[[]string]
+	urlsC      chan []string
+	kids       *atomic.Pointer[[]string]
+	kidsC      chan []string
 }
 
 // some handy types so we don't mixup these channels
 type urlsChan chan<- []string
 type kidsChan chan<- []string
 
-func NewImagePullSecretController(kubeclient kubernetes.Interface, secrets informers.SecretInformer, serviceAccounts informers.ServiceAccountInformer) (*imagePullSecretController, kidsChan, urlsChan) {
+func NewImagePullSecretController(kubeclient kubernetes.Interface, secrets informers.SecretInformer) (*imagePullSecretController, kidsChan, urlsChan) {
 	c := &imagePullSecretController{
-		client:          kubeclient,
-		secrets:         secrets.Lister(),
-		serviceAccounts: serviceAccounts.Lister(),
-		cacheSyncs:      []cache.InformerSynced{secrets.Informer().HasSynced, serviceAccounts.Informer().HasSynced},
-		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "bound-token-managed-image-pull-secrets"),
-		kids:            atomic.NewPointer[[]string](nil),
-		urls:            atomic.NewPointer[[]string](nil),
-		kidsC:           make(chan []string),
-		urlsC:           make(chan []string),
+		client:     kubeclient,
+		secrets:    secrets.Lister(),
+		cacheSyncs: []cache.InformerSynced{secrets.Informer().HasSynced},
+		queue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "bound-token-managed-image-pull-secrets"),
+		kids:       atomic.NewPointer[[]string](nil),
+		urls:       atomic.NewPointer[[]string](nil),
+		kidsC:      make(chan []string),
+		urlsC:      make(chan []string),
 	}
 	secrets.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: isManagedImagePullSecret,
@@ -139,14 +137,6 @@ func (c *imagePullSecretController) sync(ctx context.Context, key string) (error
 		return err, 0
 	}
 
-	orphaned, err := c.isOrphanedManagedImagePullSecret(secret)
-	if err != nil {
-		return err, 0
-	}
-	if orphaned {
-		return c.cleanupOrphanedManagedImagePullSecret(ctx, secret), 0
-	}
-
 	refreshNow, refreshAt := c.isSecretRefreshNeeded(secret, *urls, *kids)
 	if !refreshNow {
 
@@ -203,47 +193,6 @@ func (c *imagePullSecretController) sync(ctx context.Context, key string) (error
 
 	refreshAfter := refreshAt.Sub(time.Now())
 	return nil, refreshAfter
-}
-
-func (c *imagePullSecretController) cleanupOrphanedManagedImagePullSecret(ctx context.Context, secret *corev1.Secret) error {
-	ns := secret.Namespace
-	serviceAccountName := serviceAccountNameForManagedSecret(secret)
-	if len(serviceAccountName) > 0 {
-		var updateServiceAccount bool
-		serviceAccount, err := c.serviceAccounts.ServiceAccounts(ns).Get(serviceAccountName)
-		if err != nil && !errors.IsNotFound(err) {
-			return fmt.Errorf("removing orphaned managed image pull secret from serviceaccount: %v", err)
-		}
-		var imagePullSecrets []corev1.LocalObjectReference
-		for _, ref := range serviceAccount.ImagePullSecrets {
-			if ref.Name == secret.Name {
-				updateServiceAccount = true
-				continue
-			}
-			imagePullSecrets = append(imagePullSecrets, ref)
-		}
-		var mountableSecrets []corev1.ObjectReference
-		for _, ref := range serviceAccount.Secrets {
-			if ref.Name == secret.Name {
-				updateServiceAccount = true
-				continue
-			}
-			mountableSecrets = append(mountableSecrets, ref)
-		}
-		if updateServiceAccount {
-			sa := serviceAccount.DeepCopy()
-			sa.ImagePullSecrets = imagePullSecrets
-			sa.Secrets = mountableSecrets
-			_, err = c.client.CoreV1().ServiceAccounts(ns).Update(ctx, sa, metav1.UpdateOptions{})
-			if err != nil {
-				return fmt.Errorf("removing refrences to orphaned managed image pull secret from service account: %v", err)
-			}
-		}
-	}
-	if err := c.client.CoreV1().Secrets(ns).Delete(ctx, secret.Name, metav1.DeleteOptions{}); err != nil {
-		return fmt.Errorf("deleting orphaned managed image pull secret: %v", err)
-	}
-	return nil
 }
 
 func dockerConfig(token string, urls []string) any {
@@ -449,27 +398,4 @@ func (c *imagePullSecretController) processNextWorkItem(ctx context.Context) boo
 	runtime.HandleError(fmt.Errorf("%v failed with : %v", key, err))
 	c.queue.AddRateLimited(key)
 	return true
-}
-
-func (c *imagePullSecretController) isOrphanedManagedImagePullSecret(secret *corev1.Secret) (bool, error) {
-	// the annotation referencing the service account must exist, or this controller would not of been triggered
-	serviceAccount, err := c.serviceAccounts.ServiceAccounts(secret.Namespace).Get(secret.Annotations[InternalRegistryAuthTokenServiceAccountAnnotation])
-	if errors.IsNotFound(err) {
-		// service account does not exist, this secret should not exist either, unless the ownerrefs were clobbered
-		return true, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if serviceAccount.Annotations == nil {
-		// service account's secret ref annotation is missing, we take no action until it is reconciled by its owning controller
-		return false, nil
-	}
-	secretRef, ok := serviceAccount.Annotations[InternalRegistryImagePullSecretRefKey]
-	if !ok {
-		// service account's secret ref annotation is missing, we take no action until it is reconciled by its owning controller
-		return false, nil
-	}
-	// secret if considered orphaned the service account it references has a secret ref, and it does not reference the secret
-	return secretRef != secret.Name, nil
 }
