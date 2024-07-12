@@ -211,7 +211,10 @@ func (c *imagePullSecretController) cleanupOrphanedManagedImagePullSecret(ctx co
 	if len(serviceAccountName) > 0 {
 		var updateServiceAccount bool
 		serviceAccount, err := c.serviceAccounts.ServiceAccounts(ns).Get(serviceAccountName)
-		if err != nil && !errors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
 			return fmt.Errorf("removing orphaned managed image pull secret from serviceaccount: %v", err)
 		}
 		var imagePullSecrets []corev1.LocalObjectReference
