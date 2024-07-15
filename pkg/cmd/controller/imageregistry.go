@@ -12,7 +12,7 @@ func RunInternalImageRegistryPullSecretsController(ctx *ControllerContext) (bool
 	additionalRegistryURLs := ctx.OpenshiftControllerConfig.DockerPullSecret.RegistryURLs
 
 	serviceAccountController := controllers.NewServiceAccountController(kc, serviceAccounts, secrets)
-	imagePullSecretController, kids, urls := controllers.NewImagePullSecretController(kc, secrets)
+	imagePullSecretController, kids, urls := controllers.NewImagePullSecretController(kc, secrets, serviceAccounts)
 	keyIDObservationController := controllers.NewKeyIDObservationController(kc, secrets, kids)
 	registryURLObservationController := controllers.NewRegistryURLObservationController(services, additionalRegistryURLs, urls)
 	legacyTokenSecretController := controllers.NewLegacyTokenSecretController(kc, secrets)
