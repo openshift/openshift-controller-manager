@@ -157,6 +157,9 @@ func (c *imagePullSecretController) sync(ctx context.Context, key string) (error
 				return err, 0
 			}
 			patch.WithAnnotations(map[string]string{InternalRegistryAuthTokenTypeAnnotation: AuthTokenTypeBound})
+			// add the UID to the patch to ensure we don't re-create the secret if it no longer exists.
+			// the service account controller is responsible for re-creating the initial secret.
+			patch.WithUID(secret.UID)
 			_, err = c.client.CoreV1().Secrets(secret.Namespace).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: imagePullSecretControllerFieldManager})
 			if err != nil {
 				return err, 0
@@ -194,7 +197,10 @@ func (c *imagePullSecretController) sync(ctx context.Context, key string) (error
 			InternalRegistryAuthTokenTypeAnnotation: AuthTokenTypeBound,
 		}).
 		WithType(corev1.SecretTypeDockercfg).
-		WithData(map[string][]byte{corev1.DockerConfigKey: data})
+		WithData(map[string][]byte{corev1.DockerConfigKey: data}).
+		// add the UID to the patch to ensure we don't re-create the secret if it no longer exists.
+		// the service account controller is responsible for re-creating the initial secret.
+		WithUID(secret.UID)
 	_, err = c.client.CoreV1().Secrets(secret.Namespace).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: imagePullSecretControllerFieldManager})
 
 	if err != nil {
