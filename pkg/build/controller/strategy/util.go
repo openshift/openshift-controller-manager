@@ -149,9 +149,6 @@ func mountVolume(pod *corev1.Pod, container *corev1.Container, objName, mountPat
 		}
 	}
 	mode := int32(0o600)
-	if container.SecurityContext == nil || container.SecurityContext.Privileged == nil || !*container.SecurityContext.Privileged {
-		mode = int32(0o644) // make sure unprivileged builders can read them
-	}
 	if !volumeExists {
 		volume := makeVolume(volumeName, objName, mode, fsType, volumeSource)
 		pod.Spec.Volumes = append(pod.Spec.Volumes, volume)
@@ -557,6 +554,45 @@ func securityContextForBuild(vars []corev1.EnvVar) *corev1.SecurityContext {
 		}
 	}
 	return securityContext
+}
+
+// builderMinSecurityContext returns a SecurityContext that has the minimum privileges needed to
+// run the openshift-builder-container's non-buildah actions. This includes cloning source code,
+// accepting source code from a command line, and manipulating a provided Dockerfile.
+//
+// These containers need to run as root in order to generate a full ca-trust chain from the mounted
+// cluster trust bundle. This trust chain is used to clone source code from private git
+// hosted with self/enterprise-internal SSL certificates, amongst other actions [1]. Linux
+// capabilities are otherwise minimized to reduce attack surfaces [2].
+//
+// See also:
+// [1] https://bugzilla.redhat.com/show_bug.cgi?id=1826183
+// [2] https://kubernetes.io/docs/concepts/security/pod-security-standards/#baseline
+func builderMinSecurityContext() *corev1.SecurityContext {
+	isNonRoot := false
+	isPrivileged := false
+	uidGid := int64(0)
+	// Try run as root, but only have permission to CHOWN files.
+	return &corev1.SecurityContext{
+		Privileged:   &isPrivileged,
+		RunAsNonRoot: &isNonRoot,
+		RunAsUser:    &uidGid,
+		RunAsGroup:   &uidGid,
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+		// DAC_OVERRIDE required to override the permission checks on ssh keys and .gitconfig files.
+		// TODO: Set appropriate file permission bits on ssh keys and .gitconfig files.
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{
+				"ALL",
+			},
+			Add: []corev1.Capability{
+				"CHOWN",
+				"DAC_OVERRIDE",
+			},
+		},
+	}
 }
 
 // Add annotations that should tell CRI-O to provide /dev/fuse in the pod's
