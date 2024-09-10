@@ -7,4 +7,5 @@ FROM registry.ci.openshift.org/ocp/4.17:base-rhel9
 COPY --from=builder /go/src/github.com/openshift/openshift-controller-manager/openshift-controller-manager /usr/bin/
 LABEL io.k8s.display-name="OpenShift Controller Manager Command" \
       io.k8s.description="OpenShift is a platform for developing, building, and deploying containerized applications." \
-      io.openshift.tags="openshift,openshift-controller-manager"
+      io.openshift.tags="openshift,openshift-controller-manager" \
+      test.pr=true
