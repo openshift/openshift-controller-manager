@@ -151,6 +151,7 @@ func TestDockerCreateBuildPod(t *testing.T) {
 	}
 
 	checkAliasing(t, actual)
+	checkPodSecurityContexts(t, actual)
 }
 
 func TestDockerBuildLongName(t *testing.T) {
