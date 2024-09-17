@@ -110,6 +110,15 @@ func TestSetupDockerSecrets(t *testing.T) {
 			t.Errorf("Duplicate volume name %s", v.Name)
 		}
 		seenName[v.Name] = true
+
+		if v.VolumeSource.Secret == nil {
+			t.Errorf("expected volume %s to have source type Secret", v.Name)
+		} else {
+			defaultMode := v.VolumeSource.Secret.DefaultMode
+			if *defaultMode != int32(0600) {
+				t.Errorf("expected volume source to default file permissions to read-write-user (0600), got %o", *defaultMode)
+			}
+		}
 	}
 
 	if !seenName["my-pushSecret-with-full-stops-and-longer-than-six-c6eb4d75-push"] {
@@ -886,18 +895,18 @@ func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy b
 				t.Errorf("Unexpected error: %v", err)
 				return
 			}
-			for ctrIndex, ctr := range append(actual.Spec.Containers, actual.Spec.InitContainers...) {
+			for _, ctr := range append(actual.Spec.Containers, actual.Spec.InitContainers...) {
 				sc := ctr.SecurityContext
 				if sc == nil {
-					t.Errorf("Container %d in pod spec has no SecurityContext", ctrIndex)
+					t.Errorf("Container %s in pod spec has no SecurityContext", ctr.Name)
 					continue
 				}
 				if sc.Privileged == nil {
-					t.Errorf("Container %d in pod spec has no privileged field", ctrIndex)
+					t.Errorf("Container %s in pod spec has no privileged field", ctr.Name)
 					continue
 				}
-				if *sc.Privileged != testCase.privileged {
-					t.Errorf("Expected privileged: %q to produce privileged=%v, got %v", testCase.env, testCase.privileged, *sc.Privileged)
+				if isPrivilegedContainerAllowed(ctr.Name) && *sc.Privileged != testCase.privileged {
+					t.Errorf("Expected privileged: %q to produce privileged=%v for container %s, got %v", testCase.env, testCase.privileged, ctr.Name, *sc.Privileged)
 				}
 			}
 			for annotation, value := range testCase.annotations {
@@ -916,5 +925,117 @@ func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy b
 				}
 			}
 		})
+	}
+}
+
+func TestMinimalSecurityContext(t *testing.T) {
+	securityCtx := builderMinSecurityContext()
+	checkSecurityContextMeetsBaseline(t, "test", securityCtx)
+}
+
+var allowedCapabilities = []string{
+	"AUDIT_WRITE",
+	"CHOWN",
+	"DAC_OVERRIDE",
+	"FOWNER",
+	"FSETID",
+	"KILL",
+	"MKNOD",
+	"NET_BIND_SERVICE",
+	"SETFCAP",
+	"SETGID",
+	"SETPCAP",
+	"SETUID",
+	"SYS_CHROOT",
+}
+
+func isCapabilityAllowedBaseline(capability corev1.Capability) bool {
+	for _, allowed := range allowedCapabilities {
+		if capability == corev1.Capability(allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkSecurityContextMeetsBaseline verifes if the security context meets the "baseline" Pod Security Standard.
+func checkSecurityContextMeetsBaseline(t *testing.T, containerName string, securityCtx *corev1.SecurityContext) {
+	// Baseline pod security standard allows containers to run as root, but with extra protections
+	// to prevent common/known attack surfaces.
+
+	// Privileged containers are not allowed
+	if securityCtx.Privileged != nil && *securityCtx.Privileged {
+		t.Errorf("container %s should not be privileged", containerName)
+	}
+
+	// A subset of Linux capabilities are allowed for "baseline" pod security standard
+	if securityCtx.Capabilities != nil {
+		for _, cap := range securityCtx.Capabilities.Add {
+			if !isCapabilityAllowedBaseline(cap) {
+				t.Errorf("container %s adds privileged capability %q", containerName, cap)
+			}
+		}
+	}
+
+	// SELinux cannot be disabled, or use user/role overrides
+	if securityCtx.SELinuxOptions != nil {
+		seLinuxType := securityCtx.SELinuxOptions.Type
+		if seLinuxType != "container_t" && seLinuxType != "container_init_t" &&
+			seLinuxType != "container_kvm_t" && seLinuxType != "container_engine_t" {
+			t.Errorf("container %s uses privileged SELinux type %q", containerName, seLinuxType)
+		}
+		if len(securityCtx.SELinuxOptions.User) > 0 {
+			t.Errorf("container %s overrides SELinux user", containerName)
+		}
+		if len(securityCtx.SELinuxOptions.Role) > 0 {
+			t.Errorf("container %s overrides SELinux role", containerName)
+		}
+	}
+
+	// /proc mount should use defaults (masked)
+	if securityCtx.ProcMount != nil && *securityCtx.ProcMount != corev1.DefaultProcMount {
+		t.Errorf("container %s does not use default /proc mount type", containerName)
+	}
+
+	// Seccomp profile cannot be set to "Unconfined"
+	if securityCtx.SeccompProfile != nil && securityCtx.SeccompProfile.Type == corev1.SeccompProfileTypeUnconfined {
+		t.Errorf("container %s uses Unconfined Seccomp profile", containerName)
+	}
+
+}
+
+// checkPodSecurityContexts verifies if the build pod containers have appropriate security
+// contexts. Only a subset of build pod containers are allowed to use a non-restricted security
+// context.
+func checkPodSecurityContexts(t *testing.T, pod *corev1.Pod) {
+	for _, c := range pod.Spec.Containers {
+		if isPrivilegedContainerAllowed(c.Name) {
+			continue
+		}
+		checkSecurityContextMeetsBaseline(t, c.Name, c.SecurityContext)
+	}
+	for _, c := range pod.Spec.InitContainers {
+		if isPrivilegedContainerAllowed(c.Name) {
+			continue
+		}
+		checkSecurityContextMeetsBaseline(t, c.Name, c.SecurityContext)
+	}
+}
+
+// isPrivilegedContainerAllowed returns true if the container is allowed to run as privileged,
+// based on its name. Only the following containers in the build pod are allowed to run as
+// privileged:
+//
+// - DockerBuild
+// - StiBuild
+// - ExtractImageContentContainer
+//
+// TODO: Remove need for privileged containers by having cri-o mount /dev/fuse safely.
+func isPrivilegedContainerAllowed(containerName string) bool {
+	switch containerName {
+	case DockerBuild, StiBuild, ExtractImageContentContainer:
+		return true
+	default:
+		return false
 	}
 }

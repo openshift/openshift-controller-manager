@@ -39,7 +39,8 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	}
 
 	strategy := build.Spec.Strategy.DockerStrategy
-	securityContext := securityContextForBuild(strategy.Env)
+	buildSecurityContext := securityContextForBuild(strategy.Env)
+	initSecurityContext := builderMinSecurityContext()
 	hostPathFile := v1.HostPathFile
 
 	containerEnv := []v1.EnvVar{
@@ -73,7 +74,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 					Image:                    bs.Image,
 					Args:                     []string{"openshift-docker-build"},
 					Env:                      copyEnvVarSlice(containerEnv),
-					SecurityContext:          securityContext,
+					SecurityContext:          buildSecurityContext,
 					TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 					VolumeMounts: []v1.VolumeMount{
 						{
@@ -130,7 +131,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 			Image:                    bs.Image,
 			Args:                     []string{"openshift-git-clone"},
 			Env:                      copyEnvVarSlice(containerEnv),
-			SecurityContext:          securityContext,
+			SecurityContext:          initSecurityContext,
 			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 			VolumeMounts: []v1.VolumeMount{
 				{
@@ -149,12 +150,14 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, gitCloneContainer)
 	}
 	if len(build.Spec.Source.Images) > 0 {
+		// We use buildah to extract the image content as source. Using the build security context
+		// since buildah needs to create its own isolation environment.
 		extractImageContentContainer := v1.Container{
 			Name:                     ExtractImageContentContainer,
 			Image:                    bs.Image,
 			Args:                     []string{"openshift-extract-image-content"},
 			Env:                      copyEnvVarSlice(containerEnv),
-			SecurityContext:          securityContext,
+			SecurityContext:          buildSecurityContext,
 			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 			VolumeMounts: []v1.VolumeMount{
 				{
@@ -183,7 +186,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 			Image:                    bs.Image,
 			Args:                     []string{"openshift-manage-dockerfile"},
 			Env:                      copyEnvVarSlice(containerEnv),
-			SecurityContext:          securityContext,
+			SecurityContext:          initSecurityContext,
 			TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
 			VolumeMounts: []v1.VolumeMount{
 				{
@@ -209,7 +212,7 @@ func (bs *DockerBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 	setupContainersConfigs(build, pod)
 	setupBuildCAs(build, pod, additionalCAs, internalRegistryHost)
 	setupContainersStorage(pod, &pod.Spec.Containers[0])
-	if securityContext == nil || securityContext.Privileged == nil || !*securityContext.Privileged {
+	if buildSecurityContext == nil || buildSecurityContext.Privileged == nil || !*buildSecurityContext.Privileged {
 		setupBuilderAutonsUser(build, strategy.Env, pod)
 		setupBuilderDeviceFUSE(pod)
 	}

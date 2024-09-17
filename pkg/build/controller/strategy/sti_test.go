@@ -210,6 +210,7 @@ func testSTICreateBuildPod(t *testing.T, rootAllowed bool) {
 	}
 
 	checkAliasing(t, actual)
+	checkPodSecurityContexts(t, actual)
 }
 
 func TestS2IBuildLongName(t *testing.T) {
