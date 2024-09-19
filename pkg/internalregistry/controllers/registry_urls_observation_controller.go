@@ -84,6 +84,7 @@ func (c *registryURLObservation) sync(ctx context.Context, key string) error {
 		urls = append(urls, urlsForInternalRegistryService(c.services, location)...)
 	}
 	slices.Sort(urls)
+	urls = slices.Compact(urls)
 	select {
 	case c.ch <- urls:
 	case <-ctx.Done():
