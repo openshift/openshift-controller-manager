@@ -19,6 +19,7 @@ require (
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
 	github.com/spf13/cobra v1.7.0
+	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 	k8s.io/api v0.28.2
 	k8s.io/apimachinery v0.28.2
 	k8s.io/apiserver v0.28.2
@@ -146,7 +147,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.14.0 // indirect
-	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/oauth2 v0.11.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
@@ -212,4 +212,9 @@ replace (
 	k8s.io/mount-utils => k8s.io/mount-utils v0.28.2
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.28.2
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.28.2
+)
+
+replace (
+	gopkg.in/go-jose/go-jose.v2 v2.6.0-unstable => github.com/go-jose/go-jose v2.6.3+incompatible
+	gopkg.in/square/go-jose.v2 v2.6.0-unstable => github.com/go-jose/go-jose v2.6.3+incompatible
 )
