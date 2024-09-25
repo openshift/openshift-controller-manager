@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"reflect"
 	"sync"
 	"time"
@@ -175,11 +176,17 @@ func (c *imagePullSecretController) sync(ctx context.Context, key string) (error
 	var serviceAccountName = serviceAccountNameForManagedSecret(secret)
 	klog.V(2).InfoS("Refreshing image pull secret", "ns", secret.Namespace, "name", secret.Name, "serviceaccount", serviceAccountName)
 
-	// request new token, bound by default time and bound to this secret
+	// request new token, bound to this secret and with jittered expiration
+	expirationSeconds := 60*60 + rand.Int64N(10*60) // [1h, 1h10m)
 	tokenRequest, err := c.client.CoreV1().ServiceAccounts(secret.Namespace).CreateToken(ctx, serviceAccountName,
-		&authenticationv1.TokenRequest{Spec: authenticationv1.TokenRequestSpec{BoundObjectRef: &authenticationv1.BoundObjectReference{
-			APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID,
-		}}},
+		&authenticationv1.TokenRequest{
+			Spec: authenticationv1.TokenRequestSpec{
+				BoundObjectRef: &authenticationv1.BoundObjectReference{
+					APIVersion: "v1", Kind: "Secret", Name: secret.Name, UID: secret.UID,
+				},
+				ExpirationSeconds: &expirationSeconds,
+			},
+		},
 		metav1.CreateOptions{},
 	)
 	if err != nil {
