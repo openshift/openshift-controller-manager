@@ -3,10 +3,12 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"slices"
 	"time"
 
+	"golang.org/x/exp/slices"
+
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -134,16 +136,47 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 	// name of managed secret
 	secretName, err := c.managedImagePullSecretName(ctx, serviceAccount)
 
-	// ensure secret ref annotation is set
-	if serviceAccount.Annotations[InternalRegistryImagePullSecretRefKey] != secretName {
-		patch, err := applycorev1.ExtractServiceAccount(serviceAccount, serviceAccountControllerFieldManager)
-		if err != nil {
-			return err
+	patch := applycorev1.ServiceAccount(name, ns).
+		WithAnnotations(map[string]string{InternalRegistryImagePullSecretRefKey: secretName}).
+		// TODO stop adding to .Secrets part of API-1798
+		WithSecrets(applycorev1.ObjectReference().WithName(secretName))
+
+	// Extract an apply patch from the service account. The extracted patch is used
+	// to deduce some field ownership information without having to parse
+	// ManagedFields, and it must remain unmodified so we can detect if the apply
+	// call is necessary.
+	extracted, err := applycorev1.ExtractServiceAccount(serviceAccount, serviceAccountControllerFieldManager)
+	if err != nil {
+		return err
+	}
+
+	// As an atomic field, an update to ImagePullSecrets replaces the the entire
+	// field. We want to be cautious about not overwriting the changes made to
+	// ImagePullSecrets by other users or controllers. When updating ImagePullSecrets
+	// always add the ResourceVersion to the patch to ensure the apply fails if the
+	// cache was stale.
+	if slices.ContainsFunc(serviceAccount.ImagePullSecrets, func(ref corev1.LocalObjectReference) bool { return ref.Name == secretName }) {
+		// If this controller owns the field, we copy the value from the extracted patch
+		// to preserve it upon apply with force=true. If this controller does not own the
+		// field, the copied extracted value should be nil, also preserving the existing
+		// value upon apply with force=true.
+		patch.ImagePullSecrets = extracted.ImagePullSecrets
+	} else {
+		// preserve the existing ImagePullSecrets items and add the managed image pull secret.
+		for _, ref := range serviceAccount.ImagePullSecrets {
+			patch.WithImagePullSecrets(applycorev1.LocalObjectReference().WithName(ref.Name))
 		}
-		patch.WithAnnotations(map[string]string{InternalRegistryImagePullSecretRefKey: secretName})
+		patch.WithImagePullSecrets(applycorev1.LocalObjectReference().WithName(secretName))
+	}
+
+	// apply patch only if necessary
+	if !equality.Semantic.DeepEqual(patch, extracted) {
 		// add the UID to the patch to ensure we don't re-create the service account if it no longer exists
 		patch.WithUID(serviceAccount.UID)
-		// we apply this now to ensure the secret name stays stable in case a error occurs while reconciling
+		if len(patch.ImagePullSecrets) > 0 {
+			// prevent inadvertently overwriting someone else's updates to ImagePullSecrets
+			patch.WithResourceVersion(serviceAccount.ResourceVersion)
+		}
 		serviceAccount, err = c.client.CoreV1().ServiceAccounts(ns).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: serviceAccountControllerFieldManager})
 		if err != nil {
 			return err
@@ -165,9 +198,10 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 	var secretOwnerRefNeedsUpdate, secretSARefNeedsUpdate bool
 	if secret != nil {
 		secretSARefNeedsUpdate = secret.Annotations[InternalRegistryAuthTokenServiceAccountAnnotation] != serviceAccount.Name
+		secretOwnerRefNeedsUpdate = true
 		for _, ref := range secret.OwnerReferences {
 			if ref.Name == serviceAccount.Name && ref.UID == serviceAccount.UID && ref.Kind == "ServiceAccount" && ref.APIVersion == "v1" {
-				secretOwnerRefNeedsUpdate = true
+				secretOwnerRefNeedsUpdate = false
 				break
 			}
 		}
@@ -195,61 +229,7 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 		}
 	}
 
-	// nothing else to do if we are not dealing with a bound image pull secret
-	if secret.Annotations[InternalRegistryAuthTokenTypeAnnotation] != AuthTokenTypeBound {
-		return nil
-	}
-
-	// new patch
-	patch := applycorev1.ServiceAccount(name, ns)
-
-	// don't leave out the anotation
-	patch.WithAnnotations(map[string]string{InternalRegistryImagePullSecretRefKey: secretName})
-
-	// the imagePullSecrets list's apply is atomic, so we need to copy any existing values it into the patch
-	serviceAccount, err = c.serviceAccounts.ServiceAccounts(ns).Get(name)
-	if err != nil {
-		return err
-	}
-	for _, ref := range serviceAccount.ImagePullSecrets {
-		patch.WithImagePullSecrets(applycorev1.LocalObjectReference().WithName(ref.Name))
-	}
-
-	// ensure managed image pull secret is referenced, only if there is data
-	if len(secret.Data[corev1.DockerConfigKey]) > len([]byte("{}")) {
-		if !slices.ContainsFunc(serviceAccount.ImagePullSecrets, func(ref corev1.LocalObjectReference) bool { return ref.Name == secretName }) {
-			patch.WithImagePullSecrets(applycorev1.LocalObjectReference().WithName(secretName))
-		}
-		// TODO remove the following line as part of API-1798
-		patch.WithSecrets(applycorev1.ObjectReference().WithName(secretName))
-	} else {
-		patch.ImagePullSecrets = slices.DeleteFunc(patch.ImagePullSecrets, func(ref applycorev1.LocalObjectReferenceApplyConfiguration) bool { return *ref.Name == secretName })
-	}
-
-	// add the UID to the patch to ensure we don't re-create the service account if it no longer exists
-	patch.WithUID(serviceAccount.UID)
-
-	serviceAccount, err = c.client.CoreV1().ServiceAccounts(ns).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: serviceAccountControllerFieldManager})
-	if err != nil {
-		return err
-	}
-
-	// TODO add the commented out code as part of API-1798
-	/*
-		// TODO haven't figured out how to remove the secret reference using Apply
-		if slices.ContainsFunc(serviceAccount.Secrets, func(ref corev1.ObjectReference) bool { return ref.Name == secretName }) {
-			sa := serviceAccount.DeepCopy()
-			var a []corev1.ObjectReference
-			for _, ref := range serviceAccount.Secrets {
-				if ref.Name != secretName {
-					a = append(a, ref)
-				}
-			}
-			sa.Secrets = a
-			_, err = c.client.CoreV1().ServiceAccounts(ns).Update(ctx, sa, metav1.UpdateOptions{FieldManager: serviceAccountControllerFieldManager})
-		}
-	*/
-	return err
+	return nil
 }
 
 func ownerReferenceDeSynced(serviceAccount *corev1.ServiceAccount, secret *corev1.Secret) bool {
