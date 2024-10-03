@@ -191,3 +191,8 @@ replace (
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.27.3
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.27.3
 )
+
+replace (
+	github.com/go-jose/go-jose.v2 => github.com/go-jose/go-jose v2.6.3+incompatible
+	gopkg.in/square/go-jose.v2 v2.6.0 => github.com/go-jose/go-jose v2.6.0+incompatible
+)
