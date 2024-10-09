@@ -826,7 +826,7 @@ google.golang.org/protobuf/types/known/wrapperspb
 # gopkg.in/inf.v0 v0.9.1
 ## explicit
 gopkg.in/inf.v0
-# gopkg.in/square/go-jose.v2 v2.6.0 => gopkg.in/square/go-jose.v2 v2.2.2
+# gopkg.in/square/go-jose.v2 v2.6.0 => github.com/go-jose/go-jose v2.6.0+incompatible
 ## explicit
 gopkg.in/square/go-jose.v2
 gopkg.in/square/go-jose.v2/cipher
@@ -1754,3 +1754,4 @@ sigs.k8s.io/yaml
 # k8s.io/mount-utils => k8s.io/mount-utils v0.26.1
 # k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.26.1
 # k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.26.1
+# github.com/go-jose/go-jose.v2 => github.com/go-jose/go-jose v2.6.3+incompatible
