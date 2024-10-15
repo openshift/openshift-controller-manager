@@ -47,6 +47,6 @@ func newRemoteAuthenticator(tokenReview authenticationv1client.AuthenticationV1I
 		// Add the "system:authenticated" group to users that pass token/cert authentication
 		group.NewAuthenticatedGroupAdder(union.New(authenticators...)),
 		// Fall back to the "system:anonymous" user
-		anonymous.NewAuthenticator(),
+		anonymous.NewAuthenticator(nil),
 	), nil
 }

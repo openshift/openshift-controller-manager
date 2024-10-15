@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
+	"k8s.io/apiserver/pkg/authorization/cel"
 	apifilters "k8s.io/apiserver/pkg/endpoints/filters"
 	apiserver "k8s.io/apiserver/pkg/server"
 	apiserverfilters "k8s.io/apiserver/pkg/server/filters"
@@ -20,6 +21,7 @@ import (
 	genericmux "k8s.io/apiserver/pkg/server/mux"
 	genericroutes "k8s.io/apiserver/pkg/server/routes"
 	authzwebhook "k8s.io/apiserver/plugin/pkg/authorizer/webhook"
+	"k8s.io/apiserver/plugin/pkg/authorizer/webhook/metrics"
 	clientgoclientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
@@ -48,9 +50,10 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 		return err
 	}
 	sarClient := kubeExternal.AuthorizationV1()
-	remoteAuthz, err := authzwebhook.NewFromInterface(sarClient, 5*time.Minute, 5*time.Minute, *authzwebhook.DefaultRetryBackoff(), authorizer.DecisionNoOpinion, authzwebhook.AuthorizerMetrics{
-		RecordRequestTotal:   noopMetrics{}.RequestTotal,
-		RecordRequestLatency: noopMetrics{}.RequestLatency,
+	remoteAuthz, err := authzwebhook.NewFromInterface(sarClient, 5*time.Minute, 5*time.Minute, *authzwebhook.DefaultRetryBackoff(), authorizer.DecisionNoOpinion, metrics.NoopAuthorizerMetrics{
+		NoopRequestMetrics: metrics.NoopRequestMetrics{},
+		NoopWebhookMetrics: metrics.NoopWebhookMetrics{},
+		NoopMatcherMetrics: cel.NoopMatcherMetrics{},
 	})
 	if err != nil {
 		return err
