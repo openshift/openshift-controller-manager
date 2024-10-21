@@ -1,14 +1,9 @@
 reviewers:
-  - bparees
-  - mfojtik
-  - soltysh
   - csrwng
   - sayan-biswas
-  - divyansh42
+  - sanchezl
 approvers:
   - adambkaplan
-  - bparees
-  - mfojtik
-  - soltysh
   - sayan-biswas
+  - sanchezl
 component: openshift-controller-manager
