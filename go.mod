@@ -7,7 +7,6 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/containers/image v3.0.2+incompatible
 	github.com/containers/image/v5 v5.22.0
-	github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
 	github.com/davecgh/go-spew v1.1.1
 	github.com/google/go-cmp v0.5.8
 	github.com/google/gofuzz v1.2.0
@@ -151,7 +150,8 @@ require (
 )
 
 replace (
-	gopkg.in/square/go-jose.v2 => gopkg.in/square/go-jose.v2 v2.2.2
+	github.com/go-jose/go-jose.v2 => github.com/go-jose/go-jose v2.6.3+incompatible
+	gopkg.in/square/go-jose.v2 v2.6.0 => github.com/go-jose/go-jose v2.6.0+incompatible
 	// these are needed since k8s.io/kubernetes cites v0.0.0 for each of these k8s deps in its go.mod
 	k8s.io/api => k8s.io/api v0.25.2
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.25.2
