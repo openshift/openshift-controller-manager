@@ -2,8 +2,12 @@ reviewers:
   - csrwng
   - sayan-biswas
   - sanchezl
+  - prabhapa
+  - moebasim
 approvers:
   - adambkaplan
   - sayan-biswas
   - sanchezl
+  - prabhapa
+  - moebasim
 component: openshift-controller-manager
