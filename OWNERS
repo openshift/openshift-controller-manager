@@ -6,10 +6,14 @@ reviewers:
   - csrwng
   - gabemontero
   - adambkaplan
+  - prabhapa
+  - moebasim
 approvers:
   - adambkaplan
   - bparees
   - mfojtik
   - soltysh
   - coreydaley
+  - prabhapa
+  - moebasim
 component: openshift-controller-manager
