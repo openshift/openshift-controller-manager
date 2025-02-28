@@ -54,7 +54,7 @@ func RunControllerServer(servingInfo configv1.HTTPServingInfo, kubeExternal clie
 		NoopRequestMetrics: metrics.NoopRequestMetrics{},
 		NoopWebhookMetrics: metrics.NoopWebhookMetrics{},
 		NoopMatcherMetrics: cel.NoopMatcherMetrics{},
-	})
+	}, cel.NewDefaultCompiler())
 	if err != nil {
 		return err
 	}

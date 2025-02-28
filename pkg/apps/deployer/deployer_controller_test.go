@@ -1197,6 +1197,8 @@ func TestMakeDeployerPod(t *testing.T) {
 				// k8s 1.26
 				p.Spec.ResourceClaims = []corev1.PodResourceClaim{}
 				p.Spec.SchedulingGates = []corev1.PodSchedulingGate{}
+				// k8s 1.32
+				p.Spec.Resources = nil
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}
