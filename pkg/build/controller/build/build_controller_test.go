@@ -2062,7 +2062,7 @@ func fakeKubeExternalClientSet(objects ...runtime.Object) kubernetes.Interface {
 	builderSA := &corev1.ServiceAccount{}
 	builderSA.Name = "builder"
 	builderSA.Namespace = "namespace"
-	builderSA.Secrets = []corev1.ObjectReference{
+	builderSA.ImagePullSecrets = []corev1.LocalObjectReference{
 		{
 			Name: "secret",
 		},

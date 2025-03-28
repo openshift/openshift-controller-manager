@@ -201,7 +201,7 @@ func FetchServiceAccountSecrets(secretStore v1lister.SecretLister, serviceAccoun
 	if err != nil {
 		return result, fmt.Errorf("Error getting push/pull secrets for service account %s/%s: %v", namespace, serviceAccount, err)
 	}
-	for _, ref := range sa.Secrets {
+	for _, ref := range sa.ImagePullSecrets {
 		secret, err := secretStore.Secrets(namespace).Get(ref.Name)
 		if err != nil {
 			continue
