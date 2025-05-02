@@ -19,7 +19,6 @@ require (
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/client_model v0.6.1
 	github.com/spf13/cobra v1.8.1
-	go.uber.org/atomic v1.11.0
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
 	k8s.io/api v0.32.2
