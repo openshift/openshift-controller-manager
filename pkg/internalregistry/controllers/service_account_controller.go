@@ -26,7 +26,6 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/openshift/library-go/pkg/build/naming"
-	"github.com/openshift/openshift-controller-manager/pkg/serviceaccounts/controllers"
 )
 
 type serviceAccountController struct {
@@ -304,10 +303,10 @@ func (c *serviceAccountController) legacyImagePullSecretName(ctx context.Context
 }
 
 var expectedLegacyAnnotations = map[string]func(*corev1.ServiceAccount, string) bool{
-	corev1.ServiceAccountNameKey:                   func(sa *corev1.ServiceAccount, v string) bool { return sa.Name == v },
-	corev1.ServiceAccountUIDKey:                    func(sa *corev1.ServiceAccount, v string) bool { return sa.UID == types.UID(v) },
-	controllers.ServiceAccountTokenSecretNameKey:   func(sa *corev1.ServiceAccount, v string) bool { return true },
-	controllers.ServiceAccountTokenValueAnnotation: func(sa *corev1.ServiceAccount, v string) bool { return true },
+	corev1.ServiceAccountNameKey:      func(sa *corev1.ServiceAccount, v string) bool { return sa.Name == v },
+	corev1.ServiceAccountUIDKey:       func(sa *corev1.ServiceAccount, v string) bool { return sa.UID == types.UID(v) },
+	"openshift.io/token-secret.name":  func(sa *corev1.ServiceAccount, v string) bool { return true },
+	"openshift.io/token-secret.value": func(sa *corev1.ServiceAccount, v string) bool { return true },
 }
 
 func isLegacyImagePullSecret(secret *corev1.Secret) bool {
