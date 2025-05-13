@@ -3,9 +3,9 @@ package rollback
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
-	"golang.org/x/exp/slices"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,7 +91,7 @@ func (c *legacyImagePullSecretRollbackController) sync(ctx context.Context, key 
 		`{"op": "test", "path": "/metadata/finalizers/%d", "value": "%s"},`+
 		`{"op": "remove", "path": "/metadata/finalizers/%[1]d"}`+
 		`]`, index, "openshift.io/legacy-token")
-	klog.V(1).InfoS("rolling back legacy managed image pull secret", "ns", secret.Namespace, "serviceAccount", secret.Name)
+	klog.V(1).InfoS("rolling back legacy managed image pull secret", "ns", secret.Namespace, "secret", secret.Name)
 	_, err = c.client.CoreV1().Secrets(secret.Namespace).Patch(ctx, secret.Name, types.JSONPatchType, []byte(patch), v1.PatchOptions{})
 	return err
 }
