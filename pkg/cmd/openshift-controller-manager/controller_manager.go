@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/openshift/library-go/pkg/serviceability"
@@ -154,7 +155,37 @@ func startControllers(controllerContext *origincontrollers.ControllerContext) er
 		}
 		klog.Infof("Started %q", controllerName)
 	}
+	if err := startRollbackControllers(controllerContext); err != nil {
+		return err
+	}
 	klog.Infof("Started Origin Controllers")
 
+	return nil
+}
+
+func startRollbackControllers(ctx *origincontrollers.ControllerContext) error {
+	for name, start := range origincontrollers.RollbackControllers {
+		if ctx.IsControllerEnabled(string(name)) {
+			// rollback controller should never run if corresponding origin controller is enabled
+			continue
+		}
+		name = name + "-rollback"
+		if slices.Contains(ctx.OpenshiftControllerConfig.Controllers, string("-"+name)) {
+			// rollback controller was explicitly disabled in the config
+			klog.Warningf("%q is disabled", name)
+			continue
+		}
+		klog.V(1).Infof("Starting %q", name)
+		ok, err := start(ctx)
+		if err != nil {
+			klog.Fatalf("Error starting %q (%v)", name, err)
+			return err
+		}
+		if !ok {
+			klog.Warningf("Skipping %q", name)
+			continue
+		}
+		klog.Infof("Started %q", name)
+	}
 	return nil
 }

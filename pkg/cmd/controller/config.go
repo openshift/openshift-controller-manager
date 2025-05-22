@@ -55,3 +55,8 @@ const (
 
 	defaultOpenShiftInfraNamespace = "openshift-infra"
 )
+
+// RollbackControllers are started for disabled controllers, given them an opportunity to rollback or cleanup as needed.
+var RollbackControllers = map[openshiftcontrolplanev1.OpenShiftControllerName]InitFunc{
+	openshiftcontrolplanev1.OpenShiftServiceAccountPullSecretsController: RunInternalImageRegistryPullSecretsRollbackController,
+}
