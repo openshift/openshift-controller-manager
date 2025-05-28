@@ -27,8 +27,10 @@ import (
 )
 
 type OpenShiftControllerManager struct {
-	ConfigFilePath string
-	Output         io.Writer
+	ConfigFilePath     string
+	KubeConfigFilePath string
+	Namespace          string
+	Output             io.Writer
 }
 
 var longDescription = templates.LongDesc(`
@@ -64,8 +66,12 @@ func NewOpenShiftControllerManagerCommand(name string, out, errout io.Writer, ct
 	flags := cmd.Flags()
 	// This command only supports reading from config
 	flags.StringVar(&options.ConfigFilePath, "config", options.ConfigFilePath, "Location of the master configuration file to run from.")
+	flags.StringVar(&options.KubeConfigFilePath, "kubeconfig", options.KubeConfigFilePath, "This flag is ignored.")
+	flags.StringVar(&options.Namespace, "namespace", options.Namespace, "This flag is ignored.")
 	cmd.MarkFlagFilename("config", "yaml", "yml")
 	cmd.MarkFlagRequired("config")
+	cmd.Flags().MarkHidden("kubeconfig")
+	cmd.Flags().MarkHidden("namespace")
 
 	return cmd
 }
