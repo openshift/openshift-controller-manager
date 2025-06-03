@@ -90,6 +90,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 						{
 							Name:      "node-pullsecrets",
 							MountPath: buildutil.NodePullSecretsPath,
+							ReadOnly:  true,
 						},
 						{
 							Name:      "buildworkdir",
@@ -170,6 +171,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 				{
 					Name:      "node-pullsecrets",
 					MountPath: buildutil.NodePullSecretsPath,
+					ReadOnly:  true,
 				},
 				{
 					Name:      "buildworkdir",
