@@ -4,44 +4,28 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"slices"
 	"time"
 
-	"github.com/openshift/library-go/pkg/serviceability"
-
-	"k8s.io/klog/v2"
-
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	v1core "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/leaderelection"
-	"k8s.io/client-go/tools/leaderelection/resourcelock"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
+	"k8s.io/klog/v2"
 
-	openshiftcontrolplanev1 "github.com/openshift/api/openshiftcontrolplane/v1"
+	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	origincontrollers "github.com/openshift/openshift-controller-manager/pkg/cmd/controller"
 	"github.com/openshift/openshift-controller-manager/pkg/cmd/imageformat"
-	"github.com/openshift/openshift-controller-manager/pkg/version"
 )
 
-func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftControllerManagerConfig, clientConfig *rest.Config, ctx context.Context) error {
-	serviceability.InitLogrusFromKlog()
-	kubeClient, err := kubernetes.NewForConfig(clientConfig)
+func RunOpenShiftControllerManager(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
+	config, err := asOpenshiftControllerManagerConfig(controllerContext.ComponentConfig)
 	if err != nil {
 		return err
 	}
 
-	// only serve if we have serving information.
-	if config.ServingInfo != nil {
-		klog.Infof("Starting controllers on %s (%s)", config.ServingInfo.BindAddress, version.Get().String())
-
-		if err := origincontrollers.RunControllerServer(*config.ServingInfo, kubeClient); err != nil {
-			return err
-		}
+	kubeClient, err := kubernetes.NewForConfig(controllerContext.KubeConfig)
+	if err != nil {
+		return err
 	}
 
 	{
@@ -57,58 +41,20 @@ func RunOpenShiftControllerManager(config *openshiftcontrolplanev1.OpenShiftCont
 		klog.Infof("Build controller using images from %q", imageTemplate.ExpandOrDie("<component>"))
 	}
 
-	originControllerManager := func(c context.Context) {
-		if err := WaitForHealthyAPIServer(kubeClient.Discovery().RESTClient()); err != nil {
-			klog.Fatal(err)
-		}
-
-		controllerContext, err := origincontrollers.NewControllerContext(c, *config, clientConfig)
-		if err != nil {
-			klog.Fatal(err)
-		}
-		if err := startControllers(controllerContext); err != nil {
-			klog.Fatal(err)
-		}
-		controllerContext.StartInformers(c.Done())
-	}
-
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(klog.Infof)
-	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
-	eventRecorder := eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "openshift-controller-manager"})
-	id, err := os.Hostname()
-	if err != nil {
-		return err
-	}
-	rl, err := resourcelock.New(
-		resourcelock.LeasesResourceLock,
-		"openshift-controller-manager",
-		"openshift-master-controllers", // this matches what ansible used to set
-		kubeClient.CoreV1(),
-		kubeClient.CoordinationV1(),
-		resourcelock.ResourceLockConfig{
-			Identity:      id,
-			EventRecorder: eventRecorder,
-		})
-	if err != nil {
+	if err := WaitForHealthyAPIServer(kubeClient.Discovery().RESTClient()); err != nil {
 		return err
 	}
 
-	leaderelection.RunOrDie(ctx,
-		leaderelection.LeaderElectionConfig{
-			Lock:            rl,
-			ReleaseOnCancel: true,
-			LeaseDuration:   config.LeaderElection.LeaseDuration.Duration,
-			RenewDeadline:   config.LeaderElection.RenewDeadline.Duration,
-			RetryPeriod:     config.LeaderElection.RetryPeriod.Duration,
-			Callbacks: leaderelection.LeaderCallbacks{
-				OnStartedLeading: originControllerManager,
-				OnStoppedLeading: func() {
-					defer os.Exit(0)
-					klog.Warningf("Controller Manager received stop signal: leaderelection lost")
-				},
-			},
-		})
+	ocmControllerContext, err := origincontrollers.NewControllerContext(ctx, *config, controllerContext.KubeConfig)
+	if err != nil {
+		return err
+	}
+	if err := startControllers(ocmControllerContext); err != nil {
+		return err
+	}
+	ocmControllerContext.StartInformers(ctx.Done())
+
+	<-ctx.Done()
 	return nil
 }
 
@@ -123,15 +69,14 @@ func WaitForHealthyAPIServer(client rest.Interface) error {
 			klog.Errorf("Server isn't healthy yet. Waiting a little while.")
 			return false, nil
 		}
+
 		content, _ := resp.Raw()
 		healthzContent = string(content)
-
 		return true, nil
 	})
 	if err != nil {
-		return fmt.Errorf("server unhealthy: %v: %v", healthzContent, err)
+		return fmt.Errorf("server unhealthy: %v: %w", healthzContent, err)
 	}
-
 	return nil
 }
 
@@ -143,11 +88,11 @@ func startControllers(controllerContext *origincontrollers.ControllerContext) er
 			klog.Warningf("%q is disabled", controllerName)
 			continue
 		}
+
 		klog.V(1).Infof("Starting %q", controllerName)
 		started, err := initFn(controllerContext)
 		if err != nil {
-			klog.Fatalf("Error starting %q (%v)", controllerName, err)
-			return err
+			return fmt.Errorf("failed to start controller %s: %w", controllerName, err)
 		}
 		if !started {
 			klog.Warningf("Skipping %q", controllerName)
@@ -159,7 +104,6 @@ func startControllers(controllerContext *origincontrollers.ControllerContext) er
 		return err
 	}
 	klog.Infof("Started Origin Controllers")
-
 	return nil
 }
 
