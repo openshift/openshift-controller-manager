@@ -1,6 +1,9 @@
 package controller
 
-import "github.com/openshift/openshift-controller-manager/pkg/internalregistry/controllers"
+import (
+	"github.com/openshift/openshift-controller-manager/pkg/internalregistry/controllers"
+	"github.com/openshift/openshift-controller-manager/pkg/internalregistry/controllers/rollback"
+)
 
 // RunInternalImageRegistryPullSecretsController starts the control loops that manage
 // the image pull secrets for the internal image registry.
@@ -24,5 +27,13 @@ func RunInternalImageRegistryPullSecretsController(ctx *ControllerContext) (bool
 	go imagePullSecretController.Run(ctx.Context, 5)
 	go legacyTokenSecretController.Run(ctx.Context, 5)
 	go legacyImagePullSecretController.Run(ctx.Context, 5)
+	return true, nil
+}
+
+func RunInternalImageRegistryPullSecretsRollbackController(ctx *ControllerContext) (bool, error) {
+	kc := ctx.HighRateLimitClientBuilder.ClientOrDie(iInfraServiceAccountPullSecretsControllerServiceAccountName)
+	secrets := ctx.KubernetesInformers.Core().V1().Secrets()
+	legacyImagePullSecretController := rollback.NewLegacyImagePullSecretRollbackController(kc, secrets)
+	go legacyImagePullSecretController.Run(ctx.Context, 1)
 	return true, nil
 }
