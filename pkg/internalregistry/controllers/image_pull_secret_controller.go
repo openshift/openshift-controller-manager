@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"go.uber.org/atomic"
 	"golang.org/x/exp/slices"
 	"gopkg.in/go-jose/go-jose.v2/jwt"
 	authenticationv1 "k8s.io/api/authentication/v1"
@@ -52,8 +52,8 @@ func NewImagePullSecretController(kubeclient kubernetes.Interface, secrets infor
 		serviceAccounts: serviceAccounts.Lister(),
 		cacheSyncs:      []cache.InformerSynced{secrets.Informer().HasSynced, serviceAccounts.Informer().HasSynced},
 		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "bound-token-managed-image-pull-secrets"),
-		kids:            atomic.NewPointer[[]string](nil),
-		urls:            atomic.NewPointer[[]string](nil),
+		kids:            &atomic.Pointer[[]string]{},
+		urls:            &atomic.Pointer[[]string]{},
 		kidsC:           make(chan []string),
 		urlsC:           make(chan []string),
 	}
@@ -147,10 +147,10 @@ func (c *imagePullSecretController) sync(ctx context.Context, key string) (error
 		return c.cleanupOrphanedManagedImagePullSecret(ctx, secret), 0
 	}
 
-	refreshNow, refreshAt := c.isSecretRefreshNeeded(secret, *urls, *kids)
-	if !refreshNow {
+	now := time.Now()
 
-		// the annotation is missing or incorrect, fix it
+	if refreshNow, refreshAt := isSecretRefreshNeeded(secret, *urls, *kids, now); !refreshNow {
+		// if the annotation is missing or incorrect, fix it
 		if secret.Annotations[InternalRegistryAuthTokenTypeAnnotation] != AuthTokenTypeBound {
 			patch, err := applycorev1.ExtractSecret(secret, imagePullSecretControllerFieldManager)
 			if err != nil {
@@ -167,9 +167,9 @@ func (c *imagePullSecretController) sync(ctx context.Context, key string) (error
 		}
 
 		// token is not expired and not expiring soon, requeue when expected to need a refresh
-		refreshAfter := refreshAt.Sub(time.Now())
-		klog.V(4).InfoS(key, "refreshAfter", refreshAfter)
-		return nil, refreshAfter
+		requeueAfter := refreshAt.Sub(now)
+		klog.V(4).InfoS(key, "requeueAfter", requeueAfter, "refreshed", false)
+		return nil, requeueAfter
 	}
 
 	var serviceAccountName = serviceAccountNameForManagedSecret(secret)
@@ -202,13 +202,14 @@ func (c *imagePullSecretController) sync(ctx context.Context, key string) (error
 		// the service account controller is responsible for re-creating the initial secret.
 		WithUID(secret.UID)
 	_, err = c.client.CoreV1().Secrets(secret.Namespace).Apply(ctx, patch, metav1.ApplyOptions{Force: true, FieldManager: imagePullSecretControllerFieldManager})
-
 	if err != nil {
 		return err, 0
 	}
 
-	refreshAfter := refreshAt.Sub(time.Now())
-	return nil, refreshAfter
+	// assume `now` as the value of nbf as to not have to parse the token, it should be close enough
+	requeueAfter := refreshThresholdTime(now, tokenRequest.Status.ExpirationTimestamp.Time).Sub(now)
+	klog.V(4).InfoS(key, "requeueAfter", requeueAfter, "refreshed", true)
+	return nil, requeueAfter
 }
 
 func (c *imagePullSecretController) cleanupOrphanedManagedImagePullSecret(ctx context.Context, secret *corev1.Secret) error {
@@ -267,31 +268,31 @@ func dockerConfig(token string, urls []string) any {
 	return auth
 }
 
-func (c *imagePullSecretController) isSecretRefreshNeeded(secret *corev1.Secret, urls, kids []string) (bool, time.Time) {
-	valid, refreshAt := c.registryAuthenticationFileValid(secret, urls, kids)
+func isSecretRefreshNeeded(secret *corev1.Secret, urls, kids []string, now time.Time) (bool, *time.Time) {
+	valid, refreshAt := registryAuthenticationFileValid(secret, urls, kids, now)
 	return !valid, refreshAt
 }
 
-func (c *imagePullSecretController) registryAuthenticationFileValid(imagePullSecret *corev1.Secret, urls, kids []string) (bool, time.Time) {
+func registryAuthenticationFileValid(imagePullSecret *corev1.Secret, urls, kids []string, now time.Time) (bool, *time.Time) {
 	if imagePullSecret.Type != corev1.SecretTypeDockercfg {
 		klog.V(2).InfoS("Internal registry pull secret type is incorrect.", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "type", imagePullSecret.Type)
-		return false, time.Now()
+		return false, nil
 	}
 	// registry authentication file must exist
 	if _, ok := imagePullSecret.Data[corev1.DockerConfigKey]; !ok {
 		klog.V(2).InfoS("Internal registry pull secret does not contain the expected key", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "keys", reflect.ValueOf(imagePullSecret.Data).MapKeys())
-		return false, time.Now()
+		return false, nil
 	}
 	// parse the registry authentication file
 	auth := credentialprovider.DockerConfig{}
 	if err := json.Unmarshal(imagePullSecret.Data[corev1.DockerConfigKey], &auth); err != nil {
 		klog.V(2).InfoS("Internal registry pull secret auth data cannot be parsed", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name)
-		return false, time.Now()
+		return false, nil
 	}
 	// there should be an entries for each internal registry url
 	if len(auth) != len(urls) {
 		klog.V(2).InfoS("Internal registry pull secret auth data does not contain the correct number of entries", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "expected", len(urls), "actual", len(auth))
-		return false, time.Now()
+		return false, nil
 	}
 	matches := 0
 CheckUrl:
@@ -305,7 +306,7 @@ CheckUrl:
 	}
 	if matches != len(urls) {
 		klog.V(2).InfoS("Internal registry pull secret needs to be refreshed", "reason", "auth data does not contain the correct entries", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "expected", urls, "actual", reflect.ValueOf(auth).MapKeys())
-		return false, time.Now()
+		return false, nil
 	}
 
 	// track the earliest refresh time of the token (they should all be the same, but check anyway)
@@ -316,10 +317,10 @@ CheckUrl:
 		token, err := jwt.ParseSigned(entry.Password)
 		if err != nil {
 			klog.V(2).InfoS("Internal registry pull secret needs to be refreshed", "reason", "auth token cannot be parsed", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "url", url, "error", err)
-			return false, time.Now()
+			return false, nil
 		}
 
-		// was token created with previoud token signing cert?
+		// was token created with previous token signing cert?
 		var validKeyID bool
 		for _, kid := range kids {
 			if token.Headers[0].KeyID == kid {
@@ -329,7 +330,7 @@ CheckUrl:
 		}
 		if !validKeyID {
 			klog.V(2).InfoS("Internal registry pull secret needs to be refreshed", "reason", "auth token was not signed by a current signer", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "url", url, "error", err)
-			return false, time.Now()
+			return false, nil
 		}
 
 		var claims jwt.Claims
@@ -337,21 +338,31 @@ CheckUrl:
 		err = token.UnsafeClaimsWithoutVerification(&claims)
 		if err != nil {
 			klog.V(2).InfoS("Internal registry pull secret needs to be refreshed", "reason", "auth token claim cannot be parsed", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "url", url, "error", err)
-			return false, time.Now()
+			return false, nil
 		}
-		// if token is expired or will only be valid less than 40% of its remaining duration we want to trigger a new token request
-		refreshTime := claims.Expiry.Time().Add(time.Duration(-int64(float64(time.Now().Sub(claims.Expiry.Time())) * 0.4)))
-		klog.V(4).InfoS("Token expiration check.", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "url", url, "expirtyTime", claims.Expiry.Time(), "refreshTime", refreshTime)
-		if time.Now().After(refreshTime) {
-			klog.V(2).InfoS("Internal registry pull secret needs to be refreshed", "reason", "auth token needs to be refreshed", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "url", url, "expirtyTime", claims.Expiry.Time(), "refreshTime", refreshTime)
-			return false, time.Now()
+		// if token is expired or less than 40% of its valid duration is left, we want to trigger a new token request
+		refreshTime := refreshThresholdTime(claims.NotBefore.Time(), claims.Expiry.Time())
+		klog.V(4).InfoS("Token expiration check.", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "url", url, "exp", claims.Expiry.Time(), "refreshTime", refreshTime)
+		if now.After(refreshTime) {
+			klog.V(2).InfoS("Internal registry pull secret needs to be refreshed", "reason", "auth token needs to be refreshed", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name, "url", url, "exp", claims.Expiry.Time(), "refreshTime", refreshTime)
+			return false, nil
 		}
 		if requeueAt.IsZero() || requeueAt.After(refreshTime) {
 			requeueAt = refreshTime
 		}
 	}
 	klog.V(4).InfoS("Internal registry pull secret does not need to be refreshed.", "ns", imagePullSecret.Namespace, "name", imagePullSecret.Name)
-	return true, requeueAt
+	return true, &requeueAt
+}
+
+func refreshThresholdTime(nbf, exp time.Time) time.Time {
+	// calculate the time at which only 40% of the valid duration would be left
+	validDuration := exp.Sub(nbf)
+	if validDuration < 0 {
+		// this should not happen, but let's not get stuck if it ever does
+		return time.Time{}
+	}
+	return exp.Add(-time.Duration(int64(float64(validDuration) * 0.4)))
 }
 
 func (c *imagePullSecretController) Run(ctx context.Context, workers int) {
