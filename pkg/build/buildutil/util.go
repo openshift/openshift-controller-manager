@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -199,12 +200,15 @@ func FetchServiceAccountSecrets(secretStore v1lister.SecretLister, serviceAccoun
 	var result []corev1.Secret
 	sa, err := serviceAccountStore.ServiceAccounts(namespace).Get(serviceAccount)
 	if err != nil {
-		return result, fmt.Errorf("Error getting push/pull secrets for service account %s/%s: %v", namespace, serviceAccount, err)
+		return nil, fmt.Errorf("%s/%s: %v", namespace, serviceAccount, err)
 	}
 	for _, ref := range sa.ImagePullSecrets {
 		secret, err := secretStore.Secrets(namespace).Get(ref.Name)
-		if err != nil {
+		if errors.IsNotFound(err) {
 			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s/%s: %v", namespace, serviceAccount, err)
 		}
 		result = append(result, *secret)
 	}

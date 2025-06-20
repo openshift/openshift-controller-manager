@@ -803,7 +803,7 @@ func (bc *BuildController) resolveImageSecretAsReference(build *buildv1.Build, i
 	}
 	builderSecrets, err := buildutil.FetchServiceAccountSecrets(bc.secretStore, bc.serviceAccountStore, build.Namespace, serviceAccount)
 	if err != nil {
-		return nil, fmt.Errorf("Error getting push/pull secrets for service account %s/%s: %v", build.Namespace, serviceAccount, err)
+		return nil, fmt.Errorf("unable to get list of push/pull secrets for service account %s/%s: %v", build.Namespace, serviceAccount, err)
 	}
 	var secret *corev1.LocalObjectReference
 	if len(imagename) != 0 {
@@ -811,20 +811,15 @@ func (bc *BuildController) resolveImageSecretAsReference(build *buildv1.Build, i
 	}
 	if secret == nil {
 		klog.V(4).Infof("build %s is referencing an unknown image, will attempt to use the default secret for the service account", build.Name)
-		dockerSecretExists := false
 		for _, builderSecret := range builderSecrets {
 			if builderSecret.Type == corev1.SecretTypeDockercfg || builderSecret.Type == corev1.SecretTypeDockerConfigJson {
-				dockerSecretExists = true
 				secret = &corev1.LocalObjectReference{Name: builderSecret.Name}
 				break
 			}
 		}
-		// If there are no docker secrets associated w/ the service account, return an error so the build
-		// will be retried.  The secrets will be created shortly.
-		if !dockerSecretExists {
-			return nil, fmt.Errorf("No docker secrets associated with build service account %s", serviceAccount)
+		if secret != nil {
+			klog.V(4).Infof("No secrets found for pushing or pulling image named %s for build, using default: %s %s/%s", imagename, build.Namespace, build.Name, secret.Name)
 		}
-		klog.V(4).Infof("No secrets found for pushing or pulling image named %s for build, using default: %s %s/%s", imagename, build.Namespace, build.Name, secret.Name)
 	}
 	return secret, nil
 }
