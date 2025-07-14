@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	fuzz "github.com/google/gofuzz"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +27,7 @@ import (
 	appsv1 "github.com/openshift/api/apps/v1"
 	"github.com/openshift/library-go/pkg/apps/appsutil"
 	"github.com/openshift/openshift-controller-manager/pkg/apps/appstest"
+	"sigs.k8s.io/randfill"
 )
 
 var (
@@ -1134,8 +1134,8 @@ func TestMakeDeployerPod(t *testing.T) {
 		seed := rand.Int63()
 		f := fuzzer.FuzzerFor(kapitesting.FuzzerFuncs, rand.NewSource(seed), legacyscheme.Codecs)
 		f.Funcs(
-			func(p *corev1.PodTemplateSpec, c fuzz.Continue) {
-				c.FuzzNoCustom(p)
+			func(p *corev1.PodTemplateSpec, c randfill.Continue) {
+				c.FillNoCustom(p)
 				p.Spec.InitContainers = nil
 
 				// These are specific for deployer pod container:
@@ -1202,7 +1202,7 @@ func TestMakeDeployerPod(t *testing.T) {
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}
-		f.Fuzz(&inputPodTemplate)
+		f.Fill(&inputPodTemplate)
 		deployment.Spec.Template = inputPodTemplate
 
 		outputPodTemplate, err := controller.makeDeployerPod(deployment)
