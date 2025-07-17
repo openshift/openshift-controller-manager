@@ -335,7 +335,7 @@ func (c *DeploymentConfigController) updateStatus(config *appsv1.DeploymentConfi
 	if _, err := c.appsClient.DeploymentConfigs(copied.Namespace).UpdateStatus(context.TODO(), copied, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
-	klog.V(4).Infof(fmt.Sprintf("Updated status for DeploymentConfig: %s, ", appsutil.LabelForDeploymentConfig(config)) +
+	klog.V(4).Info(fmt.Sprintf("Updated status for DeploymentConfig: %s, ", appsutil.LabelForDeploymentConfig(config)) +
 		fmt.Sprintf("replicas %d->%d (need %d), ", config.Status.Replicas, newStatus.Replicas, config.Spec.Replicas) +
 		fmt.Sprintf("readyReplicas %d->%d, ", config.Status.ReadyReplicas, newStatus.ReadyReplicas) +
 		fmt.Sprintf("availableReplicas %d->%d, ", config.Status.AvailableReplicas, newStatus.AvailableReplicas) +

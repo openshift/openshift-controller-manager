@@ -1433,7 +1433,7 @@ func verifyState(
 		if i == times-1 {
 			sort.Strings(failures)
 			for _, s := range failures {
-				t.Errorf(s)
+				t.Error(s)
 			}
 			failed = true
 		}
@@ -1455,7 +1455,7 @@ func verifyState(
 		if i == times-1 {
 			sort.Strings(failures)
 			for _, s := range failures {
-				t.Errorf(s)
+				t.Error(s)
 			}
 			failed = true
 		}
@@ -1477,7 +1477,7 @@ func verifyState(
 		if i == times-1 {
 			sort.Strings(failures)
 			for _, s := range failures {
-				t.Errorf(s)
+				t.Error(s)
 			}
 			failed = true
 		}

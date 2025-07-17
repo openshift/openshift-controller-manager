@@ -596,7 +596,7 @@ func (c *DeploymentController) handleErr(err error, key interface{}, deployment 
 	if _, isActionableErr := err.(actionableError); isActionableErr {
 		c.emitDeploymentEvent(deployment, corev1.EventTypeWarning, "FailedRetry", msg)
 	}
-	klog.V(2).Infof(msg)
+	klog.V(2).Info(msg)
 	c.queue.Forget(key)
 }
 
