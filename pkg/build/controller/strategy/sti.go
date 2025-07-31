@@ -18,9 +18,8 @@ import (
 
 // SourceBuildStrategy creates STI(source to image) builds
 type SourceBuildStrategy struct {
-	Image                   string
-	SecurityClient          securityclient.SecurityV1Interface
-	BuildCSIVolumeseEnabled bool
+	Image          string
+	SecurityClient securityclient.SecurityV1Interface
 }
 
 // DefaultDropCaps is the list of capabilities to drop if the current user cannot run as root
@@ -226,7 +225,7 @@ func (bs *SourceBuildStrategy) CreateBuildPod(build *buildv1.Build, additionalCA
 		setupBuilderDeviceFUSE(pod)
 	}
 	setupBlobCache(pod)
-	if err := setupBuildVolumes(pod, build.Spec.Strategy.SourceStrategy.Volumes, bs.BuildCSIVolumeseEnabled); err != nil {
+	if err := setupBuildVolumes(pod, build.Spec.Strategy.SourceStrategy.Volumes); err != nil {
 		return pod, err
 	}
 	return pod, nil
