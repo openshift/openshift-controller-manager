@@ -268,6 +268,20 @@ func dockerConfig(token string, urls []string) any {
 	return auth
 }
 
+func dockerConfigJSON(token string, urls []string) any {
+	// not using credentialprovider.DockerConfigJSON to keep redundant username/password/email out of secret
+	auths := map[string]map[string]string{}
+	entry := map[string]string{
+		"auth": base64.StdEncoding.EncodeToString([]byte("<token>:" + token)),
+	}
+	for _, url := range urls {
+		auths[url] = entry
+	}
+	return map[string]map[string]map[string]string{
+		"auths": auths,
+	}
+}
+
 func isSecretRefreshNeeded(secret *corev1.Secret, urls, kids []string, now time.Time) (bool, *time.Time) {
 	valid, refreshAt := registryAuthenticationFileValid(secret, urls, kids, now)
 	return !valid, refreshAt
