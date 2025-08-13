@@ -7,7 +7,6 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/containers/image v3.0.2+incompatible
 	github.com/containers/image/v5 v5.22.0
-	github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
 	github.com/davecgh/go-spew v1.1.1
 	github.com/google/go-cmp v0.5.8
 	github.com/google/gofuzz v1.2.0
