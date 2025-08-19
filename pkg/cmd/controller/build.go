@@ -1,8 +1,6 @@
 package controller
 
 import (
-	"strings"
-
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
@@ -53,17 +51,6 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 	imageDigestMirrorSetInformer := ctx.ConfigInformers.Config().V1().ImageDigestMirrorSets()
 	imageTagMirrorSetInformer := ctx.ConfigInformers.Config().V1().ImageTagMirrorSets()
 
-	fg := ctx.OpenshiftControllerConfig.FeatureGates
-	csiVolumesEnabled := false
-	if fg != nil {
-		for _, v := range fg {
-			v = strings.TrimSpace(v)
-			if v == "BuildCSIVolumes=true" {
-				csiVolumesEnabled = true
-			}
-		}
-	}
-
 	buildControllerParams := &buildcontroller.BuildControllerParams{
 		BuildInformer:                      buildInformer,
 		BuildConfigInformer:                buildConfigInformer,
@@ -83,13 +70,11 @@ func RunBuildController(ctx *ControllerContext) (bool, error) {
 		KubeClient:                         externalKubeClient,
 		BuildClient:                        buildClient,
 		DockerBuildStrategy: &buildstrategy.DockerBuildStrategy{
-			Image:                  imageTemplate.ExpandOrDie("docker-builder"),
-			BuildCSIVolumesEnabled: csiVolumesEnabled,
+			Image: imageTemplate.ExpandOrDie("docker-builder"),
 		},
 		SourceBuildStrategy: &buildstrategy.SourceBuildStrategy{
-			Image:                   imageTemplate.ExpandOrDie("docker-builder"),
-			SecurityClient:          securityClient.SecurityV1(),
-			BuildCSIVolumeseEnabled: csiVolumesEnabled,
+			Image:          imageTemplate.ExpandOrDie("docker-builder"),
+			SecurityClient: securityClient.SecurityV1(),
 		},
 		CustomBuildStrategy:      &buildstrategy.CustomBuildStrategy{},
 		BuildDefaults:            builddefaults.BuildDefaults{Config: ctx.OpenshiftControllerConfig.Build.BuildDefaults},
