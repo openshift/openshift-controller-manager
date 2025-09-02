@@ -236,6 +236,9 @@ func (bs *SourceBuildStrategy) canRunAsRoot(build *buildv1.Build) bool {
 
 	review, err := bs.SecurityClient.PodSecurityPolicySubjectReviews(build.Namespace).Create(context.TODO(),
 		&securityv1.PodSecurityPolicySubjectReview{
+			ObjectMeta: metav1.ObjectMeta{
+				GenerateName: fmt.Sprintf("%s-", build.Name),
+			},
 			Spec: securityv1.PodSecurityPolicySubjectReviewSpec{
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
