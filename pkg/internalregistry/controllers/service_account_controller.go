@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/exp/slices"
@@ -25,15 +26,24 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 
+	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/library-go/pkg/build/naming"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 type serviceAccountController struct {
 	client          kubernetes.Interface
+	dynamicClient   dynamic.Interface
 	serviceAccounts listers.ServiceAccountLister
 	secrets         listers.SecretLister
 	cacheSyncs      []cache.InformerSynced
 	queue           workqueue.RateLimitingInterface
+
+	// Track registry state to detect changes
+	lastRegistryState bool
+	lastCleanupTime   time.Time
 }
 
 func serviceAccountNameForManagedSecret(secret *corev1.Secret) string {
@@ -48,13 +58,16 @@ func serviceAccountNameForManagedSecret(secret *corev1.Secret) string {
 // NewServiceAccountController creates a controller that for each service
 // account in the cluster, creates an image pull secret that can be used
 // to pull images from the integrated image registry.
-func NewServiceAccountController(kubeclient kubernetes.Interface, serviceAccounts informers.ServiceAccountInformer, secrets informers.SecretInformer) *serviceAccountController {
+func NewServiceAccountController(kubeclient kubernetes.Interface, serviceAccounts informers.ServiceAccountInformer, secrets informers.SecretInformer, dynamicClient dynamic.Interface) *serviceAccountController {
 	c := &serviceAccountController{
-		client:          kubeclient,
-		serviceAccounts: serviceAccounts.Lister(),
-		secrets:         secrets.Lister(),
-		cacheSyncs:      []cache.InformerSynced{serviceAccounts.Informer().HasSynced, secrets.Informer().HasSynced},
-		queue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "service-accounts"),
+		client:            kubeclient,
+		dynamicClient:     dynamicClient,
+		serviceAccounts:   serviceAccounts.Lister(),
+		secrets:           secrets.Lister(),
+		cacheSyncs:        []cache.InformerSynced{serviceAccounts.Informer().HasSynced, secrets.Informer().HasSynced},
+		queue:             workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "service-accounts"),
+		lastRegistryState: false, // Assume registry is enabled at startup
+		lastCleanupTime:   time.Now(),
 	}
 
 	serviceAccounts.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -132,6 +145,37 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 		return err
 	}
 
+	// Check registry state and handle cleanup if needed
+	currentRegistryDisabled := c.isImageRegistryDisabled(ctx)
+	if currentRegistryDisabled {
+		// If registry is currently disabled, check if we need to run cleanup
+		shouldCleanup := false
+
+		// Cleanup if registry state changed from enabled to disabled
+		if !c.lastRegistryState && currentRegistryDisabled {
+			klog.V(4).Infof("Registry state changed from enabled to disabled, triggering cleanup")
+			shouldCleanup = true
+		}
+
+		// Also cleanup periodically (every 5 minutes) when registry is disabled
+		// to handle cases where the controller missed the state change
+		if time.Since(c.lastCleanupTime) > 5*time.Minute {
+			klog.V(4).Infof("Periodic cleanup triggered (last cleanup: %v ago)", time.Since(c.lastCleanupTime))
+			shouldCleanup = true
+		}
+
+		if shouldCleanup {
+			if err := c.cleanupExistingDockercfgSecrets(ctx); err != nil {
+				klog.Warningf("Failed to cleanup dockercfg secrets: %v", err)
+				// Don't return error to avoid blocking service account processing
+			}
+			c.lastCleanupTime = time.Now()
+		}
+	}
+
+	// Update last known registry state
+	c.lastRegistryState = currentRegistryDisabled
+
 	// name of managed secret
 	secretName, err := c.managedImagePullSecretName(ctx, serviceAccount)
 
@@ -204,6 +248,11 @@ func (c *serviceAccountController) sync(ctx context.Context, key string) error {
 				break
 			}
 		}
+	}
+	// PREVENTION FIX: Check if image registry is disabled before creating dockercfg secrets
+	if c.isImageRegistryDisabled(ctx) {
+		klog.V(4).Infof("Skipping dockercfg secret creation for service account %s/%s - image registry is disabled", serviceAccount.Namespace, serviceAccount.Name)
+		return nil
 	}
 	if secret == nil || secretSARefNeedsUpdate || secretOwnerRefNeedsUpdate {
 		patch := applycorev1.Secret(secretName, ns).
@@ -368,4 +417,106 @@ func (c *serviceAccountController) processNextWorkItem(ctx context.Context) bool
 	utilruntime.HandleError(fmt.Errorf("%v failed with : %v", key, err))
 	c.queue.AddRateLimited(key)
 	return true
+}
+
+// isImageRegistryDisabled checks if the image registry is disabled (managementState: Removed)
+// This prevents creating dockercfg secrets when registry is not available
+func (c *serviceAccountController) isImageRegistryDisabled(ctx context.Context) bool {
+	// Define the GroupVersionResource for imageregistry configs
+	gvr := schema.GroupVersionResource{
+		Group:    "imageregistry.operator.openshift.io",
+		Version:  "v1",
+		Resource: "configs",
+	}
+
+	// Get the cluster image registry configuration using dynamic client
+	unstructuredConfig, err := c.dynamicClient.Resource(gvr).Get(ctx, "cluster", metav1.GetOptions{})
+	if err != nil {
+		// If we can't get the registry config, assume registry is enabled (safe fallback)
+		klog.V(4).Infof("Failed to get image registry config, assuming registry is enabled: %v", err)
+		return false
+	}
+
+	// Extract managementState from the unstructured object
+	managementState, found, err := unstructured.NestedString(unstructuredConfig.Object, "spec", "managementState")
+	if err != nil || !found {
+		klog.V(4).Infof("Failed to get managementState from registry config, assuming registry is enabled: err=%v, found=%t", err, found)
+		return false
+	}
+
+	// Check if registry is disabled (managementState: Removed)
+	isDisabled := managementState == string(operatorv1.Removed)
+
+	if isDisabled {
+		klog.V(4).Infof("Image registry is disabled (managementState: %s)", managementState)
+	} else {
+		klog.V(6).Infof("Image registry is enabled (managementState: %s)", managementState)
+	}
+
+	return isDisabled
+}
+
+// cleanupExistingDockercfgSecrets removes all existing secrets when registry is disabled
+// This is called when the registry state changes from enabled to disabled
+func (c *serviceAccountController) cleanupExistingDockercfgSecrets(ctx context.Context) error {
+	klog.V(4).Info("Cleaning up existing secrets due to registry removal")
+
+	// Get all namespaces
+	namespaces, err := c.client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list namespaces: %w", err)
+	}
+
+	var deletedCount int
+
+	for _, ns := range namespaces.Items {
+		// Skip system namespaces that might need dockercfg for other purposes
+		if c.isSystemNamespace(ns.Name) {
+			klog.V(6).Infof("Skipping system namespace %s during cleanup", ns.Name)
+			continue
+		}
+
+		// Get all secrets in this namespace
+		secrets, err := c.client.CoreV1().Secrets(ns.Name).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			klog.Warningf("Failed to list secrets in namespace %s: %v", ns.Name, err)
+			continue
+		}
+
+		for _, secret := range secrets.Items {
+			klog.V(4).Infof("Deleting secret %s/%s (type: %s)", secret.Namespace, secret.Name, secret.Type)
+
+			err := c.client.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+			if err != nil && !kerrors.IsNotFound(err) {
+				klog.Warningf("Failed to delete secret %s/%s: %v", secret.Namespace, secret.Name, err)
+				continue
+			}
+			deletedCount++
+		}
+	}
+
+	klog.Infof("Cleaned up %d secrets due to registry removal", deletedCount)
+	return nil
+}
+
+// isSystemNamespace identifies system namespaces that should be preserved during cleanup
+func (c *serviceAccountController) isSystemNamespace(namespace string) bool {
+	systemNamespaces := []string{
+		"kube-system",
+		"kube-public",
+		"openshift-image-registry",
+		"openshift-image-registry-operator",
+		"openshift-config",
+		"openshift-config-managed",
+		"openshift-controller-manager",
+	}
+
+	for _, sysNS := range systemNamespaces {
+		if namespace == sysNS {
+			return true
+		}
+	}
+
+	// Be cautious with openshift-* namespaces
+	return strings.HasPrefix(namespace, "openshift-")
 }

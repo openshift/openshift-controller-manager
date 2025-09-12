@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/openshift/openshift-controller-manager/pkg/internalregistry/controllers"
 	"github.com/openshift/openshift-controller-manager/pkg/internalregistry/controllers/rollback"
+	"k8s.io/client-go/dynamic"
 )
 
 // RunInternalImageRegistryPullSecretsController starts the control loops that manage
@@ -14,7 +15,11 @@ func RunInternalImageRegistryPullSecretsController(ctx *ControllerContext) (bool
 	services := ctx.KubernetesInformers.Core().V1().Services()
 	additionalRegistryURLs := ctx.OpenshiftControllerConfig.DockerPullSecret.RegistryURLs
 
-	serviceAccountController := controllers.NewServiceAccountController(kc, serviceAccounts, secrets)
+	dynamicClient, err := dynamic.NewForConfig(ctx.ClientBuilder.ConfigOrDie(iInfraServiceAccountPullSecretsControllerServiceAccountName))
+	if err != nil {
+		return false, err
+	}
+	serviceAccountController := controllers.NewServiceAccountController(kc, serviceAccounts, secrets, dynamicClient)
 	imagePullSecretController, kids, urls := controllers.NewImagePullSecretController(kc, secrets, serviceAccounts)
 	keyIDObservationController := controllers.NewKeyIDObservationController(kc, secrets, kids)
 	registryURLObservationController := controllers.NewRegistryURLObservationController(services, additionalRegistryURLs, urls)
