@@ -1,4 +1,6 @@
 /openshift-controller-manager
+/openshift-controller-manager-tests-ext
+.openshift-tests-extension/
 .vscode/
 .idea/
 vendor/github.com/prometheus/client_model/.classpath
