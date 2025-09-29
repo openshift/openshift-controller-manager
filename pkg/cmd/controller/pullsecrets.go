@@ -45,11 +45,6 @@ func RunServiceAccountPullSecretsController(ctx *ControllerContext) (bool, error
 		dockerRegistryControllerOptions,
 	).Run(10, ctx.Stop)
 
-	go rollback.NewLegacyImagePullSecretRollbackController(
-		kc,
-		ctx.KubernetesInformers.Core().V1().Secrets(),
-	).Run(ctx.Context, 1)
-
 	go rollback.NewServiceAccountRollbackController(
 		kc,
 		ctx.KubernetesInformers.Core().V1().ServiceAccounts(),
