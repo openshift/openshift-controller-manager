@@ -351,7 +351,7 @@ func TestBuildConfigReactor(t *testing.T) {
 		initial := test.obj.DeepCopy()
 		err := r.ImageChanged(test.obj, fakeTagRetriever(test.tags))
 		if !kapihelper.Semantic.DeepEqual(initial, test.obj) {
-			t.Errorf("%d: should not have mutated: %s", i, diff.ObjectReflectDiff(initial, test.obj))
+			t.Errorf("%d: should not have mutated: %s", i, diff.Diff(initial, test.obj))
 		}
 		switch {
 		case err == nil && test.expectedErr, err != nil && !test.expectedErr:
@@ -365,7 +365,7 @@ func TestBuildConfigReactor(t *testing.T) {
 				t.Errorf("%d: unexpected request: %v", i, instantiator.request)
 			}
 			if !reflect.DeepEqual(test.expected, instantiator.request) {
-				t.Errorf("%d: not equal: %s", i, diff.ObjectReflectDiff(test.expected, instantiator.request))
+				t.Errorf("%d: not equal: %s", i, diff.Diff(test.expected, instantiator.request))
 				t.Logf("%#v", instantiator.request.TriggeredBy)
 				continue
 			}

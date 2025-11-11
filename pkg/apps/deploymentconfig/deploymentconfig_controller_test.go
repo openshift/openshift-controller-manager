@@ -428,7 +428,7 @@ func TestHandleScenarios(t *testing.T) {
 		for i := 0; i < len(expectedDeployments); i++ {
 			expected, actual := expectedDeployments[i], actualDeployments[i]
 			if !kapihelper.Semantic.DeepEqual(expected, actual) {
-				t.Errorf("actual deployment don't match expected: %v", diff.ObjectDiff(expected, actual))
+				t.Errorf("actual deployment don't match expected: %v", diff.Diff(expected, actual))
 			}
 		}
 	}

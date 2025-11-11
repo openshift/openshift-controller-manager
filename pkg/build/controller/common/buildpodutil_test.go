@@ -19,7 +19,7 @@ func TestGetBuild(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if e, a := build.AsBuild(), resultBuild; !reflect.DeepEqual(e, a) {
-		t.Errorf("did not get expected build: %s", diff.ObjectDiff(e, a))
+		t.Errorf("did not get expected build: %s", diff.Diff(e, a))
 	}
 }
 
@@ -32,6 +32,6 @@ func TestSetBuild(t *testing.T) {
 	}
 	resultBuild := pod.GetBuild(t)
 	if e, a := build.AsBuild(), resultBuild; !reflect.DeepEqual(e, a) {
-		t.Errorf("%s: did not get expected build: %s", version, diff.ObjectDiff(e, a))
+		t.Errorf("%s: did not get expected build: %s", version, diff.Diff(e, a))
 	}
 }
