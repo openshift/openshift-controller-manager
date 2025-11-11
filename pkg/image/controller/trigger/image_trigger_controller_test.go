@@ -361,7 +361,7 @@ func TestTriggerControllerSyncBuildConfigResource(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 			if inst.namespace != "test2" || !reflect.DeepEqual(inst.req, test.req) {
-				t.Errorf("For test %s unexpected: %s %s", test.name, inst.namespace, diff.ObjectReflectDiff(test.req, inst.req))
+				t.Errorf("For test %s unexpected: %s %s", test.name, inst.namespace, diff.Diff(test.req, inst.req))
 			}
 			if inst.req == nil {
 				t.Fatal("never instantiated")
@@ -517,7 +517,7 @@ func TestBuildConfigTriggerIndexer(t *testing.T) {
 
 	actual, ok := c.Get("buildconfigs/test/build1")
 	if e := scenario_1_buildConfig_strategy_cacheEntry(); !ok || !reflect.DeepEqual(e, actual) {
-		t.Fatalf("unexpected: %s", diff.ObjectReflectDiff(e, actual))
+		t.Fatalf("unexpected: %s", diff.Diff(e, actual))
 	}
 	if err := verifyEntriesAt(c, []interface{}{scenario_1_buildConfig_strategy_cacheEntry()}, "test/stream"); err != nil {
 		t.Fatal(err)
@@ -526,7 +526,7 @@ func TestBuildConfigTriggerIndexer(t *testing.T) {
 	// verify we create two index entries and can cross namespaces with trigger types
 	actual, ok = c.Get("buildconfigs/test2/build2")
 	if e := scenario_1_buildConfig_imageSource_cacheEntry(); !ok || !reflect.DeepEqual(e, actual) {
-		t.Fatalf("unexpected: %s", diff.ObjectReflectDiff(e, actual))
+		t.Fatalf("unexpected: %s", diff.Diff(e, actual))
 	}
 	if err := verifyEntriesAt(c, []interface{}{scenario_1_buildConfig_imageSource_cacheEntry()}, "other/stream", "test2/stream"); err != nil {
 		t.Fatal(err)
@@ -589,7 +589,7 @@ func TestDeploymentConfigTriggerIndexer(t *testing.T) {
 
 	actual, ok := c.Get("deploymentconfigs/test/deploy1")
 	if e := scenario_1_deploymentConfig_imageSource_cacheEntry(); !ok || !reflect.DeepEqual(e, actual) {
-		t.Fatalf("unexpected: %s\n%#v", diff.ObjectReflectDiff(e, actual), actual)
+		t.Fatalf("unexpected: %s\n%#v", diff.Diff(e, actual), actual)
 	}
 	if err := verifyEntriesAt(c, []interface{}{scenario_1_deploymentConfig_imageSource_cacheEntry()}, "test/stream"); err != nil {
 		t.Fatal(err)
@@ -610,7 +610,7 @@ func verifyEntriesAt(c cache.ThreadSafeStore, entries []interface{}, keys ...str
 			return fmt.Errorf("unexpected error for key %s: %v", key, err)
 		}
 		if e, a := entries, indexed; !reflect.DeepEqual(e, a) {
-			return fmt.Errorf("unexpected entry for key %s: %s", key, diff.ObjectReflectDiff(e, a))
+			return fmt.Errorf("unexpected entry for key %s: %s", key, diff.Diff(e, a))
 		}
 	}
 	return nil
@@ -1423,7 +1423,7 @@ func verifyState(
 		var failures []string
 		for _, obj := range bcInformer.GetStore().List() {
 			if bc, err := updateBuildConfigImages(obj.(*buildv1.BuildConfig), c.tagRetriever); bc != nil || err != nil {
-				failures = append(failures, fmt.Sprintf("%s is not fully resolved: %v %s", obj.(*buildv1.BuildConfig).Name, err, diff.ObjectReflectDiff(obj, bc)))
+				failures = append(failures, fmt.Sprintf("%s is not fully resolved: %v %s", obj.(*buildv1.BuildConfig).Name, err, diff.Diff(obj, bc)))
 				continue
 			}
 		}

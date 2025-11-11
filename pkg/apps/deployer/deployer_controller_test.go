@@ -1212,8 +1212,8 @@ func TestMakeDeployerPod(t *testing.T) {
 
 		if !reflect.DeepEqual(inputPodTemplate.Spec, outputPodTemplate.Spec) {
 			t.Fatalf("Deployer pod is missing fields:\n%s\n\n%s",
-				diff.ObjectReflectDiff(inputPodTemplate.Spec, outputPodTemplate.Spec),
-				diff.ObjectDiff(inputPodTemplate.Spec, outputPodTemplate.Spec),
+				diff.Diff(inputPodTemplate.Spec, outputPodTemplate.Spec),
+				diff.Diff(inputPodTemplate.Spec, outputPodTemplate.Spec),
 			)
 		}
 	}

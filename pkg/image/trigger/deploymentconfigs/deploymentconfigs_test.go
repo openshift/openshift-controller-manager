@@ -401,7 +401,7 @@ func TestDeploymentConfigReactor(t *testing.T) {
 			initial := test.obj.DeepCopy()
 			err := r.ImageChanged(test.obj, fakeTagRetriever(test.tags))
 			if !kapihelper.Semantic.DeepEqual(initial, test.obj) {
-				t.Errorf("should not have mutated: %s", diff.ObjectReflectDiff(initial, test.obj))
+				t.Errorf("should not have mutated: %s", diff.Diff(initial, test.obj))
 			}
 			switch {
 			case err == nil && test.expectedErr, err != nil && !test.expectedErr:
@@ -418,7 +418,7 @@ func TestDeploymentConfigReactor(t *testing.T) {
 					t.Fatalf("no response defined %#v", actions)
 				}
 				if !reflect.DeepEqual(test.expected, actualUpdate) {
-					t.Fatalf("not equal: %s", diff.ObjectReflectDiff(test.expected, actualUpdate))
+					t.Fatalf("not equal: %s", diff.Diff(test.expected, actualUpdate))
 				}
 			} else {
 				if len(c.Actions()) != 0 {

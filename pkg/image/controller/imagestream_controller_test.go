@@ -433,7 +433,7 @@ func TestHandleImageStream(t *testing.T) {
 				}
 			} else {
 				if !kapihelper.Semantic.DeepEqual(test.stream, other) {
-					t.Errorf("did not expect change to stream: %s", diff.ObjectGoPrintDiff(test.stream, other))
+					t.Errorf("did not expect change to stream: %s", diff.Diff(test.stream, other))
 				}
 				if actions != 0 {
 					t.Errorf("did not expect remote calls, but got %d", actions)
