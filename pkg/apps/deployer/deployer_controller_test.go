@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/diff"
 	kinformers "k8s.io/client-go/informers"
 	kclientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
@@ -24,6 +23,7 @@ import (
 	kapitesting "k8s.io/kubernetes/pkg/api/testing"
 	kapihelper "k8s.io/kubernetes/pkg/apis/core/helper"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "github.com/openshift/api/apps/v1"
 	"github.com/openshift/library-go/pkg/apps/appsutil"
 	"github.com/openshift/openshift-controller-manager/pkg/apps/appstest"
@@ -1211,9 +1211,8 @@ func TestMakeDeployerPod(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(inputPodTemplate.Spec, outputPodTemplate.Spec) {
-			t.Fatalf("Deployer pod is missing fields:\n%s\n\n%s",
-				diff.ObjectReflectDiff(inputPodTemplate.Spec, outputPodTemplate.Spec),
-				diff.ObjectDiff(inputPodTemplate.Spec, outputPodTemplate.Spec),
+			t.Fatalf("Deployer pod has mismatched fields:\n%s",
+				cmp.Diff(inputPodTemplate.Spec, outputPodTemplate.Spec),
 			)
 		}
 	}

@@ -8,11 +8,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/watch"
 	kapihelper "k8s.io/kubernetes/pkg/apis/core/helper"
 
+	"github.com/google/go-cmp/cmp"
 	buildv1 "github.com/openshift/api/build/v1"
 	buildapply "github.com/openshift/client-go/build/applyconfigurations/build/v1"
 	buildclientv1 "github.com/openshift/client-go/build/clientset/versioned/typed/build/v1"
@@ -351,7 +351,7 @@ func TestBuildConfigReactor(t *testing.T) {
 		initial := test.obj.DeepCopy()
 		err := r.ImageChanged(test.obj, fakeTagRetriever(test.tags))
 		if !kapihelper.Semantic.DeepEqual(initial, test.obj) {
-			t.Errorf("%d: should not have mutated: %s", i, diff.ObjectReflectDiff(initial, test.obj))
+			t.Errorf("%d: should not have mutated: %s", i, cmp.Diff(initial, test.obj))
 		}
 		switch {
 		case err == nil && test.expectedErr, err != nil && !test.expectedErr:
@@ -365,7 +365,7 @@ func TestBuildConfigReactor(t *testing.T) {
 				t.Errorf("%d: unexpected request: %v", i, instantiator.request)
 			}
 			if !reflect.DeepEqual(test.expected, instantiator.request) {
-				t.Errorf("%d: not equal: %s", i, diff.ObjectReflectDiff(test.expected, instantiator.request))
+				t.Errorf("%d: not equal: %s", i, cmp.Diff(test.expected, instantiator.request))
 				t.Logf("%#v", instantiator.request.TriggeredBy)
 				continue
 			}

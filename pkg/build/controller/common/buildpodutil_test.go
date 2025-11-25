@@ -4,10 +4,10 @@ import (
 	"reflect"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/diff"
 
+	"github.com/google/go-cmp/cmp"
 	u "github.com/openshift/openshift-controller-manager/pkg/build/controller/common/testutil"
 )
 
@@ -19,7 +19,7 @@ func TestGetBuild(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if e, a := build.AsBuild(), resultBuild; !reflect.DeepEqual(e, a) {
-		t.Errorf("did not get expected build: %s", diff.ObjectDiff(e, a))
+		t.Errorf("did not get expected build: %s", cmp.Diff(e, a))
 	}
 }
 
@@ -32,6 +32,6 @@ func TestSetBuild(t *testing.T) {
 	}
 	resultBuild := pod.GetBuild(t)
 	if e, a := build.AsBuild(), resultBuild; !reflect.DeepEqual(e, a) {
-		t.Errorf("%s: did not get expected build: %s", version, diff.ObjectDiff(e, a))
+		t.Errorf("%s: did not get expected build: %s", version, cmp.Diff(e, a))
 	}
 }

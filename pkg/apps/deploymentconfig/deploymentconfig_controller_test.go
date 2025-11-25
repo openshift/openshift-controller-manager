@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
 	kinformers "k8s.io/client-go/informers"
@@ -21,6 +20,7 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	kapihelper "k8s.io/kubernetes/pkg/apis/core/helper"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "github.com/openshift/api/apps/v1"
 	appsfake "github.com/openshift/client-go/apps/clientset/versioned/fake"
 	appslisters "github.com/openshift/client-go/apps/listers/apps/v1"
@@ -428,7 +428,7 @@ func TestHandleScenarios(t *testing.T) {
 		for i := 0; i < len(expectedDeployments); i++ {
 			expected, actual := expectedDeployments[i], actualDeployments[i]
 			if !kapihelper.Semantic.DeepEqual(expected, actual) {
-				t.Errorf("actual deployment don't match expected: %v", diff.ObjectDiff(expected, actual))
+				t.Errorf("actual deployment don't match expected: %v", cmp.Diff(expected, actual))
 			}
 		}
 	}
