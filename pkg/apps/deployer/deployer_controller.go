@@ -45,8 +45,8 @@ import (
 // In most cases, we shouldn't need to retry up to maxRetryCount...
 const maxRetryCount = 15
 
-// maxInjectedEnvironmentAllowedSize represents maximum size of a value of environment variable
-// that we will inject to a container. The default is 128Kb.
+// maxInjectedEnvironmentAllowedSize is the maximum size for an environment variable to be injected in a container. This
+// is a heuristic that should be set well below POSIX `ARGS_MAX`.
 const maxInjectedEnvironmentAllowedSize = 1000 * 128
 
 // fatalError is an error which can't be retried.
@@ -481,10 +481,10 @@ func (c *DeploymentController) makeDeployerContainer(strategy *appsv1.Deployment
 		if set.Has(env.Name) {
 			continue
 		}
-		// TODO: The size of environment value should be probably validated in k8s api validation
-		//       as when the env var size is more than 128kb the execve calls will fail.
+		// Skip large env values, to reduce the risk of `execve` failing due to envs+args exceeding `MAX_ARGS`.
+		// TODO: The size of environment values should be probably validated in k8s api validation.
 		if len(env.Value) > maxInjectedEnvironmentAllowedSize {
-			klog.Errorf("failed to inject %s environment variable as the size exceed %d bytes", env.Name, maxInjectedEnvironmentAllowedSize)
+			klog.Errorf("not injecting %s environment variable as its size exceeds %d bytes", env.Name, maxInjectedEnvironmentAllowedSize)
 			continue
 		}
 		environment = append(environment, env)
