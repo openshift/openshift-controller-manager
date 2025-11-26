@@ -1163,11 +1163,10 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.ServiceAccountName = "sa:test"
 				p.Spec.ShareProcessNamespace = &defaultShareProcessNamespace
 
-				// FIXME: These are weird or missing. If you get an error below, consider
-				// adding this field into deployer controller or to this list:
+				// These are not picked up by `makeDeployerPod() and need to be ignored here. The list might need
+				// additions/deletions with new k8s version, and with updates to `makeDeployerPod()`
 				p.Spec.DeprecatedServiceAccount = ""
 				p.Spec.AutomountServiceAccountToken = nil
-				p.Spec.Tolerations = nil
 				p.Spec.Volumes = nil
 				p.Spec.NodeName = ""
 				p.Spec.HostNetwork = false
@@ -1199,20 +1198,22 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.SchedulingGates = []corev1.PodSchedulingGate{}
 				// k8s 1.32
 				p.Spec.Resources = nil
+				// k8s 1.34
+				p.Spec.HostnameOverride = nil
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}
 		f.Fill(&inputPodTemplate)
 		deployment.Spec.Template = inputPodTemplate
 
-		outputPodTemplate, err := controller.makeDeployerPod(deployment)
+		outputPod, err := controller.makeDeployerPod(deployment)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if !reflect.DeepEqual(inputPodTemplate.Spec, outputPodTemplate.Spec) {
-			t.Fatalf("Deployer pod has mismatched fields:\n%s",
-				cmp.Diff(inputPodTemplate.Spec, outputPodTemplate.Spec),
+		if !reflect.DeepEqual(inputPodTemplate.Spec, outputPod.Spec) {
+			t.Fatalf("Deployer pod mismatches fields from the fuzzed template:\n%s",
+				cmp.Diff(inputPodTemplate.Spec, outputPod.Spec),
 			)
 		}
 	}
