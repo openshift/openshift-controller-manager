@@ -8,10 +8,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/diff"
 	testingcore "k8s.io/client-go/testing"
 	kapihelper "k8s.io/kubernetes/pkg/apis/core/helper"
 
+	"github.com/google/go-cmp/cmp"
 	appsv1 "github.com/openshift/api/apps/v1"
 	appsclient "github.com/openshift/client-go/apps/clientset/versioned/fake"
 )
@@ -401,7 +401,7 @@ func TestDeploymentConfigReactor(t *testing.T) {
 			initial := test.obj.DeepCopy()
 			err := r.ImageChanged(test.obj, fakeTagRetriever(test.tags))
 			if !kapihelper.Semantic.DeepEqual(initial, test.obj) {
-				t.Errorf("should not have mutated: %s", diff.ObjectReflectDiff(initial, test.obj))
+				t.Errorf("should not have mutated: %s", cmp.Diff(initial, test.obj))
 			}
 			switch {
 			case err == nil && test.expectedErr, err != nil && !test.expectedErr:
@@ -418,7 +418,7 @@ func TestDeploymentConfigReactor(t *testing.T) {
 					t.Fatalf("no response defined %#v", actions)
 				}
 				if !reflect.DeepEqual(test.expected, actualUpdate) {
-					t.Fatalf("not equal: %s", diff.ObjectReflectDiff(test.expected, actualUpdate))
+					t.Fatalf("not equal: %s", cmp.Diff(test.expected, actualUpdate))
 				}
 			} else {
 				if len(c.Actions()) != 0 {

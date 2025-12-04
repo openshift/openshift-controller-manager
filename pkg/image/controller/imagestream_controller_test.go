@@ -16,11 +16,11 @@ import (
 	apitesting "k8s.io/apimachinery/pkg/api/apitesting"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/diff"
 	restfake "k8s.io/client-go/rest/fake"
 	kapihelper "k8s.io/kubernetes/pkg/apis/core/helper"
 	kcontroller "k8s.io/kubernetes/pkg/controller"
 
+	"github.com/google/go-cmp/cmp"
 	imagev1 "github.com/openshift/api/image/v1"
 	fakeimagev1client "github.com/openshift/client-go/image/clientset/versioned/fake"
 	imagev1informer "github.com/openshift/client-go/image/informers/externalversions"
@@ -433,7 +433,7 @@ func TestHandleImageStream(t *testing.T) {
 				}
 			} else {
 				if !kapihelper.Semantic.DeepEqual(test.stream, other) {
-					t.Errorf("did not expect change to stream: %s", diff.ObjectGoPrintDiff(test.stream, other))
+					t.Errorf("did not expect change to stream: %s", cmp.Diff(test.stream, other))
 				}
 				if actions != 0 {
 					t.Errorf("did not expect remote calls, but got %d", actions)

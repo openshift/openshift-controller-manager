@@ -24,3 +24,15 @@ There are additional controllers which add OpenShift-specific capabilities to th
 Many of the controllers expose metrics which are visible in the default OpenShift monitoring system
 (Prometheus). See [metrics](docs/metrics.md) for a detailed list of exposed metrics for each API
 group.
+
+## Rebase
+Follow this checklist and copy into the PR:
+
+- [ ] Select the desired [kubernetes release branch](https://github.com/kubernetes/kubernetes/branches), and use its `go.mod` and `CHANGELOG` as references for the rest of the work.
+- [ ] Bump go version if needed.
+- [ ] Bump `require`s and `replace`s for `k8s.io/`, `github.com/openshift/`, and relevant deps.
+- [ ] Run `go mod vendor && go mod tidy`, commit `vendor` folder separately from all other changes.
+- [ ] Bump image versions (Dockerfile, ci...) if needed.
+- [ ] Run `make build verify test`.
+- [ ] Make code changes as needed until the above pass.
+- [ ] Any other minor update, like documentation.
