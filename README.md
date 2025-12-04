@@ -36,3 +36,33 @@ Follow this checklist and copy into the PR:
 - [ ] Run `make build verify test`.
 - [ ] Make code changes as needed until the above pass.
 - [ ] Any other minor update, like documentation.
+## Tests
+
+This repository is compatible with the "OpenShift Tests Extension (OTE)" framework.
+
+### Building the test binary
+```bash
+make build
+```
+
+### Running test suites and tests
+```bash
+# Run a specific test suite or test
+./openshift-controller-manager-tests-ext run-suite openshift/openshift-controller-manager/all
+./openshift-controller-manager-tests-ext run-test "test-name"
+
+# Run with JUnit output
+./openshift-controller-manager-tests-ext run-suite openshift/openshift-controller-manager/all --junit-path=/tmp/junit-results/junit.xml
+./openshift-controller-manager-tests-ext run-test "test-name" --junit-path=/tmp/junit-results/junit.xml
+```
+
+### Listing available tests and suites
+```bash
+# List all test suites
+./openshift-controller-manager-tests-ext list-suites
+
+# List tests in a specific suite
+./openshift-controller-manager-tests-ext list-tests openshift/openshift-controller-manager/all
+```
+
+The test extension binary is included in the production image for CI/CD integration.
