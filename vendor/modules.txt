@@ -344,10 +344,12 @@ github.com/openshift-eng/openshift-tests-extension/pkg/flags
 github.com/openshift-eng/openshift-tests-extension/pkg/junit
 github.com/openshift-eng/openshift-tests-extension/pkg/util/sets
 github.com/openshift-eng/openshift-tests-extension/pkg/version
-# github.com/openshift/api v0.0.0-20251122153900-88cca31a44c9
+# github.com/openshift/api v0.0.0-20260126183958-606bd613f9f7
 ## explicit; go 1.24.0
 github.com/openshift/api
 github.com/openshift/api/annotations
+github.com/openshift/api/apiextensions
+github.com/openshift/api/apiextensions/v1alpha1
 github.com/openshift/api/apiserver
 github.com/openshift/api/apiserver/v1
 github.com/openshift/api/apps
@@ -364,6 +366,8 @@ github.com/openshift/api/config/v1alpha1
 github.com/openshift/api/config/v1alpha2
 github.com/openshift/api/console
 github.com/openshift/api/console/v1
+github.com/openshift/api/etcd
+github.com/openshift/api/etcd/v1alpha1
 github.com/openshift/api/helm
 github.com/openshift/api/helm/v1beta1
 github.com/openshift/api/image
@@ -427,7 +431,7 @@ github.com/openshift/build-machinery-go/make/targets/golang
 github.com/openshift/build-machinery-go/make/targets/openshift
 github.com/openshift/build-machinery-go/make/targets/openshift/operator
 github.com/openshift/build-machinery-go/scripts
-# github.com/openshift/client-go v0.0.0-20251123231646-4685125c2287
+# github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13
 ## explicit; go 1.24.0
 github.com/openshift/client-go/apps/applyconfigurations
 github.com/openshift/client-go/apps/applyconfigurations/apps/v1
@@ -528,7 +532,7 @@ github.com/openshift/client-go/template/informers/externalversions/internalinter
 github.com/openshift/client-go/template/informers/externalversions/template
 github.com/openshift/client-go/template/informers/externalversions/template/v1
 github.com/openshift/client-go/template/listers/template/v1
-# github.com/openshift/library-go v0.0.0-20251120164824-14a789e09884
+# github.com/openshift/library-go v0.0.0-20260202103639-c3c3c4609280
 ## explicit; go 1.24.0
 github.com/openshift/library-go/pkg/apps/appsserialization
 github.com/openshift/library-go/pkg/apps/appsutil
@@ -763,7 +767,7 @@ go.yaml.in/yaml/v2
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
-# golang.org/x/crypto v0.42.0
+# golang.org/x/crypto v0.45.0
 ## explicit; go 1.24.0
 golang.org/x/crypto/cast5
 golang.org/x/crypto/cryptobyte
@@ -789,8 +793,8 @@ golang.org/x/crypto/sha3
 golang.org/x/exp/constraints
 golang.org/x/exp/maps
 golang.org/x/exp/slices
-# golang.org/x/net v0.43.0
-## explicit; go 1.23.0
+# golang.org/x/net v0.47.0
+## explicit; go 1.24.0
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/hpack
@@ -803,20 +807,20 @@ golang.org/x/net/websocket
 ## explicit; go 1.23.0
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
-# golang.org/x/sync v0.17.0
+# golang.org/x/sync v0.18.0
 ## explicit; go 1.24.0
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.36.0
+# golang.org/x/sys v0.38.0
 ## explicit; go 1.24.0
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.35.0
+# golang.org/x/term v0.37.0
 ## explicit; go 1.24.0
 golang.org/x/term
-# golang.org/x/text v0.29.0
+# golang.org/x/text v0.31.0
 ## explicit; go 1.24.0
 golang.org/x/text/feature/plural
 golang.org/x/text/internal
