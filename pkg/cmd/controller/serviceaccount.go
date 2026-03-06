@@ -42,7 +42,9 @@ func runServiceAccountsController(cctx *ControllerContext, managedNames ...strin
 	if len(options.ServiceAccounts) == 0 {
 		return false, fmt.Errorf("no managed names specified")
 	}
+
 	controller, err := serviceaccount.NewServiceAccountsController(
+		klog.NewKlogr(),
 		cctx.KubernetesInformers.Core().V1().ServiceAccounts(),
 		cctx.KubernetesInformers.Core().V1().Namespaces(),
 		cctx.ClientBuilder.ClientOrDie(infraServiceAccountControllerServiceAccountName),
