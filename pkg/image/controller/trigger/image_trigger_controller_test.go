@@ -940,15 +940,26 @@ func scenario_1_buildConfig_imageSource_cacheEntry() *trigger.CacheEntry {
 	}
 }
 
+// fakeClientDoesNotSupportWatchList signals that fake watchers don't support WatchList semantics.
+// This is needed for Kubernetes 1.35+ where WatchListClient feature is enabled by default.
+type fakeClientDoesNotSupportWatchList struct{}
+
+func (f *fakeClientDoesNotSupportWatchList) IsWatchListSemanticsUnSupported() bool {
+	return true
+}
+
 func newFakeInformer(item, initialList runtime.Object) (cache.SharedIndexInformer, *watch.RaceFreeFakeWatcher) {
 	fw := watch.NewRaceFreeFake()
-	lw := &cache.ListWatch{
-		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-			return initialList, nil
+	lw := cache.ToListWatcherWithWatchListSemantics(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return initialList, nil
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) { return fw, nil },
 		},
-		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) { return fw, nil },
-	}
-	informer := cache.NewSharedIndexInformer(lw, item, 0, nil)
+		&fakeClientDoesNotSupportWatchList{}, // Signal that this doesn't support WatchList
+	)
+	informer := cache.NewSharedIndexInformer(lw, item, 0, cache.Indexers{})
 	return informer, fw
 }
 
