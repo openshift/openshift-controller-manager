@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"reflect"
 	"strings"
@@ -478,7 +477,7 @@ func objBody(object interface{}) io.ReadCloser {
 	if err != nil {
 		panic(err)
 	}
-	return ioutil.NopCloser(bytes.NewReader([]byte(output)))
+	return io.NopCloser(bytes.NewReader([]byte(output)))
 }
 
 func header() http.Header {
@@ -488,7 +487,7 @@ func header() http.Header {
 }
 
 func decode(reader io.ReadCloser, decoder runtime.Decoder) (runtime.Object, error) {
-	data, err := ioutil.ReadAll(reader)
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, err
 	}

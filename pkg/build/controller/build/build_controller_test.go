@@ -3,7 +3,6 @@ package build
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strings"
@@ -1761,7 +1760,7 @@ func TestHandleControllerConfig(t *testing.T) {
 			}
 
 			// Ensure that the generated configuration is actually valid.
-			registriesConf, err := ioutil.TempFile("", "registries.conf")
+			registriesConf, err := os.CreateTemp("", "registries.conf")
 			defer os.Remove(registriesConf.Name())
 			if err != nil {
 				t.Errorf("unexpected error creating temp file: %s", err.Error())

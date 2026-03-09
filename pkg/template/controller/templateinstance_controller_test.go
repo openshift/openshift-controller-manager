@@ -3,7 +3,7 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -72,7 +72,7 @@ func TestControllerCheckReadiness(t *testing.T) {
 				}
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       ioutil.NopCloser(bytes.NewBuffer(b)),
+					Body:       io.NopCloser(bytes.NewBuffer(b)),
 				}, nil
 			})
 		},
