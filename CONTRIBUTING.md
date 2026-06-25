@@ -50,7 +50,7 @@ image. See the [README](README.md) for OTE usage.
 
 - No `controller-runtime` — use raw `client-go` informers and workqueues
 - Each controller gets its own service account and init function in `pkg/cmd/controller/`
-- Retry limit is typically `maxRetries = 15` with exponential backoff
+- Retry limits range from 5 to 15 depending on the controller, with exponential backoff
 - Use Server-Side Apply (SSA) with distinct field manager strings for new controllers
 - Build and deployer pod specs live in `pkg/build/controller/strategy/` and
   `pkg/apps/deployer/` respectively

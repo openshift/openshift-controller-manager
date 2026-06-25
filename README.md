@@ -40,7 +40,7 @@ make test-unit      # runs unit tests in ./pkg/... ./cmd/...
 ```bash
 make build
 ./openshift-controller-manager-tests-ext list-suites
-./openshift-controller-manager-tests-ext run-suite openshift/openshift-controller-manager/all
+./openshift-controller-manager-tests-ext run-suite openshift/openshift-controller-manager/conformance/parallel
 ```
 
 ## Rebase Checklist

@@ -58,7 +58,7 @@ make verify         # gofmt, govet, version checks
 - **Capabilities integration:** Build and DC controllers can be disabled. Check
   `IsControllerEnabled()` and conditional informer startup in `StartInformers()`.
 - **Error classification (apps):** `fatalError` (never retried), `actionableError` (retried with
-  warning), regular errors (retried silently). Max 15 retries.
+  warning), regular errors (retried silently). Retry limits range from 5 to 15 by controller.
 - **SSA in internalregistry:** Pull secret controllers use Server-Side Apply with distinct field
   manager strings to avoid conflicts.
 
@@ -76,5 +76,5 @@ make verify         # gofmt, govet, version checks
 ## Test Suites
 
 - **Unit tests:** `make test-unit` — colocated `_test.go` files throughout `pkg/`
-- **OTE:** `./openshift-controller-manager-tests-ext run-suite openshift/openshift-controller-manager/all`
+- **OTE:** `./openshift-controller-manager-tests-ext run-suite openshift/openshift-controller-manager/conformance/parallel`
 - **E2E:** Run via `openshift/origin` against a live cluster (not in this repo)

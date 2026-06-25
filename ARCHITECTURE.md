@@ -14,7 +14,7 @@ resource quotas, or security context constraints (moved out during the 2019 spli
 
 | Namespace | Purpose |
 |-----------|---------|
-| `openshift-controller-manager` | Operand pods, serving-cert secrets, leader election ConfigMap |
+| `openshift-controller-manager` | Operand pods, serving-cert secrets, leader election Lease |
 | `openshift-infra` | Service accounts used by controllers (e.g., `build-controller`, `deployer-controller`) |
 | `openshift-config` | Cluster-wide CA bundles and proxy config consumed by the build controller |
 | `openshift-image-registry` | Registry Service watched by the registry URL observation controller |
