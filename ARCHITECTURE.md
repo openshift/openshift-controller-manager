@@ -55,8 +55,14 @@ semantics.
 The pull-secrets controller (`openshift.io/serviceaccount-pull-secrets`) is internally composed of
 6 sub-controllers coordinated via Go channels: `ServiceAccountController`,
 `ImagePullSecretController`, `RegistryURLObservationController`, `KeyIDObservationController`,
-`LegacyImagePullSecretController`, and `LegacyTokenSecretController`. A 7th rollback controller
-runs only when the main controller is disabled.
+`LegacyImagePullSecretController`, and `LegacyTokenSecretController`.
+
+**Rollback controllers:** The `RollbackControllers` map in `config.go` registers cleanup/rollback
+logic that runs *instead of* a disabled controller. When `startControllers()` skips a disabled
+controller, `startRollbackControllers()` checks this map and starts the corresponding rollback
+init function. This pattern is extensible — any controller that needs cleanup behavior when
+disabled can register a rollback entry. Currently only `serviceaccount-pull-secrets` has one
+(the `legacyImagePullSecretRollbackController`).
 
 ## Capabilities Integration
 
