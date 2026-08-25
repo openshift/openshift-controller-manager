@@ -1200,8 +1200,8 @@ func TestMakeDeployerPod(t *testing.T) {
 				p.Spec.Resources = nil
 				// k8s 1.34
 				p.Spec.HostnameOverride = nil
-				// k8s 1.35
-				p.Spec.WorkloadRef = nil
+				// k8s 1.36
+				p.Spec.SchedulingGroup = nil
 			},
 		)
 		inputPodTemplate := &corev1.PodTemplateSpec{}

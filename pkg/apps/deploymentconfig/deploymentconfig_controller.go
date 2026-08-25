@@ -226,7 +226,7 @@ func (c *DeploymentConfigController) Handle(config *appsv1.DeploymentConfig) err
 		return fmt.Errorf("couldn't create deployment for deployment config %s: %v", appsutil.LabelForDeploymentConfig(config), err)
 	}
 	msg := fmt.Sprintf("Created new replication controller %q for version %d", created.Name, config.Status.LatestVersion)
-	c.recorder.Eventf(config, v1.EventTypeNormal, "DeploymentCreated", msg)
+	c.recorder.Eventf(config, v1.EventTypeNormal, "DeploymentCreated", "%s", msg)
 
 	// As we've just created a new deployment, we need to make sure to clean
 	// up old deployments if we have reached our deployment history quota

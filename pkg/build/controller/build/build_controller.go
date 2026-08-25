@@ -1569,18 +1569,18 @@ func (bc *BuildController) updateBuild(build *buildv1.Build, update *buildUpdate
 		switch *update.phase {
 		case buildv1.BuildPhaseRunning:
 			bc.recorder.Eventf(patchedBuild, corev1.EventTypeNormal, buildutil.BuildStartedEventReason,
-				fmt.Sprintf(buildutil.BuildStartedEventMessage,
-					patchedBuild.Namespace, patchedBuild.Name))
+				buildutil.BuildStartedEventMessage,
+				patchedBuild.Namespace, patchedBuild.Name)
 		case buildv1.BuildPhaseCancelled:
 			bc.recorder.Eventf(patchedBuild, corev1.EventTypeNormal, buildutil.BuildCancelledEventReason,
-				fmt.Sprintf(buildutil.BuildCancelledEventMessage, patchedBuild.Namespace, patchedBuild.Name))
+				buildutil.BuildCancelledEventMessage, patchedBuild.Namespace, patchedBuild.Name)
 		case buildv1.BuildPhaseComplete:
 			bc.recorder.Eventf(patchedBuild, corev1.EventTypeNormal, buildutil.BuildCompletedEventReason,
-				fmt.Sprintf(buildutil.BuildCompletedEventMessage, patchedBuild.Namespace, patchedBuild.Name))
+				buildutil.BuildCompletedEventMessage, patchedBuild.Namespace, patchedBuild.Name)
 		case buildv1.BuildPhaseError,
 			buildv1.BuildPhaseFailed:
-			bc.recorder.Eventf(patchedBuild, corev1.EventTypeNormal, buildutil.BuildFailedEventReason, fmt.Sprintf(buildutil.BuildFailedEventMessage,
-				patchedBuild.Namespace, patchedBuild.Name))
+			bc.recorder.Eventf(patchedBuild, corev1.EventTypeNormal, buildutil.BuildFailedEventReason, buildutil.BuildFailedEventMessage,
+				patchedBuild.Namespace, patchedBuild.Name)
 		}
 		if buildutil.IsTerminalPhase(*update.phase) {
 			bc.handleBuildCompletion(patchedBuild)

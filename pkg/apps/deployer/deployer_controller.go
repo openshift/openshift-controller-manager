@@ -569,9 +569,9 @@ func (c *DeploymentController) cleanupDeployerPods(deployment *corev1.Replicatio
 
 func (c *DeploymentController) emitDeploymentEvent(deployment *corev1.ReplicationController, eventType, title, message string) {
 	if config, _ := appsserialization.DecodeDeploymentConfig(deployment); config != nil {
-		c.recorder.Eventf(config, eventType, title, message)
+		c.recorder.Eventf(config, eventType, title, "%s", message)
 	} else {
-		c.recorder.Eventf(deployment, eventType, title, message)
+		c.recorder.Eventf(deployment, eventType, title, "%s", message)
 	}
 }
 

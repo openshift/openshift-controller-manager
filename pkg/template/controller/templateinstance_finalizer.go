@@ -156,7 +156,7 @@ func (c *TemplateInstanceFinalizerController) sync(key string) error {
 	}
 	if len(errs) > 0 {
 		err = kerrs.NewAggregate(errs)
-		c.recorder.Eventf(templateInstance, "FinalizerError", "DeletionFailure", err.Error())
+		c.recorder.Eventf(templateInstance, corev1.EventTypeWarning, "DeletionFailure", "%s", err.Error())
 		return err
 	}
 
