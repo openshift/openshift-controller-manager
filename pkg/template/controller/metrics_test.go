@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -183,7 +184,7 @@ func TestMetrics(t *testing.T) {
 		}
 
 		rw := &fakeResponseWriter{header: http.Header{}}
-		h.ServeHTTP(rw, &http.Request{})
+		h.ServeHTTP(rw, &http.Request{URL: &url.URL{}})
 		response := rw.String()
 		for _, expected := range expectedResponse {
 			if !strings.Contains(response, expected) {

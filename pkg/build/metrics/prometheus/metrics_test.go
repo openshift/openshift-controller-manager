@@ -3,6 +3,7 @@ package prometheus
 import (
 	"bytes"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -132,7 +133,7 @@ func TestBuildMetrics(t *testing.T) {
 
 	h := promhttp.HandlerFor(legacyregistry.DefaultGatherer, promhttp.HandlerOpts{ErrorHandling: promhttp.PanicOnError})
 	rw := &fakeResponseWriter{header: http.Header{}}
-	h.ServeHTTP(rw, &http.Request{})
+	h.ServeHTTP(rw, &http.Request{URL: &url.URL{}})
 
 	respStr := rw.String()
 
