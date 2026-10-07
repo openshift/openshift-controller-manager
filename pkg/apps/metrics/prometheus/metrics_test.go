@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -464,7 +465,7 @@ openshift_apps_deploymentconfigs_strategy_total{type="rolling"} 0
 
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{ErrorHandling: promhttp.PanicOnError})
 	rw := &fakeResponseWriter{header: http.Header{}}
-	h.ServeHTTP(rw, &http.Request{})
+	h.ServeHTTP(rw, &http.Request{URL: &url.URL{}})
 
 	respStr := rw.String()
 
