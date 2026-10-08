@@ -601,14 +601,14 @@ func builderMinSecurityContext() *corev1.SecurityContext {
 // Reference: https://github.com/openshift/machine-config-operator/pull/2805
 func setupBuilderDeviceFUSE(pod *corev1.Pod) {
 	metav1.SetMetaDataAnnotation(&pod.ObjectMeta, "io.openshift.builder", "")
-	metav1.SetMetaDataAnnotation(&pod.ObjectMeta, "io.kubernetes.cri-o.Devices", "/dev/fuse:rwm")
+	metav1.SetMetaDataAnnotation(&pod.ObjectMeta, "devices.crio.io", "/dev/fuse:rwm")
 }
 
 // Request that the builder be run in a user namespace, mapped from host ID
 // ranges chosen by the node.
 func setupBuilderAutonsUser(build *buildv1.Build, vars []corev1.EnvVar, pod *corev1.Pod) {
 	metav1.SetMetaDataAnnotation(&pod.ObjectMeta, "io.openshift.builder", "")
-	metav1.SetMetaDataAnnotation(&pod.ObjectMeta, "io.kubernetes.cri-o.userns-mode", "auto:size=65536")
+	metav1.SetMetaDataAnnotation(&pod.ObjectMeta, "userns-mode.crio.io", "auto:size=65536")
 }
 
 // setupBuildCAs mounts certificate authorities for the build from a predetermined ConfigMap.

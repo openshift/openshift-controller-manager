@@ -811,17 +811,17 @@ func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy b
 			privileged: true,
 			noAnnotations: []string{
 				"io.openshift.builder",
-				"io.kubernetes.cri-o.Devices",
-				"io.kubernetes.cri-o.userns-mode",
+				"devices.crio.io",
+				"userns-mode.crio.io",
 			},
 		},
 		{
 			env:        "BUILD_PRIVILEGED=0",
 			privileged: false,
 			annotations: map[string]string{
-				"io.openshift.builder":            "",
-				"io.kubernetes.cri-o.Devices":     "/dev/fuse:rwm",
-				"io.kubernetes.cri-o.userns-mode": "auto:size=65536",
+				"io.openshift.builder": "",
+				"devices.crio.io":      "/dev/fuse:rwm",
+				"userns-mode.crio.io":  "auto:size=65536",
 			},
 		},
 		{
@@ -829,17 +829,17 @@ func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy b
 			privileged: true,
 			noAnnotations: []string{
 				"io.openshift.builder",
-				"io.kubernetes.cri-o.Devices",
-				"io.kubernetes.cri-o.userns-mode",
+				"devices.crio.io",
+				"userns-mode.crio.io",
 			},
 		},
 		{
 			env:        "BUILD_PRIVILEGED=false",
 			privileged: false,
 			annotations: map[string]string{
-				"io.openshift.builder":            "",
-				"io.kubernetes.cri-o.Devices":     "/dev/fuse:rwm",
-				"io.kubernetes.cri-o.userns-mode": "auto:size=65536",
+				"io.openshift.builder": "",
+				"devices.crio.io":      "/dev/fuse:rwm",
+				"userns-mode.crio.io":  "auto:size=65536",
 			},
 		},
 		{
@@ -847,8 +847,8 @@ func testCreateBuildPodAutonsUser(t *testing.T, build *buildv1.Build, strategy b
 			privileged: true,
 			noAnnotations: []string{
 				"io.openshift.builder",
-				"io.kubernetes.cri-o.Devices",
-				"io.kubernetes.cri-o.userns-mode",
+				"devices.crio.io",
+				"userns-mode.crio.io",
 			},
 		},
 	} {
