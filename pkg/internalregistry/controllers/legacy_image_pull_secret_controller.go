@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
@@ -45,6 +46,14 @@ func NewLegacyImagePullSecretController(client kubernetes.Interface, secrets inf
 			if secret.Type != corev1.SecretTypeDockercfg {
 				// not an image pull secret
 				return false
+			}
+			// A secret being deleted that still carries the finalizer must reach
+			// sync() even after the token-secret.name annotation has been removed
+			// (i.e. the secret has transitioned to the "bound" auth type but the
+			// finalizer was never cleared). Without this, sync() is never invoked
+			// and namespaces are stuck in Terminating indefinitely.
+			if !secret.DeletionTimestamp.IsZero() && slices.Contains(secret.Finalizers, "openshift.io/legacy-token") {
+				return true
 			}
 			if _, ok = secret.Annotations["openshift.io/token-secret.name"]; !ok {
 				// does not appear to be a legacy managed image pull secret
@@ -100,17 +109,16 @@ func (c *legacyImagePullSecretController) sync(ctx context.Context, key string) 
 					return err
 				}
 			}
-			// either no token secret was specified, or it was successfully deleted. clear finalizer
-			var finalizers []string
-			for _, f := range secret.Finalizers {
-				if f != "openshift.io/legacy-token" {
-					finalizers = append(finalizers, f)
-				}
-			}
-			patch := applycorev1.Secret(name, ns).
-				WithAnnotations(map[string]string{InternalRegistryAuthTokenTypeAnnotation: AuthTokenTypeLegacy}).
-				WithFinalizers(finalizers...)
-			_, err = c.client.CoreV1().Secrets(ns).Apply(ctx, patch, metav1.ApplyOptions{FieldManager: legacyTokenSecretControllerFieldManager})
+			// either no token secret was specified, or it was successfully deleted.
+			// Remove the finalizer via JSON Patch (same approach as the rollback
+			// controller) so that a nil finalizers slice is never serialised with
+			// omitempty, which would leave the finalizer in place.
+			index := slices.Index(secret.Finalizers, "openshift.io/legacy-token")
+			patchData := []byte(fmt.Sprintf(`[`+
+				`{"op":"test","path":"/metadata/finalizers/%d","value":"openshift.io/legacy-token"},`+
+				`{"op":"remove","path":"/metadata/finalizers/%[1]d"}`+
+				`]`, index))
+			_, err = c.client.CoreV1().Secrets(ns).Patch(ctx, name, types.JSONPatchType, patchData, metav1.PatchOptions{})
 			return err
 		}
 		// finalizer has already been removed, nothing to do, delete in progress
