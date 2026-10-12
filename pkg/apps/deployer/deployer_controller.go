@@ -98,22 +98,30 @@ type DeploymentController struct {
 }
 
 // handle processes a deployment and either creates a deployer pod or responds
-// to a terminal deployment status. Since this controller started using caches,
-// the provided rc MUST be deep-copied beforehand (see work() in factory.go).
+// to a terminal deployment status. The provided deployment may come from an
+// informer cache and must remain read-only.
 func (c *DeploymentController) handle(deployment *corev1.ReplicationController, willBeDropped bool) error {
-	// Copy all the annotations from the deployment.
-	updatedAnnotations := make(map[string]string)
-	for key, value := range deployment.Annotations {
-		updatedAnnotations[key] = value
+	deploymentCopy := deployment.DeepCopy()
+	if deploymentCopy.Annotations == nil {
+		deploymentCopy.Annotations = map[string]string{}
 	}
+	updatedAnnotations := deploymentCopy.Annotations
 
 	currentStatus := appsutil.DeploymentStatusFor(deployment)
 	nextStatus := currentStatus
 
 	deployerPodName := appsutil.DeployerPodNameForDeployment(deployment.Name)
 	deployer, deployerErr := c.podLister.Pods(deployment.Namespace).Get(deployerPodName)
-	if deployerErr == nil {
+	deployerBelongsToDeployment := deployerErr == nil && appsutil.DeploymentNameFor(deployer) == deployment.Name
+	if deployerBelongsToDeployment {
 		nextStatus = c.nextStatus(deployer, deployment, updatedAnnotations)
+	}
+	cancellationState := deployment
+	if appsutil.CanTransitionPhase(currentStatus, nextStatus) {
+		// nextStatus may have cleared cancellation from the private copy after
+		// observing a successful deployer. Only make that state effective if the
+		// corresponding phase transition is allowed.
+		cancellationState = deploymentCopy
 	}
 
 	switch currentStatus {
@@ -124,7 +132,7 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 		// continues to see the deployment as in-flight. Eventually the deletion
 		// of the deployer pod should cause a requeue of this deployment and
 		// then it can be transitioned to Failed by this controller.
-		if appsutil.IsDeploymentCancelled(deployment) {
+		if appsutil.IsDeploymentCancelled(cancellationState) {
 			nextStatus = appsv1.DeploymentStatusPending
 			if err := c.cleanupDeployerPods(deployment); err != nil {
 				return err
@@ -193,7 +201,7 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 			// to ensure that changes to 'unrelated' pods don't result in updates to
 			// the deployment. So, the image check will have to be done in other areas
 			// of the code as well.
-			if appsutil.DeploymentNameFor(deployer) != deployment.Name {
+			if !deployerBelongsToDeployment {
 				nextStatus = appsv1.DeploymentStatusFailed
 				updatedAnnotations[appsv1.DeploymentStatusReasonAnnotation] = appsutil.DeploymentFailedUnrelatedDeploymentExists
 				c.emitDeploymentEvent(deployment, corev1.EventTypeWarning, "FailedCreate", fmt.Sprintf("Error creating deployer pod since another pod with the same name (%q) exists", deployer.Name))
@@ -214,7 +222,7 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 			nextStatus = appsv1.DeploymentStatusFailed
 			// If the deployment is cancelled here then we deleted the deployer in a previous
 			// resync of the deployment.
-			if !appsutil.IsDeploymentCancelled(deployment) {
+			if !appsutil.IsDeploymentCancelled(cancellationState) {
 				// Retry more before setting the deployment to Failed if it's Pending - the pod might not have
 				// appeared in the cache yet.
 				if !willBeDropped && currentStatus == appsv1.DeploymentStatusPending {
@@ -237,7 +245,7 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 			// found. Eventually the deletion of the deployer pod should cause
 			// a requeue of this deployment and then it can be transitioned to
 			// Failed.
-			if appsutil.IsDeploymentCancelled(deployment) {
+			if appsutil.IsDeploymentCancelled(cancellationState) {
 				if err := c.cleanupDeployerPods(deployment); err != nil {
 					return err
 				}
@@ -253,7 +261,7 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 	case appsv1.DeploymentStatusFailed:
 		// Try to cleanup once more a cancelled deployment in case hook pods
 		// were created just after we issued the first cleanup request.
-		if appsutil.IsDeploymentCancelled(deployment) {
+		if appsutil.IsDeploymentCancelled(cancellationState) {
 			if err := c.cleanupDeployerPods(deployment); err != nil {
 				return err
 			}
@@ -269,12 +277,9 @@ func (c *DeploymentController) handle(deployment *corev1.ReplicationController, 
 		// preserve deployer pods on completed deployments
 	}
 
-	deploymentCopy := deployment.DeepCopy()
-
 	// Update only if we need to transition to a new phase.
 	if appsutil.CanTransitionPhase(currentStatus, nextStatus) {
 		updatedAnnotations[appsv1.DeploymentStatusAnnotation] = string(nextStatus)
-		deploymentCopy.Annotations = updatedAnnotations
 
 		// If we are going to transition to failed or complete and scale is non-zero, we'll check one more
 		// time to see if we are a test deployment to guarantee that we maintain the test invariant.
@@ -310,7 +315,8 @@ func (c *DeploymentController) nextStatus(pod *corev1.Pod, deployment *corev1.Re
 		// then we need to remove the cancel annotations from the complete deployment
 		// and emit an event letting users know their cancellation failed.
 		if appsutil.IsDeploymentCancelled(deployment) {
-			appsutil.DeleteStatusReasons(deployment)
+			delete(updatedAnnotations, appsv1.DeploymentCancelledAnnotation)
+			delete(updatedAnnotations, appsv1.DeploymentStatusReasonAnnotation)
 			c.emitDeploymentEvent(deployment, corev1.EventTypeWarning, "FailedCancellation", "Succeeded before cancel recorded")
 		}
 		// Sync the internal replica annotation with the target so that we can
