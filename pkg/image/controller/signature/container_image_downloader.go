@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/containers/image/v5/docker"
+	"github.com/containers/image/v5/types"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
@@ -15,15 +17,21 @@ import (
 	"github.com/openshift/library-go/pkg/image/imageutil"
 )
 
+const registryAuthFileEnvVar = "REGISTRY_AUTH_FILE"
+
 type containerImageSignatureDownloader struct {
-	ctx     context.Context
-	timeout time.Duration
+	ctx           context.Context
+	timeout       time.Duration
+	systemContext *types.SystemContext
 }
 
 func NewContainerImageSignatureDownloader(ctx context.Context, timeout time.Duration) SignatureDownloader {
 	return &containerImageSignatureDownloader{
 		ctx:     ctx,
 		timeout: timeout,
+		systemContext: &types.SystemContext{
+			AuthFilePath: os.Getenv("REGISTRY_AUTH_FILE"),
+		},
 	}
 }
 
@@ -40,11 +48,10 @@ func (s *containerImageSignatureDownloader) DownloadImageSignatures(image *image
 	ctx, cancel := context.WithTimeout(s.ctx, s.timeout)
 	defer cancel()
 
-	source, err := reference.NewImageSource(ctx, nil)
+	source, err := reference.NewImageSource(ctx, s.systemContext)
 	if err != nil {
-		// In case we fail to talk to registry to get the image metadata (private
-		// registry, internal registry, etc...), do not fail with error to avoid
-		// spamming logs.
+		// In case we fail to talk to registry to get the image metadata
+		// do not fail with error to avoid spamming logs.
 		klog.V(4).Infof("Failed to get %q: %v", image.DockerImageReference, err)
 		return []imagev1.ImageSignature{}, nil
 	}
