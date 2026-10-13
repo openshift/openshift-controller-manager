@@ -1,0 +1,7 @@
+reviewers:
+  - divyansh42
+  - coreydaley
+approvers:
+  - bparees
+  - coreydaley
+component: openshift-controller-manager
